@@ -21,12 +21,37 @@ providers, profile fields, and tests.
 
 ## Setup
 
-```bash
+### Windows PowerShell
+
+Use a normal Python installation from python.org, then run these commands from
+the repository root:
+
+```powershell
 python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-copy .env.example .env
-uvicorn app.main:app --reload
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+Copy-Item .env.example .env
+python -m uvicorn app.main:app --reload
+```
+
+If PowerShell says that `Activate.ps1` cannot be loaded, enable scripts for the
+current terminal session and activate the environment again:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+```
+
+If the existing `.venv` was created from a Windows Store Python and fails with
+an `Access is denied` error, delete and recreate it after installing Python:
+
+```powershell
+Remove-Item -Recurse -Force .venv
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m uvicorn app.main:app --reload
 ```
 
 The API will be available at `http://127.0.0.1:8000`.
@@ -101,4 +126,24 @@ api_router.include_router(example.router, prefix="/example", tags=["example"])
 
 ```bash
 pytest
+```
+
+The normal tests start the FastAPI app inside pytest and do not need a running
+server. To test a server that is already running, start the API first:
+
+```powershell
+python -m uvicorn app.main:app --reload
+```
+
+Then run the live-server test in another terminal:
+
+```powershell
+python -m pytest tests/test_running_server.py
+```
+
+By default it calls `http://127.0.0.1:8000`. To use another server URL:
+
+```powershell
+$env:FEELY_TEST_SERVER_URL = "http://127.0.0.1:8001"
+python -m pytest tests/test_running_server.py
 ```
