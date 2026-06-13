@@ -1,3 +1,3 @@
-from app.models.user import User, UserProfile
+from app.models.user import ChatSession, User, UserProfile
 
-__all__ = ["User", "UserProfile"]
+__all__ = ["ChatSession", "User", "UserProfile"]

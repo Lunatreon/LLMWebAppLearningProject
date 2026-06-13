@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#100f13" />
+    <meta
+      name="description"
+      content="A private FeelY space for thoughtful conversations and personal reflection."
+    />
+    <title>FeelY Chat</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css?v=20260613-3" />
+  </head>
+  <body>
+    <main class="shell">
+      <section id="auth-view" class="auth-view">
+        <div class="auth-story">
+          <a class="brand-lockup brand-lockup-light" href="index.html" aria-label="FeelY home">
+            <span class="brand-symbol" aria-hidden="true">F</span>
+            <span>FeelY</span>
+          </a>
+          <div class="auth-story-copy">
+            <p class="eyebrow eyebrow-light">Your private reflection space</p>
+            <h1>Become your own creation.</h1>
+            <p>
+              Slow down, name what is happening, and find the next honest step through
+              conversation.
+            </p>
+          </div>
+          <p class="image-credit">A quieter place to hear yourself.</p>
+        </div>
+
+        <div class="auth-panel" aria-labelledby="auth-heading">
+          <div class="auth-panel-brand">
+            <a class="brand-lockup" href="index.html" aria-label="FeelY home">
+              <span class="brand-symbol" aria-hidden="true">F</span>
+              <span>FeelY</span>
+            </a>
+            <p>Mythic self-authorship, grounded in real conversation.</p>
+          </div>
+
+          <div class="auth-heading">
+            <p class="eyebrow">Welcome</p>
+            <h2 id="auth-heading">Return to your space</h2>
+          </div>
+
+          <div class="auth-tabs" role="tablist" aria-label="Account access">
+            <button id="login-tab" class="tab active" type="button" role="tab">Login</button>
+            <button id="register-tab" class="tab" type="button" role="tab">Register</button>
+          </div>
+
+          <form id="auth-form" class="auth-form">
+            <label>
+              <span>Email</span>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                autocomplete="email"
+                placeholder="you@example.com"
+                required
+              />
+            </label>
+            <label id="username-field" class="hidden">
+              <span>Username</span>
+              <input
+                id="username"
+                name="username"
+                autocomplete="username"
+                minlength="3"
+                placeholder="How should FeelY call you?"
+              />
+            </label>
+            <label>
+              <span>Password</span>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                minlength="8"
+                placeholder="At least 8 characters"
+                required
+              />
+            </label>
+            <button id="auth-submit" class="primary-button" type="submit">Login</button>
+            <p id="auth-error" class="form-error" role="alert"></p>
+          </form>
+
+          <p class="privacy-note">Your conversations remain connected to your private account.</p>
+        </div>
+      </section>
+
+      <section id="chat-view" class="chat-view hidden">
+        <button
+          id="sidebar-backdrop"
+          class="sidebar-backdrop hidden"
+          type="button"
+          aria-label="Close chat navigation"
+        ></button>
+
+        <aside id="sidebar" class="sidebar">
+          <div class="sidebar-brand-row">
+            <a class="brand-lockup brand-lockup-light" href="index.html" aria-label="FeelY home">
+              <span class="brand-symbol" aria-hidden="true">F</span>
+              <span>FeelY</span>
+            </a>
+            <button
+              id="sidebar-close"
+              class="icon-button sidebar-close"
+              type="button"
+              title="Close navigation"
+              aria-label="Close navigation"
+            >
+              <span aria-hidden="true">&times;</span>
+            </button>
+          </div>
+
+          <p class="sidebar-tagline">Become your own creation.</p>
+
+          <button id="new-chat-button" class="new-chat-button" type="button">
+            <span class="button-icon" aria-hidden="true">+</span>
+            <span>New conversation</span>
+          </button>
+
+          <div class="chat-list-heading">
+            <span>Conversations</span>
+            <span id="chat-count">0</span>
+          </div>
+          <nav id="chat-list" class="chat-list" aria-label="Chats"></nav>
+
+          <div class="sidebar-profile">
+            <span id="user-avatar" class="user-avatar" aria-hidden="true">Y</span>
+            <div class="user-copy">
+              <strong id="user-name">Your space</strong>
+              <span id="user-email">Private account</span>
+            </div>
+            <button
+              id="logout-button"
+              class="icon-button"
+              type="button"
+              title="Sign out"
+              aria-label="Sign out"
+            >
+              <span aria-hidden="true">&#8594;</span>
+            </button>
+          </div>
+        </aside>
+
+        <section class="conversation">
+          <header class="conversation-header">
+            <div class="conversation-heading">
+              <button
+                id="sidebar-toggle"
+                class="icon-button sidebar-toggle"
+                type="button"
+                title="Open conversations"
+                aria-label="Open conversations"
+              >
+                <span aria-hidden="true">&#9776;</span>
+              </button>
+              <div>
+                <p class="eyebrow">Current reflection</p>
+                <h2 id="chat-title">New conversation</h2>
+              </div>
+            </div>
+            <button
+              id="refresh-button"
+              class="icon-button"
+              type="button"
+              title="Refresh conversations"
+              aria-label="Refresh conversations"
+            >
+              <span aria-hidden="true">&#8635;</span>
+            </button>
+          </header>
+
+          <div id="messages" class="messages" aria-live="polite"></div>
+
+          <footer class="composer-zone">
+            <section id="topic-card" class="topic-card hidden" aria-live="polite">
+              <div class="topic-copy">
+                <span class="topic-mark" aria-hidden="true">&#10022;</span>
+                <div>
+                  <p class="eyebrow">A possible thread</p>
+                  <h3 id="topic-title"></h3>
+                  <p id="topic-description" class="hidden" aria-hidden="true"></p>
+                </div>
+              </div>
+              <div class="topic-actions">
+                <button id="topic-dismiss" class="secondary-button" type="button">Not this</button>
+                <button id="topic-accept" class="primary-button small" type="button">Save topic</button>
+              </div>
+            </section>
+
+            <form id="message-form" class="message-form">
+              <textarea
+                id="message-input"
+                rows="1"
+                placeholder="Write what is on your mind..."
+                aria-label="Message FeelY"
+              ></textarea>
+              <button
+                id="send-button"
+                class="send-button"
+                type="submit"
+                title="Send message"
+                aria-label="Send message"
+              >
+                <span aria-hidden="true">&#8593;</span>
+              </button>
+            </form>
+            <p class="composer-note">FeelY can help you reflect, but it is not emergency or medical care.</p>
+          </footer>
+        </section>
+      </section>
+    </main>
+
+    <script src="app.js?v=20260613-3"></script>
+  </body>
+</html>

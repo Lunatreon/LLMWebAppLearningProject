@@ -1,0 +1,1194 @@
+:root {
+  color-scheme: dark;
+  --midnight: #100f13;
+  --night: #17151b;
+  --raised: #211e26;
+  --white: #fffdf9;
+  --paper: #f3eee7;
+  --ink: #252129;
+  --muted: #aaa2ad;
+  --lavender: #c5b5ff;
+  --orchid: #a988e8;
+  --coral: #d4876f;
+  --mint: #82b7a8;
+  --line: rgba(255, 253, 249, 0.14);
+  --line-dark: rgba(37, 33, 41, 0.18);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  overflow-x: hidden;
+  background: var(--midnight);
+  color: var(--white);
+  font-family: "DM Sans", Inter, ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0;
+}
+
+body.menu-open {
+  overflow: hidden;
+}
+
+button,
+input,
+a {
+  font: inherit;
+  letter-spacing: 0;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  cursor: pointer;
+}
+
+a:focus-visible,
+button:focus-visible {
+  outline: 3px solid rgba(197, 181, 255, 0.48);
+  outline-offset: 3px;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
+h1,
+h2,
+h3,
+.site-brand {
+  font-family: Manrope, "DM Sans", sans-serif;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+.site-container {
+  width: min(1160px, calc(100% - 48px));
+  margin: 0 auto;
+}
+
+.site-container.narrow {
+  width: min(790px, calc(100% - 48px));
+}
+
+.site-header {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  right: 0;
+  left: 0;
+  border-bottom: 1px solid transparent;
+  background: rgba(16, 15, 19, 0.76);
+  backdrop-filter: blur(18px);
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.site-header.scrolled {
+  border-color: var(--line);
+  background: rgba(16, 15, 19, 0.94);
+}
+
+.site-nav {
+  display: flex;
+  min-height: 70px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.site-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--white);
+  font-size: 20px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.site-brand-mark {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid var(--lavender);
+  border-radius: 50%;
+  color: var(--lavender);
+  font-size: 14px;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 25px;
+}
+
+.nav-links a {
+  color: rgba(255, 253, 249, 0.68);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.nav-links a:hover,
+.nav-links a.active {
+  color: var(--white);
+}
+
+.nav-chat {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(197, 181, 255, 0.48);
+  border-radius: 8px;
+  padding: 0 14px;
+  color: var(--white) !important;
+}
+
+.nav-chat:hover {
+  background: rgba(197, 181, 255, 0.12);
+}
+
+.menu-button {
+  display: none;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--white);
+  font-size: 20px;
+}
+
+.site-eyebrow {
+  margin-bottom: 10px;
+  color: var(--lavender);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.site-eyebrow.dark {
+  color: #725d98;
+}
+
+.site-button {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  padding: 0 18px;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.site-button-primary {
+  background: var(--white);
+  color: var(--ink);
+}
+
+.site-button-primary:hover {
+  background: var(--lavender);
+}
+
+.site-button-ghost {
+  border: 1px solid rgba(255, 253, 249, 0.34);
+  background: rgba(16, 15, 19, 0.18);
+  color: var(--white);
+}
+
+.site-button-ghost:hover {
+  border-color: var(--lavender);
+}
+
+.site-button-dark {
+  background: var(--ink);
+  color: var(--white);
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.home-hero {
+  position: relative;
+  display: flex;
+  min-height: min(860px, 92vh);
+  align-items: flex-end;
+  overflow: hidden;
+  background-image: url("assets/feely-landscape.jpg");
+  background-position: center 58%;
+  background-size: cover;
+}
+
+.home-hero-shade,
+.community-shade {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 9, 12, 0.58);
+}
+
+.home-hero-content {
+  position: relative;
+  z-index: 1;
+  padding: 150px 0 120px;
+}
+
+.home-hero h1 {
+  margin-bottom: 12px;
+  font-size: clamp(72px, 13vw, 180px);
+  line-height: 0.88;
+}
+
+.home-hero-lead {
+  max-width: 660px;
+  margin-bottom: 28px;
+  color: rgba(255, 253, 249, 0.83);
+  font-size: clamp(18px, 2vw, 24px);
+  line-height: 1.55;
+}
+
+.hero-next {
+  position: absolute;
+  z-index: 2;
+  right: 30px;
+  bottom: 28px;
+  color: rgba(255, 253, 249, 0.75);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.hero-next span {
+  margin-left: 8px;
+  color: var(--lavender);
+}
+
+.site-band {
+  padding: 105px 0;
+}
+
+.site-band-light {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.site-band-lavender {
+  background: var(--lavender);
+  color: var(--ink);
+}
+
+.intro-layout,
+.course-guide,
+.story-layout,
+.community-principles {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: clamp(42px, 8vw, 110px);
+  align-items: start;
+}
+
+.intro-layout h2,
+.feature-copy h2,
+.story-layout h2,
+.community-principles h2,
+.toolkit-callout h2 {
+  margin-bottom: 0;
+  font-size: clamp(34px, 5vw, 60px);
+  line-height: 1.08;
+}
+
+.intro-copy p,
+.feature-copy p,
+.story-layout > div:last-child p,
+.community-principles li span {
+  color: #5e5860;
+  font-size: 17px;
+  line-height: 1.75;
+}
+
+.section-heading {
+  max-width: 760px;
+  margin: 0 auto 45px;
+  text-align: center;
+}
+
+.section-heading.left {
+  margin: 0 0 42px;
+  text-align: left;
+}
+
+.section-heading h2,
+.closing-callout h2,
+.course-guide h2 {
+  margin-bottom: 14px;
+  font-size: clamp(34px, 5vw, 56px);
+  line-height: 1.08;
+}
+
+.section-heading > p:last-child,
+.closing-callout > p,
+.course-guide p {
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+.path-grid,
+.course-grid,
+.video-grid,
+.toolkit-grid,
+.format-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.path-card {
+  display: flex;
+  min-height: 330px;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 25px;
+}
+
+.path-chat {
+  background: #211c2a;
+}
+
+.path-map {
+  background: #24211d;
+}
+
+.path-tools {
+  background: #182522;
+}
+
+.card-index,
+.format-grid article > span,
+.philosophy-grid article > span {
+  color: var(--coral);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.path-card h3 {
+  margin: auto 0 12px;
+  font-size: 25px;
+}
+
+.path-card p {
+  min-height: 72px;
+  margin-bottom: 22px;
+  color: rgba(255, 253, 249, 0.62);
+  line-height: 1.55;
+}
+
+.path-card a,
+.text-link,
+.course-card a,
+.tool-card a {
+  color: var(--lavender);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.text-link.dark,
+.course-card a,
+.tool-card a {
+  color: #60458d;
+}
+
+.feature-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(340px, 0.85fr);
+  gap: clamp(42px, 8vw, 100px);
+  align-items: center;
+}
+
+.feature-image {
+  min-height: 520px;
+  border-radius: 8px;
+  background-image: url("assets/feely-landscape.jpg");
+  background-position: center 70%;
+  background-size: cover;
+}
+
+.feature-copy p {
+  color: #4c4254;
+}
+
+.closing-callout,
+.toolkit-callout {
+  max-width: 800px;
+  text-align: left;
+}
+
+.closing-callout .site-button {
+  margin-top: 10px;
+}
+
+.page-intro {
+  padding: 175px 0 105px;
+  background: var(--night);
+  text-align: center;
+}
+
+.page-intro.compact {
+  padding-bottom: 75px;
+}
+
+.page-intro h1 {
+  margin-bottom: 20px;
+  font-size: clamp(46px, 7vw, 84px);
+  line-height: 1.02;
+}
+
+.page-intro p:last-child {
+  max-width: 680px;
+  margin: 0 auto;
+  color: rgba(255, 253, 249, 0.62);
+  font-size: 18px;
+  line-height: 1.65;
+}
+
+.course-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.course-card,
+.tool-card {
+  display: flex;
+  min-height: 310px;
+  flex-direction: column;
+  border: 1px solid var(--line-dark);
+  border-radius: 8px;
+  background: var(--white);
+  padding: 25px;
+}
+
+.course-card > span,
+.tool-card > span {
+  color: #725d98;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.course-card h2,
+.tool-card h2 {
+  margin: 18px 0 10px;
+  font-size: 25px;
+}
+
+.course-card p,
+.tool-card p {
+  color: #676068;
+  line-height: 1.6;
+}
+
+.course-card strong {
+  margin-bottom: 24px;
+  color: #7d5260;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.course-card a,
+.tool-card a {
+  margin-top: auto;
+}
+
+.course-guide {
+  align-items: center;
+}
+
+.course-guide .site-button {
+  margin-top: 12px;
+}
+
+.quiz-band {
+  min-height: 620px;
+}
+
+.quiz-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.65fr) minmax(0, 1.35fr);
+  gap: clamp(40px, 7vw, 90px);
+  align-items: start;
+}
+
+.quiz-context {
+  position: sticky;
+  top: 110px;
+}
+
+.quiz-context h2 {
+  font-size: clamp(31px, 4vw, 46px);
+  line-height: 1.1;
+}
+
+.quiz-context > p:last-child {
+  color: #676068;
+  line-height: 1.65;
+}
+
+.quiz {
+  min-height: 460px;
+  border: 1px solid var(--line-dark);
+  border-radius: 8px;
+  background: var(--white);
+  padding: clamp(24px, 5vw, 48px);
+}
+
+.quiz-progress-row {
+  display: flex;
+  justify-content: space-between;
+  color: #756e76;
+  font-size: 12px;
+}
+
+.quiz-progress {
+  height: 4px;
+  margin: 10px 0 44px;
+  overflow: hidden;
+  background: #e4ddd6;
+}
+
+.quiz-progress span {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--orchid);
+  transition: width 180ms ease;
+}
+
+.quiz-question-number {
+  color: #725d98;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.quiz h2 {
+  margin: 12px 0 28px;
+  font-size: clamp(25px, 4vw, 38px);
+  line-height: 1.2;
+}
+
+.quiz-options {
+  display: grid;
+  gap: 9px;
+}
+
+.quiz-option {
+  min-height: 54px;
+  border: 1px solid var(--line-dark);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  padding: 11px 14px;
+  text-align: left;
+}
+
+.quiz-option:hover {
+  border-color: var(--orchid);
+  background: rgba(197, 181, 255, 0.12);
+}
+
+.quiz-results-list {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 25px;
+}
+
+.quiz-result {
+  border-left: 3px solid var(--coral);
+  background: #f3ede8;
+  padding: 12px 14px;
+}
+
+.quiz-result strong,
+.quiz-result span {
+  display: block;
+}
+
+.quiz-result span {
+  margin-top: 3px;
+  color: #756e76;
+  font-size: 12px;
+}
+
+.quiz-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.quiz-reset {
+  min-height: 46px;
+  border: 1px solid var(--line-dark);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  padding: 0 18px;
+  font-weight: 700;
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 28px;
+}
+
+.filter-button {
+  min-height: 38px;
+  border: 1px solid var(--line-dark);
+  border-radius: 8px;
+  background: transparent;
+  color: #615a62;
+  padding: 0 13px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.filter-button.active,
+.filter-button:hover {
+  background: var(--ink);
+  color: var(--white);
+}
+
+.video-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.video-card {
+  overflow: hidden;
+  border: 1px solid var(--line-dark);
+  border-radius: 8px;
+  background: var(--white);
+}
+
+.video-card.hidden {
+  display: none;
+}
+
+.video-visual {
+  position: relative;
+  display: grid;
+  min-height: 250px;
+  place-items: center;
+  background-image: url("assets/feely-landscape.jpg");
+  background-size: cover;
+}
+
+.visual-reset { background-position: center 32%; }
+.visual-talk { background-position: 20% 58%; filter: saturate(0.65); }
+.visual-work { background-position: 80% 73%; filter: sepia(0.18); }
+.visual-night { background-position: center 15%; filter: brightness(0.58) hue-rotate(15deg); }
+
+.play-button {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  border: 1px solid rgba(255, 253, 249, 0.7);
+  border-radius: 50%;
+  background: rgba(16, 15, 19, 0.58);
+  color: var(--white);
+  font-size: 17px;
+}
+
+.video-body {
+  padding: 23px;
+}
+
+.video-meta {
+  display: flex;
+  justify-content: space-between;
+  color: #725d98;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.video-body h2 {
+  margin: 16px 0 9px;
+  font-size: 24px;
+}
+
+.video-body p {
+  color: #676068;
+  line-height: 1.6;
+}
+
+.video-body strong {
+  color: #8b5562;
+  font-size: 12px;
+}
+
+.site-dialog {
+  width: min(480px, calc(100% - 32px));
+  border: 0;
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 25px 80px rgba(0, 0, 0, 0.45);
+  padding: 34px;
+}
+
+.site-dialog::backdrop {
+  background: rgba(10, 9, 12, 0.76);
+}
+
+.site-dialog h2 {
+  font-size: 30px;
+}
+
+.site-dialog p:not(.site-eyebrow) {
+  color: #676068;
+  line-height: 1.6;
+}
+
+.dialog-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 24px;
+}
+
+.toolkit-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.tool-card {
+  min-height: 270px;
+}
+
+.community-hero {
+  position: relative;
+  display: flex;
+  min-height: 76vh;
+  align-items: flex-end;
+  background-image: url("assets/feely-landscape.jpg");
+  background-position: center 44%;
+  background-size: cover;
+}
+
+.community-content {
+  position: relative;
+  z-index: 1;
+  padding: 170px 0 90px;
+}
+
+.community-content h1 {
+  max-width: 820px;
+  margin-bottom: 18px;
+  font-size: clamp(52px, 8vw, 100px);
+  line-height: 1;
+}
+
+.community-content > p:not(.site-eyebrow) {
+  max-width: 650px;
+  margin-bottom: 28px;
+  color: rgba(255, 253, 249, 0.75);
+  font-size: 19px;
+  line-height: 1.65;
+}
+
+.community-principles ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.community-principles li {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 24px;
+  border-top: 1px solid var(--line-dark);
+  padding: 22px 0;
+}
+
+.format-grid article {
+  min-height: 230px;
+  border-top: 1px solid var(--line);
+  padding: 22px 10px 0 0;
+}
+
+.format-grid h2 {
+  margin: 45px 0 10px;
+  font-size: 24px;
+}
+
+.format-grid p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.about-hero {
+  display: grid;
+  min-height: 760px;
+  grid-template-columns: minmax(0, 1.1fr) minmax(430px, 0.9fr);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.about-image {
+  min-height: 620px;
+  background-image: url("assets/feely-landscape.jpg");
+  background-position: center 58%;
+  background-size: cover;
+}
+
+.about-copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 130px clamp(40px, 7vw, 100px) 70px;
+}
+
+.about-copy h1 {
+  margin-bottom: 22px;
+  font-size: clamp(52px, 7vw, 90px);
+  line-height: 1;
+}
+
+.about-copy p:last-child {
+  color: #676068;
+  font-size: 18px;
+  line-height: 1.7;
+}
+
+.philosophy-grid {
+  display: grid;
+  grid-template-columns: 1.1fr repeat(3, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.philosophy-grid h2 {
+  font-size: clamp(32px, 4vw, 48px);
+  line-height: 1.1;
+}
+
+.philosophy-grid article {
+  border-left: 1px solid rgba(37, 33, 41, 0.22);
+  padding-left: 20px;
+}
+
+.philosophy-grid h3 {
+  margin: 45px 0 12px;
+  font-size: 21px;
+  line-height: 1.3;
+}
+
+.philosophy-grid article p {
+  color: #554b5b;
+  line-height: 1.6;
+}
+
+.timeline {
+  max-width: 900px;
+}
+
+.timeline-row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 30px;
+  border-top: 1px solid var(--line-dark);
+  padding: 24px 0;
+}
+
+.timeline-row strong {
+  color: #725d98;
+}
+
+.timeline-row p {
+  margin: 0;
+  color: #615a62;
+  line-height: 1.6;
+}
+
+.site-footer {
+  border-top: 1px solid var(--line);
+  background: #0c0b0e;
+  padding: 54px 0 30px;
+}
+
+.footer-grid {
+  display: grid;
+  grid-template-columns: 1.3fr 0.7fr 0.7fr;
+  gap: 50px;
+}
+
+.footer-intro p {
+  max-width: 360px;
+  margin: 16px 0 0;
+  color: rgba(255, 253, 249, 0.48);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.footer-column strong {
+  display: block;
+  margin-bottom: 14px;
+  color: var(--white);
+  font-size: 12px;
+}
+
+.footer-column a {
+  display: block;
+  margin: 8px 0;
+  color: rgba(255, 253, 249, 0.52);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.footer-column a:hover {
+  color: var(--lavender);
+}
+
+.footer-bottom {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 46px;
+  border-top: 1px solid var(--line);
+  padding-top: 20px;
+  color: rgba(255, 253, 249, 0.34);
+  font-size: 11px;
+}
+
+@media (max-width: 980px) {
+  .menu-button {
+    display: grid;
+    place-items: center;
+  }
+
+  .nav-links {
+    position: fixed;
+    inset: 70px 0 auto;
+    display: none;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0;
+    border-bottom: 1px solid var(--line);
+    background: #100f13;
+    padding: 18px 24px 25px;
+  }
+
+  .nav-links.open {
+    display: flex;
+  }
+
+  .nav-links a {
+    border-bottom: 1px solid var(--line);
+    padding: 15px 2px;
+  }
+
+  .nav-chat {
+    margin-top: 10px;
+    border-bottom: 1px solid rgba(197, 181, 255, 0.48) !important;
+  }
+
+  .path-grid,
+  .toolkit-grid,
+  .format-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .feature-split,
+  .about-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .feature-image,
+  .about-image {
+    min-height: 480px;
+  }
+
+  .about-copy {
+    padding: 70px max(24px, calc((100vw - 700px) / 2));
+  }
+
+  .philosophy-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  html,
+  body {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .site-container,
+  .site-container.narrow {
+    width: calc(100% - 32px);
+    max-width: none;
+  }
+
+  .site-nav {
+    position: relative;
+    min-height: 64px;
+  }
+
+  .menu-button {
+    position: absolute;
+    right: 0;
+  }
+
+  .nav-links {
+    inset: 64px 0 auto;
+  }
+
+  .home-hero {
+    min-height: 86vh;
+  }
+
+  .home-hero-content {
+    padding: 130px 0 90px;
+  }
+
+  .home-hero h1 {
+    font-size: clamp(66px, 27vw, 112px);
+  }
+
+  .home-hero .button-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .home-hero .site-button {
+    width: 100%;
+  }
+
+  .hero-next {
+    display: none;
+  }
+
+  .site-band {
+    padding: 72px 0;
+  }
+
+  .intro-layout,
+  .course-guide,
+  .story-layout,
+  .community-principles,
+  .quiz-layout {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  .path-grid,
+  .course-grid,
+  .video-grid,
+  .toolkit-grid,
+  .format-grid,
+  .philosophy-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .path-card,
+  .course-card,
+  .tool-card {
+    min-height: 260px;
+  }
+
+  .feature-image {
+    min-height: 390px;
+  }
+
+  .page-intro {
+    padding: 135px 0 75px;
+  }
+
+  .page-intro h1 {
+    font-size: clamp(40px, 13vw, 62px);
+  }
+
+  .quiz-context {
+    position: static;
+  }
+
+  .quiz {
+    min-height: 430px;
+  }
+
+  .community-hero {
+    min-height: 78vh;
+  }
+
+  .community-principles li {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .about-image {
+    min-height: 430px;
+  }
+
+  .philosophy-grid article {
+    border-top: 1px solid rgba(37, 33, 41, 0.22);
+    border-left: 0;
+    padding: 20px 0 0;
+  }
+
+  .timeline-row {
+    grid-template-columns: 75px minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .footer-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .footer-intro {
+    grid-column: 1 / -1;
+  }
+
+  .footer-bottom {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+  }
+}

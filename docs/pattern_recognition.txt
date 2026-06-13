@@ -1,0 +1,34 @@
+# FeelY pattern recognition rules
+#
+# Format:
+# topic hint|minimum matched patterns|comma-separated patterns
+#
+# The hard-coded ChatAnalyser reads this file after each Chat-LLM response.
+# Analysis only becomes eligible after at least 3 user messages and 20 user
+# words. Patterns are matched as whole words. When a rule reaches its threshold,
+# the backend sends the full chat to the Topic-LLM. The Topic-LLM then creates a
+# topic and description for the user to confirm above the chat input.
+# A conversation can also enter open-topic analysis without matching a category
+# after 4 user messages and 50 words, or 3 user messages and 140 words. In that
+# case, the Topic-LLM creates its own free-form topic from the user messages.
+
+productivity and progress|2|productivity,project,deadline,focus,task,workflow,finished,planning,goal
+stress and pressure|2|stress,stressful,overwhelmed,anxious,burnout,pressure,worried,tired
+creative work|2|creative,design,writing,idea,prototype,sketch,build,make,art
+relationship strain and personal responsibility|3|friend,family,partner,relationship,lonely,connect,conversation,support,love,jealous,jealousy,responsible,responsibility,conflict,trust,boundary,boundaries,stabilizing
+family expectations, autonomy, and self-worth|3|parents,parent,father,mother,family,judged,judging,worth,self-worth,self-esteem,independent,independence,activism,studies,study,safety,obedience,decisions,abilities
+learning and growth|2|learn,study,course,practice,skill,understand,exam,research
+self reflection|3|mood,journal,reflect,reflection,identity,values,meaning,self-awareness
+depression and behavioral change|3|depression,depressed,stuck,freeze,habit,avoidance,change,progress,bed,action,actions
+anxiety, uncertainty, and control|3|anxiety,anxious,nervous,fear,afraid,uncertain,uncertainty,control,decision,decisions,wrong,worry,worried
+identity and authenticity|3|identity,authentic,authenticity,myself,self,gender,woman,man,queer,language,english,german,belonging,values
+boundaries and emotional labor|3|boundary,boundaries,space,caregiving,caretaking,draining,exhausted,supporting,responsibility,needs,overextended
+social connection and loneliness|3|friends,friendship,alone,lonely,isolated,disconnected,community,belonging,group,people,connection
+grief, loss, and change|3|grief,loss,lost,missing,miss,goodbye,death,ended,ending,change,absence,mourning
+study, work, and performance pressure|3|study,studies,thesis,university,work,career,performance,finish,failing,failure,success,deadline,desk
+self-care and emotional regulation|3|rest,walk,walking,sleep,break,reset,calm,relax,relaxed,regulate,regulation,overstimulated,recover,recovery
+motivation, avoidance, and procrastination|3|motivation,procrastination,procrastinate,avoid,avoiding,delay,starting,finish,stuck,blocked,discipline,routine
+anger, conflict, and repair|3|anger,angry,frustrated,resentment,resentful,argument,fight,conflict,apology,repair,forgive,forgiveness
+body, health, and wellbeing|3|body,health,pain,illness,sick,doctor,therapy,medication,eating,food,exercise,energy,sleep
+joy, meaning, and fulfillment|3|joy,happy,happiness,excited,excitement,meaning,purpose,fulfilled,fulfillment,fun,hope,proud,pride
+past experiences and emotional triggers|3|past,memory,memories,childhood,trigger,triggers,reminds,flashback,learned,pattern,patterns,history

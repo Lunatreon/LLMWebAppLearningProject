@@ -1,4 +1,5 @@
 import os
+import time
 from uuid import uuid4
 
 import httpx
@@ -78,9 +79,21 @@ def test_running_server_auth_profile_and_llm_flow():
     assert read_profile_response.status_code == 200
     assert read_profile_response.json()["data"] == profile_data
 
+    create_chat_response = httpx.post(
+        f"{API_URL}/llm/chats",
+        json={"title": "Live test chat"},
+        headers=headers,
+        timeout=10.0,
+    )
+    assert create_chat_response.status_code == 201
+    chat_id = create_chat_response.json()["chat_id"]
+
     llm_response = httpx.post(
         f"{API_URL}/llm/message",
-        json={"message": "I love building cozy productivity apps."},
+        json={
+            "chat_id": chat_id,
+            "context": "I love building cozy productivity apps and finishing projects.",
+        },
         headers=headers,
         timeout=20.0,
     )
@@ -88,5 +101,41 @@ def test_running_server_auth_profile_and_llm_flow():
     assert llm_response.status_code == 200
     body = llm_response.json()
     assert "assistant_message" in body
+    assert body["chat_id"] == chat_id
+    assert body["chat_info"]["message_count"] == 1
     assert body["profile"]["message_count"] == 1
-    assert body["profile"]["last_user_message"] == "I love building cozy productivity apps."
+    assert (
+        body["profile"]["last_user_message"]
+        == "I love building cozy productivity apps and finishing projects."
+    )
+
+    for context in [
+        "I am planning the project carefully and keeping each task manageable.",
+        "My goal is to improve the workflow so I can focus before the deadline.",
+    ]:
+        follow_up_response = httpx.post(
+            f"{API_URL}/llm/message",
+            json={"chat_id": chat_id, "context": context},
+            headers=headers,
+            timeout=20.0,
+        )
+        assert follow_up_response.status_code == 200
+
+    suggestion_response = None
+    suggestion = None
+    for _ in range(10):
+        suggestion_response = httpx.get(
+            f"{API_URL}/llm/chats/{chat_id}/topic-suggestion",
+            headers=headers,
+            timeout=10.0,
+        )
+        assert suggestion_response.status_code == 200
+        suggestion = suggestion_response.json()["suggestion"]
+        if suggestion is not None:
+            break
+        time.sleep(0.25)
+
+    assert suggestion_response is not None
+    assert suggestion_response.status_code == 200
+    assert suggestion is not None
+    assert suggestion["chat_id"] == chat_id
