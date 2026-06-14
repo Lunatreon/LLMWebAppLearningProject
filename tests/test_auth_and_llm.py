@@ -1,11 +1,24 @@
+import asyncio
+import json
+from types import SimpleNamespace
+
+from app.core.config import settings
 from app.services.llm import (
+    AnthropicChatLLMClient,
+    AnthropicTopicLLMClient,
     LocalChatLLMClient,
+    OllamaChatLLMClient,
+    OllamaTopicLLMClient,
     focused_chat_context,
     focused_profile_context,
+    get_chat_llm_client,
+    get_topic_llm_client,
     infer_local_freeform_topic,
+    parse_json_response,
     topic_chat_context,
 )
 from app.services.pattern_recognition import ChatAnalyser
+from app.services.self_authorship import merge_llm_profile
 
 
 def test_local_website_cors_preflight(client):
@@ -119,6 +132,9 @@ def test_user_can_register_login_and_send_llm_message(client):
     assert confirm_response.status_code == 200
     profile = confirm_response.json()["profile"]
     assert profile["topics"][0]["topic"] == suggestion["topic"]
+    topic_spaces = profile["self_authorship_map"]["topic_spaces"]
+    assert topic_spaces[0]["title"] == suggestion["topic"]
+    assert topic_spaces[0]["chat_ids"] == [chat_id]
 
     updated_chat_response = client.get(f"/api/v1/llm/chats/{chat_id}", headers=headers)
     assert updated_chat_response.status_code == 200
@@ -140,6 +156,102 @@ def test_user_can_register_login_and_send_llm_message(client):
     )
     assert repeated_suggestion_response.status_code == 200
     assert repeated_suggestion_response.json()["suggestion"] is None
+
+
+def test_user_can_confirm_map_suggestion_and_complete_practice(client):
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "map@example.com",
+            "username": "map_user",
+            "password": "super-secret",
+        },
+    )
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"email_or_username": "map@example.com", "password": "super-secret"},
+    )
+    headers = {"Authorization": f"Bearer {login_response.json()['access_token']}"}
+
+    message_response = client.post(
+        "/api/v1/llm/message",
+        json={
+            "context": (
+                "My parents told me to choose safety and obedience, and I still feel "
+                "judged when I make my own decisions."
+            )
+        },
+        headers=headers,
+    )
+    assert message_response.status_code == 200
+    body = message_response.json()
+    suggestion = body["map_suggestion"]
+    assert suggestion["category"] == "inherited_script"
+    assert body["chat_info"]["pending_map_suggestion"] == suggestion
+
+    confirm_response = client.post(
+        "/api/v1/llm/map-suggestions/confirm",
+        json={
+            "chat_id": body["chat_id"],
+            "accepted": True,
+            "category": suggestion["category"],
+            "text": suggestion["text"],
+            "reason": suggestion["reason"],
+        },
+        headers=headers,
+    )
+    assert confirm_response.status_code == 200
+    assert confirm_response.json()["entry"]["category"] == "inherited_script"
+
+    practice_response = client.post(
+        "/api/v1/users/me/map/entries",
+        json={
+            "category": "practice",
+            "text": "Pause and name my own preference before asking what others expect.",
+            "source_chat_id": body["chat_id"],
+        },
+        headers=headers,
+    )
+    assert practice_response.status_code == 200
+    practice = practice_response.json()["entry"]
+    assert practice["status"] == "active"
+
+    complete_response = client.patch(
+        f"/api/v1/users/me/map/practices/{practice['id']}",
+        json={
+            "status": "completed",
+            "reflection": "I noticed my preference before calling my family.",
+        },
+        headers=headers,
+    )
+    assert complete_response.status_code == 200
+    completed = complete_response.json()["practice"]
+    assert completed["status"] == "completed"
+    assert completed["reflection"].startswith("I noticed")
+
+    map_response = client.get("/api/v1/users/me/map", headers=headers)
+    assert map_response.status_code == 200
+    entries = map_response.json()["unassigned_entries"]
+    assert {entry["category"] for entry in entries} == {"inherited_script", "practice"}
+
+
+def test_llm_profile_merge_preserves_user_confirmed_map():
+    current = {
+        "message_count": 2,
+        "topics": [{"topic": "Autonomy"}],
+        "self_authorship_map": {"topic_spaces": [{"id": "confirmed"}]},
+    }
+    generated = {
+        "message_count": 3,
+        "topics": [],
+        "self_authorship_map": {"topic_spaces": []},
+    }
+
+    merged = merge_llm_profile(current, generated)
+
+    assert merged["message_count"] == 3
+    assert merged["topics"] == current["topics"]
+    assert merged["self_authorship_map"] == current["self_authorship_map"]
 
 
 def test_short_emotional_message_does_not_create_topic(client):
@@ -339,8 +451,14 @@ def test_local_chat_responses_focus_on_each_new_message():
         "Walking gives me a reset, while my thesis challenges what my parents said.",
         chat_info,
     )
+    reset_response = client.local_response(
+        "Walking helps me reset when old family expectations feel loud.",
+        chat_info,
+    )
     assert "parents' voices" in family_response
     assert "two different needs" in walk_response
+    assert "own perception" in reset_response
+    assert "thesis" not in reset_response
 
     fallback_responses = [
         client.local_response(
@@ -390,3 +508,194 @@ def test_llm_message_still_accepts_legacy_message_payload(client):
     assert body["chat_id"]
     assert body["chat_info"]["message_count"] == 1
     assert body["profile"]["last_user_message"] == "I love building cozy productivity apps."
+
+
+class RecordingAnthropicMessages:
+    def __init__(self, response_payload):
+        self.response_payload = response_payload
+        self.requests = []
+
+    async def create(self, **kwargs):
+        self.requests.append(kwargs)
+        return SimpleNamespace(
+            content=[
+                SimpleNamespace(type="text", text=json.dumps(self.response_payload))
+            ]
+        )
+
+
+def test_anthropic_clients_use_messages_api_and_shared_json_contract():
+    chat_messages = RecordingAnthropicMessages(
+        {
+            "assistant_message": "The walk sounds like a useful reset. What becomes clearer?",
+            "profile": {"message_count": 2},
+            "map_suggestion": {
+                "category": "body_signal",
+                "text": "Walking helps me reset.",
+                "reason": "The user connected walking with feeling clearer.",
+            },
+        }
+    )
+    chat_client = object.__new__(AnthropicChatLLMClient)
+    chat_client.client = SimpleNamespace(messages=chat_messages)
+    chat_client.model = "claude-sonnet-4-6"
+    chat_client.max_tokens = 4096
+
+    chat_result = asyncio.run(
+        chat_client.respond(
+            "Walking helps me reset.",
+            {"message_count": 1},
+            {"message_count": 1, "messages": []},
+            "chat-1",
+        )
+    )
+
+    assert chat_result.map_suggestion["category"] == "body_signal"
+    chat_request = chat_messages.requests[0]
+    assert chat_request["model"] == "claude-sonnet-4-6"
+    assert chat_request["max_tokens"] == 4096
+    assert "FeelY Chat-LLM" in chat_request["system"]
+    assert json.loads(chat_request["messages"][0]["content"])["chat_id"] == "chat-1"
+
+    topic_messages = RecordingAnthropicMessages(
+        {
+            "topic": "Family expectations and autonomy",
+            "description": "Separating inherited rules from personal direction.",
+        }
+    )
+    topic_client = object.__new__(AnthropicTopicLLMClient)
+    topic_client.client = SimpleNamespace(messages=topic_messages)
+    topic_client.model = "claude-sonnet-4-6"
+    topic_client.max_tokens = 4096
+
+    topic_result = asyncio.run(
+        topic_client.create_topic(
+            {"messages": [{"role": "user", "content": "My family expects safety."}]},
+            ["family", "safety"],
+            "family expectations",
+        )
+    )
+
+    assert topic_result.topic == "Family expectations and autonomy"
+    topic_request = topic_messages.requests[0]
+    assert "FeelY Topic-LLM" in topic_request["system"]
+    assert json.loads(topic_request["messages"][0]["content"])["topic_hint"] == (
+        "family expectations"
+    )
+
+
+class OllamaResponse:
+    def __init__(self, response_payload):
+        self.response_payload = response_payload
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return {
+            "message": {
+                "role": "assistant",
+                "content": json.dumps(self.response_payload),
+            }
+        }
+
+
+class RecordingOllamaHttpClient:
+    def __init__(self, response_payload):
+        self.response_payload = response_payload
+        self.requests = []
+        self.base_url = "http://127.0.0.1:11434"
+
+    async def post(self, path, **kwargs):
+        self.requests.append((path, kwargs))
+        return OllamaResponse(self.response_payload)
+
+
+def make_ollama_client(client_class, response_payload):
+    client = object.__new__(client_class)
+    client.client = RecordingOllamaHttpClient(response_payload)
+    client.base_url = "http://127.0.0.1:11434"
+    client.timeout_seconds = 180.0
+    client.model = "qwen3.5:4b"
+    client.context_window = 8192
+    client.max_tokens = 2048
+    return client
+
+
+def test_ollama_clients_use_local_chat_api_and_structured_json_contract():
+    chat_client = make_ollama_client(
+        OllamaChatLLMClient,
+        {
+            "assistant_message": "The walk gave you a reset. What changed afterward?",
+            "profile": {"message_count": 2},
+            "map_suggestion": None,
+        },
+    )
+
+    chat_result = asyncio.run(
+        chat_client.respond(
+            "Walking helped me reset.",
+            {"message_count": 1},
+            {"message_count": 1, "messages": []},
+            "chat-local",
+        )
+    )
+
+    assert chat_result.profile["message_count"] == 2
+    chat_path, chat_request = chat_client.client.requests[0]
+    chat_body = chat_request["json"]
+    assert chat_path == "/api/chat"
+    assert chat_body["model"] == "qwen3.5:4b"
+    assert chat_body["stream"] is False
+    assert chat_body["think"] is False
+    assert chat_body["format"]["required"] == [
+        "assistant_message",
+        "profile",
+        "map_suggestion",
+    ]
+    assert chat_body["options"]["num_ctx"] == 8192
+    assert json.loads(chat_body["messages"][1]["content"])["chat_id"] == (
+        "chat-local"
+    )
+
+    topic_client = make_ollama_client(
+        OllamaTopicLLMClient,
+        {
+            "topic": "Family expectations and autonomy",
+            "description": "Distinguishing inherited rules from personal choices.",
+        },
+    )
+    topic_result = asyncio.run(
+        topic_client.create_topic(
+            {"messages": [{"role": "user", "content": "I want my own direction."}]},
+            ["family", "autonomy"],
+            "family expectations",
+        )
+    )
+
+    assert topic_result.topic == "Family expectations and autonomy"
+    _, topic_request = topic_client.client.requests[0]
+    topic_body = topic_request["json"]
+    assert topic_body["format"]["required"] == ["topic", "description"]
+    assert topic_body["options"]["temperature"] == 0.2
+
+
+def test_provider_factories_can_select_ollama_per_role(monkeypatch):
+    monkeypatch.setattr(settings, "chat_llm_provider", "ollama")
+    monkeypatch.setattr(settings, "topic_llm_provider", "ollama")
+    monkeypatch.setattr(settings, "ollama_chat_model", "qwen3.5:4b")
+    monkeypatch.setattr(settings, "ollama_topic_model", "phi4-mini")
+
+    chat_client = get_chat_llm_client()
+    topic_client = get_topic_llm_client()
+
+    assert isinstance(chat_client, OllamaChatLLMClient)
+    assert chat_client.model == "qwen3.5:4b"
+    assert isinstance(topic_client, OllamaTopicLLMClient)
+    assert topic_client.model == "phi4-mini"
+
+
+def test_json_parser_accepts_markdown_fenced_provider_output():
+    assert parse_json_response('```json\n{"topic": "Autonomy"}\n```') == {
+        "topic": "Autonomy"
+    }

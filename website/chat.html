@@ -15,7 +15,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=20260613-3" />
+    <link rel="stylesheet" href="styles.css?v=20260613-4" />
   </head>
   <body>
     <main class="shell">
@@ -124,6 +124,11 @@
 
           <p class="sidebar-tagline">Become your own creation.</p>
 
+          <div class="workspace-switch" role="tablist" aria-label="Workspace view">
+            <button id="chat-workspace-button" class="active" type="button" role="tab">Chat</button>
+            <button id="map-workspace-button" type="button" role="tab">My Map</button>
+          </div>
+
           <button id="new-chat-button" class="new-chat-button" type="button">
             <span class="button-icon" aria-hidden="true">+</span>
             <span>New conversation</span>
@@ -153,7 +158,7 @@
           </div>
         </aside>
 
-        <section class="conversation">
+        <section id="conversation-view" class="conversation">
           <header class="conversation-header">
             <div class="conversation-heading">
               <button
@@ -184,6 +189,22 @@
           <div id="messages" class="messages" aria-live="polite"></div>
 
           <footer class="composer-zone">
+            <section id="map-suggestion-card" class="map-suggestion-card hidden" aria-live="polite">
+              <div class="suggestion-heading">
+                <div>
+                  <p class="eyebrow">Add to My Map?</p>
+                  <span id="map-suggestion-category" class="suggestion-category"></span>
+                </div>
+                <span id="map-suggestion-topic" class="suggestion-topic"></span>
+              </div>
+              <textarea id="map-suggestion-text" rows="2" aria-label="Edit map suggestion"></textarea>
+              <p id="map-suggestion-reason" class="suggestion-reason"></p>
+              <div class="suggestion-actions">
+                <button id="map-suggestion-dismiss" class="secondary-button" type="button">Not now</button>
+                <button id="map-suggestion-accept" class="primary-button small" type="button">Save to map</button>
+              </div>
+            </section>
+
             <section id="topic-card" class="topic-card hidden" aria-live="polite">
               <div class="topic-copy">
                 <span class="topic-mark" aria-hidden="true">&#10022;</span>
@@ -197,6 +218,18 @@
                 <button id="topic-dismiss" class="secondary-button" type="button">Not this</button>
                 <button id="topic-accept" class="primary-button small" type="button">Save topic</button>
               </div>
+            </section>
+
+            <section id="lens-panel" class="lens-panel hidden" aria-label="Reflection lenses">
+              <button type="button" data-lens="What actually happened, and what evidence do I have?">
+                <strong>Data</strong><span>What happened?</span>
+              </button>
+              <button type="button" data-lens="What do I notice in my body as I think about this?">
+                <strong>Body</strong><span>What do I sense?</span>
+              </button>
+              <button type="button" data-lens="If I trusted my own perception, what response becomes possible?">
+                <strong>Imagination</strong><span>What else is possible?</span>
+              </button>
             </section>
 
             <form id="message-form" class="message-form">
@@ -216,12 +249,67 @@
                 <span aria-hidden="true">&#8593;</span>
               </button>
             </form>
-            <p class="composer-note">FeelY can help you reflect, but it is not emergency or medical care.</p>
+            <div class="composer-meta">
+              <button id="lens-toggle" class="lens-toggle" type="button" aria-expanded="false">Three lenses</button>
+              <p class="composer-note">FeelY can help you reflect, but it is not emergency or medical care.</p>
+            </div>
           </footer>
+        </section>
+
+        <section id="map-view" class="map-view hidden">
+          <header class="map-header">
+            <div class="conversation-heading">
+              <button
+                id="map-sidebar-toggle"
+                class="icon-button sidebar-toggle"
+                type="button"
+                title="Open conversations"
+                aria-label="Open conversations"
+              >
+                <span aria-hidden="true">&#9776;</span>
+              </button>
+              <div>
+                <p class="eyebrow">Self-authorship</p>
+                <h2>My Map</h2>
+              </div>
+            </div>
+            <button id="add-practice-button" class="map-command" type="button">+ Add practice</button>
+          </header>
+          <div id="map-content" class="map-content"></div>
         </section>
       </section>
     </main>
 
-    <script src="app.js?v=20260613-3"></script>
+    <dialog id="practice-dialog" class="app-dialog">
+      <form id="practice-form" method="dialog">
+        <button class="dialog-close" type="button" data-close-dialog="practice-dialog" aria-label="Close">&times;</button>
+        <p class="eyebrow">A repeatable choice</p>
+        <h2>Add a practice</h2>
+        <label>
+          <span>What would you like to try?</span>
+          <textarea id="practice-text" rows="4" required></textarea>
+        </label>
+        <label>
+          <span>Connect it to a topic</span>
+          <select id="practice-topic"></select>
+        </label>
+        <button class="primary-button" type="submit">Save practice</button>
+      </form>
+    </dialog>
+
+    <dialog id="reflection-dialog" class="app-dialog">
+      <form id="reflection-form" method="dialog">
+        <button class="dialog-close" type="button" data-close-dialog="reflection-dialog" aria-label="Close">&times;</button>
+        <p class="eyebrow">Review without shame</p>
+        <h2>What happened when you tried it?</h2>
+        <label>
+          <span>Your reflection can include what helped, what got in the way, or what you would change.</span>
+          <textarea id="practice-reflection" rows="5"></textarea>
+        </label>
+        <button class="primary-button" type="submit">Mark complete</button>
+      </form>
+    </dialog>
+
+    <script src="app.js?v=20260613-4"></script>
   </body>
 </html>

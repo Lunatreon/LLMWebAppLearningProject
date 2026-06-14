@@ -30,6 +30,18 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-5.4-mini"
     openai_chat_model: str | None = None
     openai_topic_model: str | None = None
+    anthropic_api_key: str | None = None
+    anthropic_model: str = "claude-sonnet-4-6"
+    anthropic_chat_model: str | None = None
+    anthropic_topic_model: str | None = None
+    anthropic_max_tokens: int = 4096
+    ollama_base_url: str = "http://127.0.0.1:11434"
+    ollama_model: str = "qwen3.5:4b"
+    ollama_chat_model: str | None = None
+    ollama_topic_model: str | None = None
+    ollama_timeout_seconds: float = 180.0
+    ollama_context_window: int = 8192
+    ollama_max_tokens: int = 2048
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

@@ -2,8 +2,9 @@ import json
 import re
 from collections import Counter
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, NoReturn, Protocol
 
+import httpx
 from fastapi import HTTPException, status
 
 from app.core.config import settings
@@ -201,6 +202,7 @@ def infer_local_freeform_topic(user_messages: list[str]) -> str:
 class ChatLLMResult:
     assistant_message: str
     profile: dict[str, Any]
+    map_suggestion: dict[str, str] | None = None
 
 
 @dataclass
@@ -250,7 +252,51 @@ class LocalChatLLMClient:
         updated_profile["recent_messages"] = recent_messages[-10:]
 
         assistant_message = self.local_response(user_input, chat_info)
-        return ChatLLMResult(assistant_message=assistant_message, profile=updated_profile)
+        return ChatLLMResult(
+            assistant_message=assistant_message,
+            profile=updated_profile,
+            map_suggestion=self.local_map_suggestion(user_input),
+        )
+
+    def local_map_suggestion(self, user_input: str) -> dict[str, str] | None:
+        """Offer one concrete, user-confirmed map entry when the signal is clear."""
+
+        text = user_input.lower()
+        if "walk" in text and any(word in text for word in ("reset", "calm", "clear")):
+            return {
+                "category": "body_signal",
+                "text": "Walking helps my nervous system reset and makes my thoughts clearer.",
+                "reason": "You connected walking with a noticeable change in your mental state.",
+            }
+        if any(word in text for word in ("parents", "father", "mother", "family")) and any(
+            word in text for word in ("safety", "obedience", "judge", "judging", "told")
+        ):
+            return {
+                "category": "inherited_script",
+                "text": "I should choose safety and obedience over what feels meaningful to me.",
+                "reason": "This sounds like a repeated family instruction rather than a choice you authored.",
+            }
+        if "activism" in text and any(
+            phrase in text for phrase in ("myself", "take responsibility", "take the lead")
+        ):
+            return {
+                "category": "own_perception",
+                "text": "I feel more like myself when I take responsibility in activism.",
+                "reason": "You described activism as a place where your own agency becomes easier to feel.",
+            }
+        if any(phrase in text for phrase in ("i value", "important to me", "matters to me")):
+            return {
+                "category": "value",
+                "text": short_fragment(user_input, word_limit=20),
+                "reason": "You named something as personally important rather than merely expected.",
+            }
+        if any(phrase in text for phrase in ("i will try", "i want to practice", "my next step")):
+            return {
+                "category": "practice",
+                "text": short_fragment(user_input, word_limit=24),
+                "reason": "You described a concrete response that could be tried and reviewed.",
+            }
+        return None
 
     def local_response(self, user_input: str, chat_info: dict[str, Any]) -> str:
         text = user_input.lower()
@@ -306,10 +352,11 @@ class LocalChatLLMClient:
 
         if "walk" in text and any(word in text for word in ("reset", "self esteem", "self-esteem")):
             return (
-                "You connect walking with a mental reset, while progress on the thesis feels "
-                "like evidence against your parents' prediction. I wonder whether one restores "
-                "you and the other asks you to prove yourself. What would it be like to choose "
-                "based on care for yourself rather than on winning that argument today?"
+                "Walking sounds like a way to lower the volume of everything around you long "
+                "enough to hear your own perception again. That reset does not have to be an "
+                "escape; it can create space between an inherited expectation and the response "
+                "you actually want to choose. What becomes easier to recognize as your own "
+                "after you have walked for a while?"
             )
 
         if any(phrase in text for phrase in ("writing about it", "writting about it", "write about it")):
@@ -429,6 +476,183 @@ class LocalTopicLLMClient:
         return TopicLLMResult(topic=topic[:120], description=description[:1000])
 
 
+CHAT_SYSTEM_PROMPT = (
+    "You are the FeelY Chat-LLM. Reply with valid JSON only. "
+    "The JSON object must contain `assistant_message` as a string and `profile` as the "
+    "complete updated user profile object. It must also contain `map_suggestion`, either "
+    "null or an object with `category`, `text`, and `reason` strings. Chat directly with "
+    "the user in a warm, grounded, non-judgmental, therapeutically reflective style "
+    "without claiming to be a psychologist or therapist. FeelY helps the user move from "
+    "inherited scripts toward self-authored, repeatable choices. Each response must "
+    "explicitly reference at least one concrete detail, phrase, relationship, choice, or "
+    "question from new_user_input. Briefly reflect the emotion, conflict, or need connected "
+    "to that detail. Ask one open exploratory question that could help the user understand "
+    "the current experience more clearly. Offer a concrete next step only when it follows "
+    "naturally from the current message; do not force advice into every reply. Do not repeat "
+    "this as headings or a rigid template. Do not diagnose, moralize, promise a cure, or "
+    "make the user responsible for another person's emotions. If the user indicates "
+    "immediate danger or intent to harm themselves or someone else, prioritize urgent local "
+    "support. Use profile and chat info for context, preserve useful profile fields, and "
+    "update ordinary conversational memory only. Never create, edit, or remove "
+    "`self_authorship_map`, `topics`, or `last_confirmed_topic`; those fields require "
+    "explicit user confirmation. Move naturally through whichever part of this arc fits the "
+    "moment: meet the present experience; notice a possible inherited rule; recover the "
+    "user's own perception; imagine another response; choose a small experiment; or review "
+    "an earlier choice without shame. Do not force the whole arc into one response. When "
+    "useful, consider three lenses: what actually happened and what evidence exists; what "
+    "the body signals; and what the user wants or imagines could be possible. Return one "
+    "map_suggestion only when the newest message clearly expresses a durable "
+    "inherited_script, own_perception, value, body_signal, practice, or evidence. Use exactly "
+    "one of those category values. Write the text in the user's first person, keep it "
+    "specific and editable, and explain the reason without presenting an interpretation as "
+    "fact. Otherwise return null. The new_user_input is the primary message you must answer. "
+    "Treat the recent chat context only as background for references and continuity. Do not "
+    "continue answering an older message when the newest message changes focus. Respond "
+    "specifically to concrete words, choices, or questions in the newest message. Avoid "
+    "reusing wording or advice from recent assistant messages unless the user explicitly "
+    "asks for it. Do not begin with phrases such as `You wrote`, `You said`, `That adds "
+    "useful detail`, or `I hear that`. Do not quote or mechanically paraphrase the whole "
+    "message. Engage naturally with its particular meaning and move the conversation "
+    "forward. Before returning JSON, verify that assistant_message could not have been "
+    "written without reading the newest message. Do not wrap the JSON in Markdown fences."
+)
+
+
+TOPIC_SYSTEM_PROMPT = (
+    "You are the FeelY Topic-LLM. Reply with valid JSON only. The JSON object must contain "
+    "`topic` as a short topic string and `description` as one concise paragraph. Analyze only "
+    "the user's own messages supplied in topic_chat_context. Identify the dominant durable "
+    "theme across the conversation, especially recurring conflicts, needs, relationships, "
+    "identity questions, or behavior patterns. The analyser's topic hint is only evidence "
+    "that analysis should happen; independently decide whether it accurately represents the "
+    "full user conversation. You are not selecting from a fixed taxonomy. Create a new topic "
+    "name whenever the conversation's actual theme is more specific or different from the "
+    "examples and analyser hint. Use a specific 2-7 word topic that captures the underlying "
+    "conflict, such as family expectations and autonomy, relationship strain and "
+    "responsibility, depression-related avoidance, trust, or self-worth. Never use generic "
+    "symptom words such as feel, feeling, sad, or mood as the topic title. Combine two closely "
+    "connected themes when that better represents the chat. Do not copy wording from "
+    "assistant replies and do not address the user directly. Do not wrap the JSON in Markdown "
+    "fences."
+)
+
+
+CHAT_RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "assistant_message": {"type": "string"},
+        "profile": {"type": "object"},
+        "map_suggestion": {
+            "anyOf": [
+                {"type": "null"},
+                {
+                    "type": "object",
+                    "properties": {
+                        "category": {
+                            "type": "string",
+                            "enum": [
+                                "inherited_script",
+                                "own_perception",
+                                "value",
+                                "body_signal",
+                                "practice",
+                                "evidence",
+                            ],
+                        },
+                        "text": {"type": "string"},
+                        "reason": {"type": "string"},
+                    },
+                    "required": ["category", "text", "reason"],
+                    "additionalProperties": False,
+                },
+            ]
+        },
+    },
+    "required": ["assistant_message", "profile", "map_suggestion"],
+    "additionalProperties": False,
+}
+
+
+TOPIC_RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "topic": {"type": "string"},
+        "description": {"type": "string"},
+    },
+    "required": ["topic", "description"],
+    "additionalProperties": False,
+}
+
+
+def chat_request_payload(
+    user_input: str,
+    profile: dict[str, Any],
+    chat_info: dict[str, Any],
+    chat_id: str,
+) -> str:
+    return json.dumps(
+        {
+            "chat_id": chat_id,
+            "current_profile": focused_profile_context(profile or {}),
+            "recent_chat_context": focused_chat_context(chat_info or {}),
+            "new_user_input": user_input,
+        },
+        ensure_ascii=True,
+    )
+
+
+def topic_request_payload(
+    chat_info: dict[str, Any],
+    matched_patterns: list[str],
+    topic_hint: str | None,
+) -> str:
+    return json.dumps(
+        {
+            "topic_chat_context": topic_chat_context(chat_info or {}),
+            "matched_patterns": matched_patterns,
+            "topic_hint": topic_hint,
+        },
+        ensure_ascii=True,
+    )
+
+
+def chat_result_from_payload(payload: dict[str, Any]) -> ChatLLMResult:
+    assistant_message = payload.get("assistant_message")
+    updated_profile = payload.get("profile")
+    map_suggestion = payload.get("map_suggestion")
+    if not isinstance(assistant_message, str) or not isinstance(updated_profile, dict):
+        raise_bad_gateway("Chat-LLM response did not match the expected schema")
+    if map_suggestion is not None:
+        valid_categories = {
+            "inherited_script",
+            "own_perception",
+            "value",
+            "body_signal",
+            "practice",
+            "evidence",
+        }
+        if (
+            not isinstance(map_suggestion, dict)
+            or map_suggestion.get("category") not in valid_categories
+            or not isinstance(map_suggestion.get("text"), str)
+            or not isinstance(map_suggestion.get("reason"), str)
+        ):
+            raise_bad_gateway("Chat-LLM map suggestion did not match the expected schema")
+    return ChatLLMResult(
+        assistant_message=assistant_message,
+        profile=updated_profile,
+        map_suggestion=map_suggestion,
+    )
+
+
+def topic_result_from_payload(payload: dict[str, Any]) -> TopicLLMResult:
+    topic = payload.get("topic")
+    description = payload.get("description")
+    if not isinstance(topic, str) or not isinstance(description, str):
+        raise_bad_gateway("Topic-LLM response did not match the expected schema")
+    return TopicLLMResult(topic=topic[:120], description=description[:2000])
+
+
 class OpenAIBaseClient:
     def __init__(self, api_key: str, model: str) -> None:
         from openai import AsyncOpenAI
@@ -451,58 +675,15 @@ class OpenAIChatLLMClient(OpenAIBaseClient):
             messages=[
                 {
                     "role": "system",
-                    "content": (
-                        "You are the FeelY Chat-LLM. Reply with valid JSON only. "
-                        "The JSON object must contain `assistant_message` as a string and "
-                        "`profile` as the complete updated user profile object. Chat directly "
-                        "with the user in a warm, grounded, non-judgmental, therapeutically "
-                        "reflective style without claiming to be a psychologist or therapist. "
-                        "Each response must explicitly reference at least one concrete detail, "
-                        "phrase, relationship, choice, or question from new_user_input. Briefly "
-                        "reflect the emotion, conflict, or need connected to that detail. Ask "
-                        "one open exploratory question that could help the user understand the "
-                        "current experience more clearly. Offer a concrete next step only when "
-                        "it follows naturally from the current message; do not force advice into "
-                        "every reply. Do not repeat this as headings or a rigid template. Do "
-                        "not diagnose, moralize, promise a cure, or make the user responsible "
-                        "for another person's emotions. If the user indicates immediate danger "
-                        "or intent to harm themselves or someone else, prioritize urgent local "
-                        "support. Use profile and chat info for context, preserve useful profile "
-                        "fields, and update durable user information only. "
-                        "The new_user_input is the primary message you must answer. Treat the "
-                        "recent chat context only as background for references and continuity. "
-                        "Do not continue answering an older message when the newest message "
-                        "changes focus. Respond specifically to concrete words, choices, or "
-                        "questions in the newest message. Avoid reusing wording or advice from "
-                        "recent assistant messages unless the user explicitly asks for it. "
-                        "Do not begin with phrases such as `You wrote`, `You said`, `That adds "
-                        "useful detail`, or `I hear that`. Do not quote or mechanically "
-                        "paraphrase the whole message. Engage naturally with its particular "
-                        "meaning and move the conversation forward. "
-                        "Before returning JSON, verify that assistant_message could not have "
-                        "been written without reading the newest message."
-                    ),
+                    "content": CHAT_SYSTEM_PROMPT,
                 },
                 {
                     "role": "user",
-                    "content": json.dumps(
-                        {
-                            "chat_id": chat_id,
-                            "current_profile": focused_profile_context(profile or {}),
-                            "recent_chat_context": focused_chat_context(chat_info or {}),
-                            "new_user_input": user_input,
-                        },
-                        ensure_ascii=True,
-                    ),
+                    "content": chat_request_payload(user_input, profile, chat_info, chat_id),
                 },
             ],
         )
-        payload = parse_json_response(response.choices[0].message.content)
-        assistant_message = payload.get("assistant_message")
-        updated_profile = payload.get("profile")
-        if not isinstance(assistant_message, str) or not isinstance(updated_profile, dict):
-            raise_bad_gateway("Chat-LLM response did not match the expected schema")
-        return ChatLLMResult(assistant_message=assistant_message, profile=updated_profile)
+        return chat_result_from_payload(parse_json_response(response.choices[0].message.content))
 
 
 class OpenAITopicLLMClient(OpenAIBaseClient):
@@ -518,53 +699,231 @@ class OpenAITopicLLMClient(OpenAIBaseClient):
             messages=[
                 {
                     "role": "system",
-                    "content": (
-                        "You are the FeelY Topic-LLM. Reply with valid JSON only. "
-                        "The JSON object must contain `topic` as a short topic string and "
-                        "`description` as one concise paragraph. Analyze only the user's own "
-                        "messages supplied in topic_chat_context. Identify the dominant durable "
-                        "theme across the conversation, especially recurring conflicts, needs, "
-                        "relationships, identity questions, or behavior patterns. The analyser's "
-                        "topic hint is only evidence that analysis should happen; independently "
-                        "decide whether it accurately represents the full user conversation. "
-                        "You are not selecting from a fixed taxonomy. Create a new topic name "
-                        "whenever the conversation's actual theme is more specific or different "
-                        "from the examples and analyser hint. "
-                        "Use a specific 2-7 word topic that captures the underlying conflict, "
-                        "such as family expectations and autonomy, relationship strain and "
-                        "responsibility, depression-related avoidance, trust, or self-worth. "
-                        "Never use generic symptom words such as feel, feeling, sad, or mood as "
-                        "the topic title. Combine two closely connected themes when that better "
-                        "represents the chat. Do not copy wording from assistant replies and do "
-                        "not address the user directly."
-                    ),
+                    "content": TOPIC_SYSTEM_PROMPT,
                 },
                 {
                     "role": "user",
-                    "content": json.dumps(
-                        {
-                            "topic_chat_context": topic_chat_context(chat_info or {}),
-                            "matched_patterns": matched_patterns,
-                            "topic_hint": topic_hint,
-                        },
-                        ensure_ascii=True,
-                    ),
+                    "content": topic_request_payload(chat_info, matched_patterns, topic_hint),
                 },
             ],
         )
-        payload = parse_json_response(response.choices[0].message.content)
-        topic = payload.get("topic")
-        description = payload.get("description")
-        if not isinstance(topic, str) or not isinstance(description, str):
-            raise_bad_gateway("Topic-LLM response did not match the expected schema")
-        return TopicLLMResult(topic=topic[:120], description=description[:2000])
+        return topic_result_from_payload(
+            parse_json_response(response.choices[0].message.content)
+        )
+
+
+class AnthropicBaseClient:
+    def __init__(self, api_key: str, model: str, max_tokens: int) -> None:
+        from anthropic import AsyncAnthropic
+
+        self.client = AsyncAnthropic(api_key=api_key)
+        self.model = model
+        self.max_tokens = max_tokens
+
+    @staticmethod
+    def response_text(response: Any) -> str:
+        return "".join(
+            block.text
+            for block in response.content
+            if getattr(block, "type", None) == "text" and isinstance(block.text, str)
+        )
+
+
+class AnthropicChatLLMClient(AnthropicBaseClient):
+    async def respond(
+        self,
+        user_input: str,
+        profile: dict[str, Any],
+        chat_info: dict[str, Any],
+        chat_id: str,
+    ) -> ChatLLMResult:
+        response = await self.client.messages.create(
+            model=self.model,
+            max_tokens=self.max_tokens,
+            system=CHAT_SYSTEM_PROMPT,
+            messages=[
+                {
+                    "role": "user",
+                    "content": chat_request_payload(user_input, profile, chat_info, chat_id),
+                }
+            ],
+        )
+        return chat_result_from_payload(
+            parse_json_response(self.response_text(response))
+        )
+
+
+class AnthropicTopicLLMClient(AnthropicBaseClient):
+    async def create_topic(
+        self,
+        chat_info: dict[str, Any],
+        matched_patterns: list[str],
+        topic_hint: str | None = None,
+    ) -> TopicLLMResult:
+        response = await self.client.messages.create(
+            model=self.model,
+            max_tokens=self.max_tokens,
+            system=TOPIC_SYSTEM_PROMPT,
+            messages=[
+                {
+                    "role": "user",
+                    "content": topic_request_payload(
+                        chat_info,
+                        matched_patterns,
+                        topic_hint,
+                    ),
+                }
+            ],
+        )
+        return topic_result_from_payload(
+            parse_json_response(self.response_text(response))
+        )
+
+
+class OllamaBaseClient:
+    def __init__(
+        self,
+        base_url: str,
+        model: str,
+        timeout_seconds: float,
+        context_window: int,
+        max_tokens: int,
+    ) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.timeout_seconds = timeout_seconds
+        self.client: Any | None = None
+        self.model = model
+        self.context_window = context_window
+        self.max_tokens = max_tokens
+
+    async def post(self, path: str, payload: dict[str, Any]) -> httpx.Response:
+        if self.client is not None:
+            return await self.client.post(path, json=payload)
+        async with httpx.AsyncClient(
+            base_url=self.base_url,
+            timeout=self.timeout_seconds,
+        ) as client:
+            return await client.post(path, json=payload)
+
+    async def request_json(
+        self,
+        system_prompt: str,
+        user_payload: str,
+        response_schema: dict[str, Any],
+        temperature: float,
+    ) -> dict[str, Any]:
+        try:
+            response = await self.post(
+                "/api/chat",
+                {
+                    "model": self.model,
+                    "stream": False,
+                    "think": False,
+                    "format": response_schema,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_payload},
+                    ],
+                    "options": {
+                        "num_ctx": self.context_window,
+                        "num_predict": self.max_tokens,
+                        "temperature": temperature,
+                    },
+                },
+            )
+            response.raise_for_status()
+        except httpx.ConnectError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "Could not connect to Ollama. Start Ollama and make sure "
+                    f"it is available at {self.base_url}."
+                ),
+            ) from exc
+        except httpx.TimeoutException as exc:
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail="Ollama took too long to generate a response",
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            detail = ollama_error_detail(exc.response)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Ollama request failed: {detail}",
+            ) from exc
+        except httpx.RequestError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Ollama request failed: {exc}",
+            ) from exc
+
+        try:
+            response_payload = response.json()
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Ollama returned an invalid HTTP response",
+            ) from exc
+
+        if not isinstance(response_payload, dict):
+            raise_bad_gateway("Ollama returned an unexpected HTTP response")
+        message = response_payload.get("message")
+        content = message.get("content") if isinstance(message, dict) else None
+        return parse_json_response(content)
+
+
+class OllamaChatLLMClient(OllamaBaseClient):
+    async def respond(
+        self,
+        user_input: str,
+        profile: dict[str, Any],
+        chat_info: dict[str, Any],
+        chat_id: str,
+    ) -> ChatLLMResult:
+        payload = await self.request_json(
+            system_prompt=CHAT_SYSTEM_PROMPT,
+            user_payload=chat_request_payload(user_input, profile, chat_info, chat_id),
+            response_schema=CHAT_RESPONSE_SCHEMA,
+            temperature=0.7,
+        )
+        return chat_result_from_payload(payload)
+
+
+class OllamaTopicLLMClient(OllamaBaseClient):
+    async def create_topic(
+        self,
+        chat_info: dict[str, Any],
+        matched_patterns: list[str],
+        topic_hint: str | None = None,
+    ) -> TopicLLMResult:
+        payload = await self.request_json(
+            system_prompt=TOPIC_SYSTEM_PROMPT,
+            user_payload=topic_request_payload(chat_info, matched_patterns, topic_hint),
+            response_schema=TOPIC_RESPONSE_SCHEMA,
+            temperature=0.2,
+        )
+        return topic_result_from_payload(payload)
+
+
+def ollama_error_detail(response: httpx.Response) -> str:
+    try:
+        payload = response.json()
+    except ValueError:
+        return response.text or f"HTTP {response.status_code}"
+    if isinstance(payload, dict) and isinstance(payload.get("error"), str):
+        return payload["error"]
+    return f"HTTP {response.status_code}"
 
 
 def parse_json_response(content: str | None) -> dict[str, Any]:
     if not content:
         raise_bad_gateway("LLM returned an empty response")
+    cleaned_content = content.strip()
+    if cleaned_content.startswith("```") and cleaned_content.endswith("```"):
+        cleaned_content = re.sub(r"^```(?:json)?\s*", "", cleaned_content)
+        cleaned_content = re.sub(r"\s*```$", "", cleaned_content)
     try:
-        payload = json.loads(content)
+        payload = json.loads(cleaned_content)
     except json.JSONDecodeError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -588,6 +947,25 @@ def ensure_openai_api_key() -> str:
     return settings.openai_api_key
 
 
+def ensure_anthropic_api_key() -> str:
+    if not settings.anthropic_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="ANTHROPIC_API_KEY must be configured when LLM_PROVIDER is anthropic",
+        )
+    return settings.anthropic_api_key
+
+
+def unsupported_provider(provider: str) -> NoReturn:
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail=(
+            f"Unsupported LLM provider '{provider}'. "
+            "Use mock, openai, anthropic, or ollama."
+        ),
+    )
+
+
 def get_chat_llm_client() -> ChatLLMClient:
     provider = (settings.chat_llm_provider or settings.llm_provider).lower()
     if provider == "openai":
@@ -595,7 +973,23 @@ def get_chat_llm_client() -> ChatLLMClient:
             api_key=ensure_openai_api_key(),
             model=settings.openai_chat_model or settings.openai_model,
         )
-    return LocalChatLLMClient()
+    if provider == "anthropic":
+        return AnthropicChatLLMClient(
+            api_key=ensure_anthropic_api_key(),
+            model=settings.anthropic_chat_model or settings.anthropic_model,
+            max_tokens=settings.anthropic_max_tokens,
+        )
+    if provider == "ollama":
+        return OllamaChatLLMClient(
+            base_url=settings.ollama_base_url,
+            model=settings.ollama_chat_model or settings.ollama_model,
+            timeout_seconds=settings.ollama_timeout_seconds,
+            context_window=settings.ollama_context_window,
+            max_tokens=settings.ollama_max_tokens,
+        )
+    if provider in {"mock", "local"}:
+        return LocalChatLLMClient()
+    unsupported_provider(provider)
 
 
 def get_topic_llm_client() -> TopicLLMClient:
@@ -605,4 +999,20 @@ def get_topic_llm_client() -> TopicLLMClient:
             api_key=ensure_openai_api_key(),
             model=settings.openai_topic_model or settings.openai_model,
         )
-    return LocalTopicLLMClient()
+    if provider == "anthropic":
+        return AnthropicTopicLLMClient(
+            api_key=ensure_anthropic_api_key(),
+            model=settings.anthropic_topic_model or settings.anthropic_model,
+            max_tokens=settings.anthropic_max_tokens,
+        )
+    if provider == "ollama":
+        return OllamaTopicLLMClient(
+            base_url=settings.ollama_base_url,
+            model=settings.ollama_topic_model or settings.ollama_model,
+            timeout_seconds=settings.ollama_timeout_seconds,
+            context_window=settings.ollama_context_window,
+            max_tokens=settings.ollama_max_tokens,
+        )
+    if provider in {"mock", "local"}:
+        return LocalTopicLLMClient()
+    unsupported_provider(provider)

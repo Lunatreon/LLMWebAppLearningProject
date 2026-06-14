@@ -88,7 +88,11 @@ SECRET_KEY="change-this-secret-before-deploying"
 DATABASE_URL="sqlite:///./feely.db"
 LLM_PROVIDER="mock"
 OPENAI_API_KEY=""
-OPENAI_MODEL="gpt-4.1-mini"
+OPENAI_MODEL="gpt-5.4-mini"
+ANTHROPIC_API_KEY=""
+ANTHROPIC_MODEL="claude-sonnet-4-6"
+OLLAMA_BASE_URL="http://127.0.0.1:11434"
+OLLAMA_MODEL="qwen3.5:4b"
 ```
 
 Use `.env.example` as the template for local setup.
@@ -98,8 +102,12 @@ Important settings:
 - `SECRET_KEY`: used to sign JWT access tokens. Change this before deployment.
 - `DATABASE_URL`: database connection string. SQLite is used by default.
 - `CORS_ORIGINS`: websites/apps allowed to call the API from browsers.
-- `LLM_PROVIDER`: `mock` for local development, `openai` for the OpenAI client.
+- `LLM_PROVIDER`: `mock`, `openai`, `anthropic`, or `ollama`.
+- `CHAT_LLM_PROVIDER` and `TOPIC_LLM_PROVIDER`: optional role-specific overrides.
 - `OPENAI_API_KEY`: required when `LLM_PROVIDER` is `openai`.
+- `ANTHROPIC_API_KEY`: required when a role uses the `anthropic` provider.
+- `OLLAMA_BASE_URL`: local Ollama service URL; no API key is required.
+- `OLLAMA_MODEL`: fallback model for both Ollama roles.
 
 ## Database Layer
 
@@ -176,7 +184,7 @@ What the endpoint does:
 
 1. Requires a logged-in user.
 2. Loads or creates that user's profile.
-3. Calls `get_llm_client().respond(...)`.
+3. Calls `get_chat_llm_client().respond(...)`.
 4. Passes both `user_input` and the current `profile`.
 5. Receives an assistant message and the complete updated profile.
 6. Saves the updated profile to the database.
@@ -198,30 +206,54 @@ Response body:
 
 The LLM abstraction lives in `app/services/llm.py`.
 
-The important interface is:
+The important interfaces are:
 
 ```python
-class LLMClient(Protocol):
-    async def respond(self, user_input: str, profile: dict[str, Any]) -> LLMResult:
-        """Return an assistant response and a complete updated user profile."""
+class ChatLLMClient(Protocol):
+    async def respond(
+        self,
+        user_input: str,
+        profile: dict[str, Any],
+        chat_info: dict[str, Any],
+        chat_id: str,
+    ) -> ChatLLMResult:
+        ...
+
+
+class TopicLLMClient(Protocol):
+    async def create_topic(
+        self,
+        chat_info: dict[str, Any],
+        matched_patterns: list[str],
+        topic_hint: str | None = None,
+    ) -> TopicLLMResult:
+        ...
 ```
 
-Any LLM provider should return:
+Chat providers return a direct response, updated ordinary profile memory, and
+an optional user-confirmed map suggestion. Topic providers return a topic and
+description.
 
 ```python
-LLMResult(
+ChatLLMResult(
     assistant_message="Text for the user",
-    profile={"complete": "updated profile"}
+    profile={"complete": "updated profile"},
+    map_suggestion=None,
 )
+
+TopicLLMResult(topic="Specific topic", description="Concise description")
 ```
 
-There are currently two clients:
+Each role currently has four provider implementations:
 
-- `LocalProfileLLMClient`: local deterministic fallback for development.
-- `OpenAILLMClient`: real OpenAI-powered client.
+- `LocalChatLLMClient` and `LocalTopicLLMClient`
+- `OpenAIChatLLMClient` and `OpenAITopicLLMClient`
+- `AnthropicChatLLMClient` and `AnthropicTopicLLMClient`
+- `OllamaChatLLMClient` and `OllamaTopicLLMClient`
 
 The local mock is useful because developers can build and test app flows without
-paying for or configuring a real LLM.
+paying for or configuring a real LLM. Ollama provides generated responses from
+a model running on the developer's own computer.
 
 ## How To Add A New API Function
 
@@ -393,10 +425,17 @@ def create_note(payload: NoteCreate, db: Session = Depends(get_db)):
 Add a new class in `app/services/llm.py` or split providers into separate files
 if the file becomes large.
 
-The provider must implement:
+Implement either the chat protocol, topic protocol, or both. A chat provider
+must implement:
 
 ```python
-async def respond(self, user_input: str, profile: dict[str, Any]) -> LLMResult:
+async def respond(
+    self,
+    user_input: str,
+    profile: dict[str, Any],
+    chat_info: dict[str, Any],
+    chat_id: str,
+) -> ChatLLMResult:
     ...
 ```
 
@@ -404,23 +443,25 @@ Example:
 
 ```python
 class MyLLMClient:
-    async def respond(self, user_input: str, profile: dict[str, Any]) -> LLMResult:
+    async def respond(self, user_input, profile, chat_info, chat_id):
         assistant_message = "Generated message"
         updated_profile = {
             **profile,
             "last_user_message": user_input,
         }
-        return LLMResult(
+        return ChatLLMResult(
             assistant_message=assistant_message,
             profile=updated_profile,
+            map_suggestion=None,
         )
 ```
 
-Then update `get_llm_client()`:
+Then update the matching factory:
 
 ```python
-def get_llm_client() -> LLMClient:
-    if settings.llm_provider.lower() == "my_provider":
+def get_chat_llm_client() -> ChatLLMClient:
+    provider = (settings.chat_llm_provider or settings.llm_provider).lower()
+    if provider == "my_provider":
         return MyLLMClient()
     ...
 ```

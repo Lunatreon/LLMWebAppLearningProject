@@ -6,8 +6,11 @@ const state = {
   token: localStorage.getItem("feely_token"),
   user: null,
   chats: [],
+  map: null,
   activeChatId: null,
   pendingTopic: null,
+  pendingMapSuggestion: null,
+  completingPracticeId: null,
   pollTimer: null,
 };
 
@@ -37,6 +40,13 @@ const topicCard = document.querySelector("#topic-card");
 const topicTitle = document.querySelector("#topic-title");
 const topicAccept = document.querySelector("#topic-accept");
 const topicDismiss = document.querySelector("#topic-dismiss");
+const mapSuggestionCard = document.querySelector("#map-suggestion-card");
+const mapSuggestionCategory = document.querySelector("#map-suggestion-category");
+const mapSuggestionTopic = document.querySelector("#map-suggestion-topic");
+const mapSuggestionText = document.querySelector("#map-suggestion-text");
+const mapSuggestionReason = document.querySelector("#map-suggestion-reason");
+const mapSuggestionAccept = document.querySelector("#map-suggestion-accept");
+const mapSuggestionDismiss = document.querySelector("#map-suggestion-dismiss");
 const userAvatar = document.querySelector("#user-avatar");
 const userName = document.querySelector("#user-name");
 const userEmail = document.querySelector("#user-email");
@@ -44,6 +54,31 @@ const sidebar = document.querySelector("#sidebar");
 const sidebarToggle = document.querySelector("#sidebar-toggle");
 const sidebarClose = document.querySelector("#sidebar-close");
 const sidebarBackdrop = document.querySelector("#sidebar-backdrop");
+const conversationView = document.querySelector("#conversation-view");
+const mapView = document.querySelector("#map-view");
+const chatWorkspaceButton = document.querySelector("#chat-workspace-button");
+const mapWorkspaceButton = document.querySelector("#map-workspace-button");
+const mapSidebarToggle = document.querySelector("#map-sidebar-toggle");
+const mapContent = document.querySelector("#map-content");
+const addPracticeButton = document.querySelector("#add-practice-button");
+const practiceDialog = document.querySelector("#practice-dialog");
+const practiceForm = document.querySelector("#practice-form");
+const practiceText = document.querySelector("#practice-text");
+const practiceTopic = document.querySelector("#practice-topic");
+const reflectionDialog = document.querySelector("#reflection-dialog");
+const reflectionForm = document.querySelector("#reflection-form");
+const practiceReflection = document.querySelector("#practice-reflection");
+const lensToggle = document.querySelector("#lens-toggle");
+const lensPanel = document.querySelector("#lens-panel");
+
+const MAP_CATEGORY_LABELS = {
+  inherited_script: "Inherited script",
+  own_perception: "My perception",
+  value: "Value",
+  body_signal: "Body signal",
+  practice: "Practice",
+  evidence: "Evidence",
+};
 
 function setMode(mode) {
   state.mode = mode;
@@ -106,7 +141,9 @@ async function showChat() {
   authView.classList.add("hidden");
   chatView.classList.remove("hidden");
   document.title = "FeelY | Conversations";
-  await Promise.all([loadUser(), loadChats()]);
+  const requestedView = new URLSearchParams(window.location.search).get("view");
+  switchWorkspace(requestedView === "map" ? "map" : "chat");
+  await Promise.all([loadUser(), loadMap(), loadChats()]);
   startPolling();
 }
 
@@ -140,12 +177,15 @@ function logout() {
   state.user = null;
   state.activeChatId = null;
   state.chats = [];
+  state.map = null;
   state.pendingTopic = null;
+  state.pendingMapSuggestion = null;
   localStorage.removeItem("feely_token");
   authForm.reset();
   renderChats();
   renderMessages([]);
   renderTopic(null);
+  renderMapSuggestion(null);
   renderUser();
   showAuth();
 }
@@ -153,6 +193,11 @@ function logout() {
 async function loadUser() {
   state.user = await api("/users/me", { headers: authHeaders() });
   renderUser();
+}
+
+async function loadMap() {
+  state.map = await api("/users/me/map", { headers: authHeaders() });
+  renderMap();
 }
 
 function renderUser() {
@@ -194,6 +239,7 @@ async function createChat() {
   renderChats();
   renderMessages([]);
   renderTopic(null);
+  renderMapSuggestion(null);
   closeSidebar();
   messageInput.focus();
 }
@@ -210,6 +256,7 @@ async function loadChat(chatId) {
   chatTitle.textContent = chat.title || "New conversation";
   document.title = `${chat.title || "Conversation"} | FeelY`;
   renderMessages(chat.messages || []);
+  renderMapSuggestion(chat.pending_map_suggestion || null);
   renderChats();
   closeSidebar();
   await pollTopicOnce();
@@ -305,6 +352,26 @@ function renderTopic(topic) {
   topicTitle.textContent = topic.topic;
 }
 
+function renderMapSuggestion(suggestion) {
+  state.pendingMapSuggestion = suggestion;
+  mapSuggestionCard.classList.toggle("hidden", !suggestion);
+  if (!suggestion) {
+    mapSuggestionCategory.textContent = "";
+    mapSuggestionTopic.textContent = "";
+    mapSuggestionText.value = "";
+    mapSuggestionReason.textContent = "";
+    return;
+  }
+
+  mapSuggestionCategory.textContent =
+    MAP_CATEGORY_LABELS[suggestion.category] || suggestion.category;
+  mapSuggestionTopic.textContent = suggestion.topic_title
+    ? `Topic: ${suggestion.topic_title}`
+    : "Not connected to a topic yet";
+  mapSuggestionText.value = suggestion.text || "";
+  mapSuggestionReason.textContent = suggestion.reason || "";
+}
+
 async function sendMessage(event) {
   event.preventDefault();
   const context = messageInput.value.trim();
@@ -338,6 +405,7 @@ async function sendMessage(event) {
       updated_at: response.chat_info.updated_at,
       pending_topic: response.chat_info.pending_topic || null,
       messages: response.chat_info.messages || [],
+      pending_map_suggestion: response.map_suggestion || null,
     };
     state.activeChatId = response.chat_id;
     upsertChat(updatedChat);
@@ -345,6 +413,7 @@ async function sendMessage(event) {
     document.title = `${updatedChat.title} | FeelY`;
     renderChats();
     renderMessages(updatedChat.messages);
+    renderMapSuggestion(response.map_suggestion || null);
     renderTopic(null);
     pollTopicSoon();
   } catch (error) {
@@ -412,7 +481,31 @@ async function confirmTopic(accepted) {
       accepted,
     }),
   });
+  await loadMap();
   await loadChats();
+}
+
+async function confirmMapSuggestion(accepted) {
+  if (!state.pendingMapSuggestion) return;
+  const suggestion = state.pendingMapSuggestion;
+  const text = mapSuggestionText.value.trim();
+  if (accepted && !text) return;
+
+  renderMapSuggestion(null);
+  const response = await api("/llm/map-suggestions/confirm", {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      chat_id: suggestion.source_chat_id || state.activeChatId,
+      accepted,
+      category: suggestion.category,
+      text: text || suggestion.text,
+      reason: suggestion.reason,
+      topic_space_id: suggestion.topic_space_id,
+    }),
+  });
+  state.map = response.map;
+  renderMap();
 }
 
 function autoresizeMessageInput() {
@@ -430,17 +523,263 @@ function closeSidebar() {
   sidebarBackdrop.classList.add("hidden");
 }
 
+function switchWorkspace(view) {
+  const showMap = view === "map";
+  conversationView.classList.toggle("hidden", showMap);
+  mapView.classList.toggle("hidden", !showMap);
+  chatWorkspaceButton.classList.toggle("active", !showMap);
+  mapWorkspaceButton.classList.toggle("active", showMap);
+  chatWorkspaceButton.setAttribute("aria-selected", String(!showMap));
+  mapWorkspaceButton.setAttribute("aria-selected", String(showMap));
+  document.title = showMap ? "My Map | FeelY" : `${chatTitle.textContent} | FeelY`;
+  closeSidebar();
+  if (showMap) loadMap().catch(renderInlineError);
+}
+
+function createMapEntryElement(entry) {
+  const item = document.createElement("article");
+  item.className = "map-entry";
+  item.dataset.category = entry.category;
+
+  const label = document.createElement("span");
+  label.className = "map-entry-label";
+  label.textContent = MAP_CATEGORY_LABELS[entry.category] || entry.category;
+
+  const text = document.createElement("p");
+  text.textContent = entry.text;
+  item.append(label, text);
+
+  if (entry.category === "practice") {
+    const status = document.createElement("span");
+    status.className = "practice-status";
+    status.textContent = entry.status || "active";
+    item.append(status);
+
+    const controls = document.createElement("div");
+    controls.className = "practice-controls";
+    if (entry.status !== "completed") {
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.textContent = entry.status === "paused" ? "Resume" : "Pause";
+      toggle.addEventListener("click", () => {
+        updatePractice(entry.id, entry.status === "paused" ? "active" : "paused").catch(
+          renderInlineError,
+        );
+      });
+
+      const complete = document.createElement("button");
+      complete.type = "button";
+      complete.textContent = "Reflect and complete";
+      complete.addEventListener("click", () => openReflectionDialog(entry.id));
+      controls.append(toggle, complete);
+    } else {
+      const reactivate = document.createElement("button");
+      reactivate.type = "button";
+      reactivate.textContent = "Practice again";
+      reactivate.addEventListener("click", () => updatePractice(entry.id, "active").catch(renderInlineError));
+      controls.append(reactivate);
+    }
+    item.append(controls);
+
+    if (entry.reflection) {
+      const reflection = document.createElement("p");
+      reflection.className = "practice-reflection";
+      reflection.textContent = entry.reflection;
+      item.append(reflection);
+    }
+  }
+  return item;
+}
+
+function createTopicSpaceElement(space) {
+  const card = document.createElement("section");
+  card.className = "topic-space";
+
+  const header = document.createElement("div");
+  header.className = "topic-space-header";
+  const copy = document.createElement("div");
+  const title = document.createElement("h3");
+  title.textContent = space.title;
+  const description = document.createElement("p");
+  description.textContent = space.description;
+  copy.append(title, description);
+
+  const chatCount = document.createElement("span");
+  chatCount.className = "topic-chat-count";
+  const count = space.chat_ids?.length || 0;
+  chatCount.textContent = `${count} ${count === 1 ? "chat" : "chats"}`;
+  header.append(copy, chatCount);
+  card.append(header);
+
+  const entries = space.entries || [];
+  if (entries.length) {
+    const grid = document.createElement("div");
+    grid.className = "map-entry-grid";
+    entries.forEach((entry) => grid.append(createMapEntryElement(entry)));
+    card.append(grid);
+  }
+  return card;
+}
+
+function renderMap() {
+  mapContent.replaceChildren();
+
+  const intro = document.createElement("section");
+  intro.className = "map-intro";
+  const heading = document.createElement("h3");
+  heading.textContent = "What you are learning and choosing";
+  const copy = document.createElement("p");
+  copy.textContent =
+    "Your map grows only from topics and observations you choose to save. It is a working record, not a fixed definition of who you are.";
+  intro.append(heading, copy);
+  mapContent.append(intro);
+
+  const map = state.map || { topic_spaces: [], unassigned_entries: [] };
+  const spaces = map.topic_spaces || [];
+  const unassigned = map.unassigned_entries || [];
+  if (!spaces.length && !unassigned.length) {
+    const empty = document.createElement("p");
+    empty.className = "map-empty";
+    empty.textContent =
+      "When you accept a recurring topic or save a useful observation from chat, it will appear here. You can also begin with one small practice.";
+    mapContent.append(empty);
+    return;
+  }
+
+  if (spaces.length) {
+    const grid = document.createElement("div");
+    grid.className = "topic-space-grid";
+    spaces.forEach((space) => grid.append(createTopicSpaceElement(space)));
+    mapContent.append(grid);
+  }
+
+  if (unassigned.length) {
+    const section = document.createElement("section");
+    section.className = "unassigned-section";
+    const title = document.createElement("h3");
+    title.textContent = "Across topics";
+    const grid = document.createElement("div");
+    grid.className = "map-entry-grid";
+    unassigned.forEach((entry) => grid.append(createMapEntryElement(entry)));
+    section.append(title, grid);
+    mapContent.append(section);
+  }
+}
+
+function openPracticeDialog() {
+  practiceText.value = "";
+  practiceTopic.replaceChildren();
+  const unassigned = document.createElement("option");
+  unassigned.value = "";
+  unassigned.textContent = "Across topics";
+  practiceTopic.append(unassigned);
+  (state.map?.topic_spaces || []).forEach((space) => {
+    const option = document.createElement("option");
+    option.value = space.id;
+    option.textContent = space.title;
+    practiceTopic.append(option);
+  });
+  practiceDialog.showModal();
+  practiceText.focus();
+}
+
+function openReflectionDialog(entryId) {
+  state.completingPracticeId = entryId;
+  practiceReflection.value = "";
+  reflectionDialog.showModal();
+  practiceReflection.focus();
+}
+
+async function createPractice(event) {
+  event.preventDefault();
+  const text = practiceText.value.trim();
+  if (!text) return;
+  const response = await api("/users/me/map/entries", {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      category: "practice",
+      text,
+      topic_space_id: practiceTopic.value || null,
+      source_chat_id: state.activeChatId,
+    }),
+  });
+  state.map = response.map;
+  renderMap();
+  practiceDialog.close();
+}
+
+async function updatePractice(entryId, status, reflection = null) {
+  const response = await api(`/users/me/map/practices/${encodeURIComponent(entryId)}`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify({ status, reflection }),
+  });
+  state.map = response.map;
+  renderMap();
+}
+
+async function completePractice(event) {
+  event.preventDefault();
+  if (!state.completingPracticeId) return;
+  await updatePractice(
+    state.completingPracticeId,
+    "completed",
+    practiceReflection.value.trim() || null,
+  );
+  state.completingPracticeId = null;
+  reflectionDialog.close();
+}
+
 loginTab.addEventListener("click", () => setMode("login"));
 registerTab.addEventListener("click", () => setMode("register"));
 logoutButton.addEventListener("click", logout);
 refreshButton.addEventListener("click", () => loadChats().catch(renderInlineError));
-newChatButton.addEventListener("click", () => createChat().catch(renderInlineError));
+newChatButton.addEventListener("click", () => {
+  switchWorkspace("chat");
+  createChat().catch(renderInlineError);
+});
 sidebarToggle.addEventListener("click", openSidebar);
+mapSidebarToggle.addEventListener("click", openSidebar);
 sidebarClose.addEventListener("click", closeSidebar);
 sidebarBackdrop.addEventListener("click", closeSidebar);
+chatWorkspaceButton.addEventListener("click", () => switchWorkspace("chat"));
+mapWorkspaceButton.addEventListener("click", () => switchWorkspace("map"));
 messageForm.addEventListener("submit", sendMessage);
 topicAccept.addEventListener("click", () => confirmTopic(true).catch(renderInlineError));
 topicDismiss.addEventListener("click", () => confirmTopic(false).catch(renderInlineError));
+mapSuggestionAccept.addEventListener("click", () =>
+  confirmMapSuggestion(true).catch(renderInlineError),
+);
+mapSuggestionDismiss.addEventListener("click", () =>
+  confirmMapSuggestion(false).catch(renderInlineError),
+);
+addPracticeButton.addEventListener("click", openPracticeDialog);
+practiceForm.addEventListener("submit", (event) => createPractice(event).catch(renderInlineError));
+reflectionForm.addEventListener("submit", (event) =>
+  completePractice(event).catch(renderInlineError),
+);
+document.querySelectorAll("[data-close-dialog]").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelector(`#${button.dataset.closeDialog}`).close();
+  });
+});
+lensToggle.addEventListener("click", () => {
+  const isOpen = lensPanel.classList.toggle("hidden") === false;
+  lensToggle.setAttribute("aria-expanded", String(isOpen));
+});
+document.querySelectorAll("[data-lens]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const prompt = button.dataset.lens;
+    messageInput.value = messageInput.value.trim()
+      ? `${messageInput.value.trim()}\n\n${prompt}`
+      : prompt;
+    autoresizeMessageInput();
+    lensPanel.classList.add("hidden");
+    lensToggle.setAttribute("aria-expanded", "false");
+    messageInput.focus();
+  });
+});
 messageInput.addEventListener("input", autoresizeMessageInput);
 messageInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey) {

@@ -8,6 +8,7 @@ import pytest
 
 BASE_URL = os.getenv("FEELY_TEST_SERVER_URL", "http://127.0.0.1:8000").rstrip("/")
 API_URL = f"{BASE_URL}/api/v1"
+RUN_LIVE_TESTS = os.getenv("FEELY_RUN_SERVER_TESTS") == "1"
 
 
 def assert_server_is_running() -> None:
@@ -24,6 +25,10 @@ def assert_server_is_running() -> None:
     assert response.json() == {"status": "ok"}
 
 
+@pytest.mark.skipif(
+    not RUN_LIVE_TESTS,
+    reason="Set FEELY_RUN_SERVER_TESTS=1 to test an already running backend",
+)
 def test_running_server_auth_profile_and_llm_flow():
     assert_server_is_running()
 

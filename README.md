@@ -13,14 +13,19 @@ per-user LLM requests, and persistent user profiles.
 - Chat-LLM endpoint that sends chat context, chat history, and the saved profile to the LLM
 - Background analyser that scores chats with backend pattern rules
 - Topic-LLM flow that creates a topic and description after enough patterns match
+- User-confirmed topic spaces connecting chats, observations, and practices
+- A self-authorship map for inherited scripts, personal perceptions, values, body signals, evidence, and repeatable choices
 - Static website in `website/` with public content pages, login, registration, chat list, chat view, and topic confirmation
-- Swappable LLM service with a local mock provider for development and an OpenAI provider hook
+- Swappable LLM service with mock, OpenAI, Anthropic, and local Ollama providers
 
 ## Documentation
 
 See [docs/CODE_GUIDE.md](docs/CODE_GUIDE.md) for a walkthrough of how the code
 works and how to expand the backend with new endpoints, database models, LLM
 providers, profile fields, and tests.
+
+See [docs/SELF_AUTHORSHIP.md](docs/SELF_AUTHORSHIP.md) for the Topic Space,
+My Map, suggestion-confirmation, and practice lifecycle architecture.
 
 ## Setup
 
@@ -120,9 +125,64 @@ prompt follows a consistent conversational pattern: reflect the main concern,
 separate feelings from actions when useful, offer one manageable next step, and
 ask at most one open question.
 
-With `LLM_PROVIDER="mock"`, no OpenAI model is called. The backend uses local,
-deterministic development responses instead. Set `LLM_PROVIDER="openai"` and a
-valid API key to receive generated responses from the configured mini model.
+To use Claude through Anthropic, set:
+
+```env
+LLM_PROVIDER="anthropic"
+CHAT_LLM_PROVIDER="anthropic"
+TOPIC_LLM_PROVIDER="anthropic"
+ANTHROPIC_API_KEY="your-api-key"
+ANTHROPIC_MODEL="claude-sonnet-4-6"
+ANTHROPIC_CHAT_MODEL="claude-sonnet-4-6"
+ANTHROPIC_TOPIC_MODEL="claude-sonnet-4-6"
+ANTHROPIC_MAX_TOKENS=4096
+```
+
+`ANTHROPIC_CHAT_MODEL` and `ANTHROPIC_TOPIC_MODEL` fall back to
+`ANTHROPIC_MODEL` when empty. The two roles can also use different providers.
+For example, set `CHAT_LLM_PROVIDER="anthropic"` and
+`TOPIC_LLM_PROVIDER="openai"` while leaving `LLM_PROVIDER="mock"` as the
+default for any role without an override.
+
+### Local generation with Ollama
+
+Install [Ollama](https://ollama.com/download), then download the default model:
+
+```powershell
+ollama pull qwen3.5:4b
+```
+
+The Ollama desktop application normally starts its local service automatically.
+When it does not, start it from another terminal:
+
+```powershell
+ollama serve
+```
+
+Configure FeelY to use the local model:
+
+```env
+LLM_PROVIDER="ollama"
+CHAT_LLM_PROVIDER="ollama"
+TOPIC_LLM_PROVIDER="ollama"
+OLLAMA_BASE_URL="http://127.0.0.1:11434"
+OLLAMA_MODEL="qwen3.5:4b"
+OLLAMA_CHAT_MODEL="qwen3.5:4b"
+OLLAMA_TOPIC_MODEL="qwen3.5:4b"
+OLLAMA_TIMEOUT_SECONDS=180
+OLLAMA_CONTEXT_WINDOW=8192
+OLLAMA_MAX_TOKENS=2048
+```
+
+No API key is needed. `OLLAMA_CHAT_MODEL` and `OLLAMA_TOPIC_MODEL` fall back to
+`OLLAMA_MODEL` when empty. A smaller model can be assigned to topic generation,
+or Ollama can be mixed with either hosted provider using the role-specific
+provider settings.
+
+With `LLM_PROVIDER="mock"`, no external model is called. The backend uses local,
+deterministic development responses instead. Set `LLM_PROVIDER` to `openai`,
+`anthropic`, or `ollama` to receive generated responses. OpenAI and Anthropic
+require their matching API key; Ollama runs locally without one.
 `CHAT_LLM_PROVIDER` and `TOPIC_LLM_PROVIDER` can independently override
 `LLM_PROVIDER`, which is useful while testing the two LLM roles separately.
 
@@ -136,12 +196,16 @@ Change `SECRET_KEY` before deploying.
 - `GET /api/v1/users/me`
 - `GET /api/v1/users/me/profile`
 - `PUT /api/v1/users/me/profile`
+- `GET /api/v1/users/me/map`
+- `POST /api/v1/users/me/map/entries`
+- `PATCH /api/v1/users/me/map/practices/{entry_id}`
 - `GET /api/v1/llm/chats`
 - `POST /api/v1/llm/chats`
 - `GET /api/v1/llm/chats/{chat_id}`
 - `GET /api/v1/llm/chats/{chat_id}/topic-suggestion`
 - `POST /api/v1/llm/message`
 - `POST /api/v1/llm/topics/confirm`
+- `POST /api/v1/llm/map-suggestions/confirm`
 
 ## LLM Flow
 
@@ -156,6 +220,9 @@ When an authenticated user calls `POST /api/v1/llm/message`, the backend:
 7. Saves the Topic-LLM topic and description as a pending topic suggestion.
 8. Lets the frontend poll `GET /api/v1/llm/chats/{chat_id}/topic-suggestion`.
 9. Writes an accepted topic into the user profile through `POST /api/v1/llm/topics/confirm`.
+10. Creates a Topic Space for the accepted topic and connects the current chat.
+11. Optionally proposes one editable My Map entry from the newest user message.
+12. Writes that entry only after explicit user confirmation.
 
 Patterns are an analysis trigger, not a fixed topic taxonomy. The Topic-LLM can
 create its own free-form topic from the user's full conversation. Longer chats
@@ -224,12 +291,14 @@ server. To test a server that is already running, start the API first:
 Then run the live-server test in another terminal:
 
 ```powershell
+$env:FEELY_RUN_SERVER_TESTS = "1"
 .\.venv\Scripts\python.exe -m pytest tests/test_running_server.py
 ```
 
 By default it calls `http://127.0.0.1:8000`. To use another server URL:
 
 ```powershell
+$env:FEELY_RUN_SERVER_TESTS = "1"
 $env:FEELY_TEST_SERVER_URL = "http://127.0.0.1:8001"
 .\.venv\Scripts\python.exe -m pytest tests/test_running_server.py
 ```

@@ -14,12 +14,21 @@ from app.schemas.llm import (
     ChatRead,
     LLMRequest,
     LLMResponse,
+    MapSuggestionConfirmationRequest,
+    MapSuggestionConfirmationResponse,
     TopicConfirmationRequest,
     TopicConfirmationResponse,
     TopicSuggestionResponse,
 )
 from app.services.llm import get_chat_llm_client, get_topic_llm_client
 from app.services.pattern_recognition import ChatAnalyser
+from app.services.self_authorship import (
+    add_map_entry,
+    create_or_link_topic_space,
+    find_topic_space_for_chat,
+    merge_llm_profile,
+    read_map,
+)
 
 router = APIRouter()
 GENERIC_TOPIC_TITLES = {
@@ -80,6 +89,7 @@ def chat_read(chat_session: ChatSession) -> ChatRead:
         message_count=int(info.get("message_count", 0)),
         updated_at=info.get("updated_at"),
         pending_topic=info.get("pending_topic"),
+        pending_map_suggestion=info.get("pending_map_suggestion"),
         messages=list(info.get("messages", [])),
     )
 
@@ -130,6 +140,7 @@ def append_chat_exchange(
     chat_id: str,
     user_input: str,
     assistant_message: str,
+    map_suggestion: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     next_info = dict(chat_info or default_chat_info(user_id, chat_id))
     next_info["user_id"] = user_id
@@ -151,6 +162,10 @@ def append_chat_exchange(
     next_info["last_assistant_message"] = assistant_message
     next_info["updated_at"] = now
     next_info["analysis_status"] = "queued"
+    if map_suggestion:
+        next_info["pending_map_suggestion"] = map_suggestion
+    else:
+        next_info.pop("pending_map_suggestion", None)
     return next_info
 
 
@@ -333,13 +348,24 @@ async def send_message_to_llm(
         chat_id=chat_session.chat_id,
     )
 
-    profile.data = chat_result.profile
+    profile.data = merge_llm_profile(profile.data, chat_result.profile)
+
+    map_suggestion = None
+    if chat_result.map_suggestion:
+        topic_space = find_topic_space_for_chat(profile.data, chat_session.chat_id)
+        map_suggestion = {
+            **chat_result.map_suggestion,
+            "source_chat_id": chat_session.chat_id,
+            "topic_space_id": topic_space.get("id") if topic_space else None,
+            "topic_title": topic_space.get("title") if topic_space else None,
+        }
     chat_session.info = append_chat_exchange(
         chat_session.info or {},
         user_id=current_user.id,
         chat_id=chat_session.chat_id,
         user_input=payload.input_text,
         assistant_message=chat_result.assistant_message,
+        map_suggestion=map_suggestion,
     )
     db.commit()
     db.refresh(profile)
@@ -362,6 +388,7 @@ async def send_message_to_llm(
         profile=profile.data,
         chat_id=chat_session.chat_id,
         chat_info=chat_session.info,
+        map_suggestion=map_suggestion,
         topic_analysis_status="queued",
     )
 
@@ -393,9 +420,22 @@ def confirm_topic(
             topics.append(topic_entry)
         profile_data["topics"] = topics
         profile_data["last_confirmed_topic"] = topic_entry
+        profile_data, topic_space = create_or_link_topic_space(
+            profile_data,
+            title=payload.topic,
+            description=payload.description,
+            chat_id=payload.chat_id,
+        )
         profile.data = profile_data
         pending_topic["status"] = "accepted"
+        pending_topic["topic_space_id"] = topic_space["id"]
         chat_info["title"] = payload.topic.strip()[:80]
+        chat_info["topic_space_id"] = topic_space["id"]
+        pending_map_suggestion = chat_info.get("pending_map_suggestion")
+        if isinstance(pending_map_suggestion, dict):
+            pending_map_suggestion["topic_space_id"] = topic_space["id"]
+            pending_map_suggestion["topic_title"] = topic_space["title"]
+            chat_info["pending_map_suggestion"] = pending_map_suggestion
         accepted_topic_names = list(chat_info.get("accepted_topic_names", []))
         if payload.topic not in accepted_topic_names:
             accepted_topic_names.append(payload.topic)
@@ -416,3 +456,47 @@ def confirm_topic(
     db.refresh(profile)
 
     return TopicConfirmationResponse(accepted=payload.accepted, profile=profile.data)
+
+
+@router.post(
+    "/map-suggestions/confirm",
+    response_model=MapSuggestionConfirmationResponse,
+)
+def confirm_map_suggestion(
+    payload: MapSuggestionConfirmationRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> MapSuggestionConfirmationResponse:
+    profile = get_or_create_profile(db, current_user)
+    chat_session = get_chat_session(db, current_user, payload.chat_id)
+    if chat_session is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")
+
+    entry = None
+    if payload.accepted:
+        topic_space = find_topic_space_for_chat(profile.data, payload.chat_id)
+        topic_space_id = payload.topic_space_id or (topic_space.get("id") if topic_space else None)
+        try:
+            profile_data, entry = add_map_entry(
+                profile.data,
+                category=payload.category,
+                text=payload.text,
+                topic_space_id=topic_space_id,
+                source_chat_id=payload.chat_id,
+                reason=payload.reason,
+            )
+        except (LookupError, ValueError) as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        profile.data = profile_data
+
+    chat_info = dict(chat_session.info or {})
+    chat_info.pop("pending_map_suggestion", None)
+    chat_info["updated_at"] = current_timestamp()
+    chat_session.info = chat_info
+    db.commit()
+    db.refresh(profile)
+    return MapSuggestionConfirmationResponse(
+        accepted=payload.accepted,
+        entry=entry,
+        map=read_map(profile.data),
+    )

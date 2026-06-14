@@ -29,6 +29,7 @@ class ChatRead(BaseModel):
     message_count: int
     updated_at: str | None = None
     pending_topic: dict[str, Any] | None = None
+    pending_map_suggestion: dict[str, Any] | None = None
     messages: list[dict[str, Any]] = Field(default_factory=list)
 
 
@@ -46,6 +47,7 @@ class LLMResponse(BaseModel):
     profile: dict[str, Any]
     chat_id: str
     chat_info: dict[str, Any]
+    map_suggestion: dict[str, Any] | None = None
     topic_analysis_status: str = "queued"
 
 
@@ -63,3 +65,18 @@ class TopicConfirmationRequest(BaseModel):
 class TopicConfirmationResponse(BaseModel):
     accepted: bool
     profile: dict[str, Any]
+
+
+class MapSuggestionConfirmationRequest(BaseModel):
+    chat_id: str = Field(min_length=1, max_length=120)
+    accepted: bool = True
+    category: str = Field(min_length=1, max_length=40)
+    text: str = Field(min_length=1, max_length=1000)
+    reason: str | None = Field(default=None, max_length=1000)
+    topic_space_id: str | None = Field(default=None, max_length=64)
+
+
+class MapSuggestionConfirmationResponse(BaseModel):
+    accepted: bool
+    entry: dict[str, Any] | None = None
+    map: dict[str, Any]

@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -9,6 +10,11 @@ from sqlalchemy.orm import sessionmaker
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
+
+# Unit tests must never spend API credits or depend on a local model service.
+os.environ["LLM_PROVIDER"] = "mock"
+os.environ["CHAT_LLM_PROVIDER"] = "mock"
+os.environ["TOPIC_LLM_PROVIDER"] = "mock"
 
 from app.api.dependencies import get_db
 from app.db.base import Base
