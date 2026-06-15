@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -27,6 +27,7 @@ from app.services.self_authorship import (
     create_or_link_topic_space,
     find_topic_space_for_chat,
     merge_llm_profile,
+    record_conversation_memory,
     read_map,
 )
 
@@ -314,6 +315,20 @@ def read_chat(
     return chat_read(chat_session)
 
 
+@router.delete("/chats/{chat_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_chat(
+    chat_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    chat_session = get_chat_session(db, current_user, chat_id)
+    if chat_session is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")
+    db.delete(chat_session)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/chats/{chat_id}/topic-suggestion", response_model=TopicSuggestionResponse)
 def read_topic_suggestion(
     chat_id: str,
@@ -348,7 +363,11 @@ async def send_message_to_llm(
         chat_id=chat_session.chat_id,
     )
 
-    profile.data = merge_llm_profile(profile.data, chat_result.profile)
+    profile.data = record_conversation_memory(
+        merge_llm_profile(profile.data, chat_result.profile),
+        user_input=payload.input_text,
+        chat_id=chat_session.chat_id,
+    )
 
     map_suggestion = None
     if chat_result.map_suggestion:

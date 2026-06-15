@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     ollama_topic_model: str | None = None
     ollama_timeout_seconds: float = 180.0
     ollama_context_window: int = 8192
-    ollama_max_tokens: int = 2048
+    ollama_max_tokens: int = 1024
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

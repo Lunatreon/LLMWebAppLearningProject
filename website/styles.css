@@ -344,6 +344,7 @@ textarea:focus {
   display: flex;
   min-height: 100vh;
   min-width: 0;
+  overflow-x: hidden;
   flex-direction: column;
   border-right: 1px solid var(--line-dark);
   background: var(--midnight);
@@ -433,46 +434,149 @@ textarea:focus {
 
 .chat-list {
   display: grid;
+  width: 100%;
   min-height: 0;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   gap: 5px;
+  overflow-x: hidden;
   overflow-y: auto;
   padding-right: 2px;
 }
 
-.chat-list button {
+.chat-list-item {
+  position: relative;
   width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.chat-list .chat-open-button {
+  display: block;
+  width: 100%;
+  max-width: 100%;
   min-height: 54px;
+  min-width: 0;
   border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
   color: var(--white);
-  padding: 9px 10px;
+  padding: 9px 62px 9px 10px;
   text-align: left;
 }
 
-.chat-list button:hover {
+.chat-list .chat-open-button:hover {
   background: rgba(255, 253, 249, 0.06);
 }
 
-.chat-list button.active {
+.chat-list .chat-open-button.active {
   border-color: rgba(197, 181, 255, 0.3);
   background: rgba(197, 181, 255, 0.1);
 }
 
-.chat-list strong,
-.chat-list span {
+.chat-actions-button {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 253, 249, 0.68);
+  opacity: 0;
+  padding: 0;
+  transform: translateY(-50%);
+  transition: opacity 120ms ease, background 120ms ease;
+}
+
+.chat-actions-button svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+.chat-list-item:hover .chat-actions-button,
+.chat-list-item:focus-within .chat-actions-button,
+.chat-open-button.active + .chat-actions-button,
+.chat-actions-button[aria-expanded="true"] {
+  opacity: 1;
+}
+
+.chat-actions-button:hover,
+.chat-actions-button:focus-visible,
+.chat-actions-button[aria-expanded="true"] {
+  border-color: rgba(197, 181, 255, 0.24);
+  background: rgba(255, 253, 249, 0.1);
+  color: var(--white);
+}
+
+.chat-actions-menu {
+  position: fixed;
+  z-index: 100;
+  width: 150px;
+  border: 1px solid rgba(255, 253, 249, 0.14);
+  border-radius: 9px;
+  background: #241f2b;
+  padding: 5px;
+  box-shadow: 0 14px 34px rgba(6, 4, 9, 0.42);
+}
+
+.chat-actions-menu button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--danger);
+  padding: 9px 10px;
+  text-align: left;
+}
+
+.chat-actions-menu button:hover,
+.chat-actions-menu button:focus-visible {
+  background: rgba(240, 160, 140, 0.13);
+}
+
+.chat-actions-menu svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  fill: currentColor;
+}
+
+.chat-actions-menu span {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+@media (hover: none) {
+  .chat-actions-button {
+    opacity: 1;
+  }
+}
+
+.chat-list .chat-open-button strong,
+.chat-list .chat-open-button span {
   display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.chat-list strong {
+.chat-list .chat-open-button strong {
   font-size: 13px;
   font-weight: 600;
 }
 
-.chat-list span {
+.chat-list .chat-open-button span {
   margin-top: 3px;
   color: rgba(255, 253, 249, 0.45);
   font-size: 11px;
@@ -629,6 +733,62 @@ textarea:focus {
   width: 2px;
   background: var(--lavender);
   content: "";
+}
+
+.waiting-message {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  color: rgba(255, 253, 249, 0.58);
+}
+
+.waiting-label {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+.waiting-dots {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.waiting-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--lavender);
+  animation: waiting-pulse 1.2s ease-in-out infinite;
+}
+
+.waiting-dots span:nth-child(2) {
+  animation-delay: 160ms;
+}
+
+.waiting-dots span:nth-child(3) {
+  animation-delay: 320ms;
+}
+
+@keyframes waiting-pulse {
+  0%,
+  60%,
+  100% {
+    opacity: 0.28;
+    transform: translateY(0) scale(0.82);
+  }
+
+  30% {
+    opacity: 1;
+    transform: translateY(-3px) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waiting-dots span {
+    animation: none;
+    opacity: 0.72;
+  }
 }
 
 .empty-chat {

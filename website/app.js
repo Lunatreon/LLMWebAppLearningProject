@@ -262,7 +262,83 @@ async function loadChat(chatId) {
   await pollTopicOnce();
 }
 
+async function deleteChat(chat) {
+  const title = chat.title || "New conversation";
+  if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return;
+
+  await api(`/llm/chats/${encodeURIComponent(chat.chat_id)}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+
+  state.chats = state.chats.filter((item) => item.chat_id !== chat.chat_id);
+  if (state.activeChatId === chat.chat_id) {
+    state.activeChatId = state.chats[0]?.chat_id || null;
+  }
+
+  renderChats();
+  if (state.activeChatId) {
+    await loadChat(state.activeChatId);
+  } else {
+    chatTitle.textContent = "New conversation";
+    document.title = "FeelY | Conversations";
+    renderMessages([]);
+    renderTopic(null);
+    renderMapSuggestion(null);
+  }
+}
+
+function closeChatActionsMenu() {
+  document.querySelector(".chat-actions-menu")?.remove();
+  document.querySelectorAll(".chat-actions-button[aria-expanded='true']").forEach((button) => {
+    button.setAttribute("aria-expanded", "false");
+  });
+}
+
+function openChatActionsMenu(chat, trigger) {
+  const wasOpen = trigger.getAttribute("aria-expanded") === "true";
+  closeChatActionsMenu();
+  if (wasOpen) return;
+
+  const menu = document.createElement("div");
+  menu.className = "chat-actions-menu";
+  menu.setAttribute("role", "menu");
+  menu.setAttribute("aria-label", `Actions for ${chat.title || "conversation"}`);
+
+  const deleteButton = document.createElement("button");
+  deleteButton.type = "button";
+  deleteButton.className = "chat-menu-delete";
+  deleteButton.setAttribute("role", "menuitem");
+  deleteButton.innerHTML = `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-1 11H8L7 9Zm3 2v7h2v-7h-2Zm4 0v7h2v-7h-2Z"></path>
+    </svg>
+    <span>Delete</span>
+  `;
+  deleteButton.addEventListener("click", () => {
+    closeChatActionsMenu();
+    deleteChat(chat).catch(renderInlineError);
+  });
+
+  menu.append(deleteButton);
+  document.body.append(menu);
+
+  const triggerRect = trigger.getBoundingClientRect();
+  const menuRect = menu.getBoundingClientRect();
+  const gap = 5;
+  const left = Math.max(8, triggerRect.right - menuRect.width);
+  const top =
+    triggerRect.bottom + gap + menuRect.height <= window.innerHeight
+      ? triggerRect.bottom + gap
+      : triggerRect.top - menuRect.height - gap;
+  menu.style.left = `${left}px`;
+  menu.style.top = `${Math.max(8, top)}px`;
+  trigger.setAttribute("aria-expanded", "true");
+  deleteButton.focus();
+}
+
 function renderChats() {
+  closeChatActionsMenu();
   chatList.replaceChildren();
   chatCount.textContent = String(state.chats.length);
 
@@ -275,9 +351,13 @@ function renderChats() {
   }
 
   state.chats.forEach((chat) => {
+    const item = document.createElement("div");
+    item.className = "chat-list-item";
+
     const button = document.createElement("button");
     button.type = "button";
-    button.className = chat.chat_id === state.activeChatId ? "active" : "";
+    button.className = "chat-open-button";
+    if (chat.chat_id === state.activeChatId) button.classList.add("active");
     button.setAttribute("aria-current", chat.chat_id === state.activeChatId ? "page" : "false");
 
     const title = document.createElement("strong");
@@ -288,7 +368,28 @@ function renderChats() {
     button.append(title, meta);
 
     button.addEventListener("click", () => loadChat(chat.chat_id).catch(renderInlineError));
-    chatList.append(button);
+
+    const actionsButton = document.createElement("button");
+    actionsButton.type = "button";
+    actionsButton.className = "chat-actions-button";
+    actionsButton.innerHTML = `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="5" cy="12" r="1.8"></circle>
+        <circle cx="12" cy="12" r="1.8"></circle>
+        <circle cx="19" cy="12" r="1.8"></circle>
+      </svg>
+    `;
+    actionsButton.title = `More options for ${chat.title || "conversation"}`;
+    actionsButton.setAttribute("aria-label", actionsButton.title);
+    actionsButton.setAttribute("aria-haspopup", "menu");
+    actionsButton.setAttribute("aria-expanded", "false");
+    actionsButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openChatActionsMenu(chat, actionsButton);
+    });
+
+    item.append(button, actionsButton);
+    chatList.append(item);
   });
 }
 
@@ -342,6 +443,29 @@ function renderMessages(items) {
   messages.scrollTop = messages.scrollHeight;
 }
 
+function showWaitingMessage() {
+  const bubble = document.createElement("article");
+  bubble.className = "message assistant waiting-message";
+  bubble.setAttribute("role", "status");
+  bubble.setAttribute("aria-label", "FeelY is thinking");
+
+  const label = document.createElement("span");
+  label.className = "waiting-label";
+  label.textContent = "FeelY is thinking";
+
+  const dots = document.createElement("span");
+  dots.className = "waiting-dots";
+  dots.setAttribute("aria-hidden", "true");
+  for (let index = 0; index < 3; index += 1) {
+    dots.append(document.createElement("span"));
+  }
+
+  bubble.append(label, dots);
+  messages.append(bubble);
+  messages.scrollTop = messages.scrollHeight;
+  return bubble;
+}
+
 function renderTopic(topic) {
   state.pendingTopic = topic;
   topicCard.classList.toggle("hidden", !topic);
@@ -388,6 +512,7 @@ async function sendMessage(event) {
   const currentChat = state.chats.find((chat) => chat.chat_id === state.activeChatId);
   const existingMessages = currentChat?.messages || [];
   renderMessages([...existingMessages, { role: "user", content: context }]);
+  const waitingMessage = showWaitingMessage();
 
   try {
     const response = await api("/llm/message", {
@@ -417,8 +542,10 @@ async function sendMessage(event) {
     renderTopic(null);
     pollTopicSoon();
   } catch (error) {
+    waitingMessage.remove();
     renderInlineError(error);
   } finally {
+    waitingMessage.remove();
     sendButton.disabled = false;
     messageInput.focus();
   }
@@ -759,6 +886,19 @@ practiceForm.addEventListener("submit", (event) => createPractice(event).catch(r
 reflectionForm.addEventListener("submit", (event) =>
   completePractice(event).catch(renderInlineError),
 );
+document.addEventListener("click", (event) => {
+  if (
+    !event.target.closest(".chat-actions-menu") &&
+    !event.target.closest(".chat-actions-button")
+  ) {
+    closeChatActionsMenu();
+  }
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeChatActionsMenu();
+});
+chatList.addEventListener("scroll", closeChatActionsMenu);
+window.addEventListener("resize", closeChatActionsMenu);
 document.querySelectorAll("[data-close-dialog]").forEach((button) => {
   button.addEventListener("click", () => {
     document.querySelector(`#${button.dataset.closeDialog}`).close();

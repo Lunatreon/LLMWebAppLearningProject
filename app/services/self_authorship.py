@@ -16,8 +16,12 @@ ENTRY_CATEGORIES = {
 PRACTICE_STATUSES = {"active", "paused", "completed"}
 LLM_PROTECTED_PROFILE_FIELDS = {
     MAP_KEY,
+    "last_chat_id",
     "topics",
     "last_confirmed_topic",
+    "last_user_message",
+    "message_count",
+    "recent_messages",
 }
 
 
@@ -68,6 +72,25 @@ def merge_llm_profile(
         if field in current:
             merged[field] = current[field]
     return merged
+
+
+def record_conversation_memory(
+    profile_data: dict[str, Any] | None,
+    *,
+    user_input: str,
+    chat_id: str,
+) -> dict[str, Any]:
+    """Update mechanical chat memory without asking the LLM to regenerate it."""
+
+    updated_profile = dict(profile_data or {})
+    updated_profile["last_user_message"] = user_input
+    updated_profile["last_chat_id"] = chat_id
+    updated_profile["message_count"] = int(updated_profile.get("message_count", 0)) + 1
+
+    recent_messages = list(updated_profile.get("recent_messages", []))
+    recent_messages.append(user_input)
+    updated_profile["recent_messages"] = recent_messages[-10:]
+    return updated_profile
 
 
 def create_or_link_topic_space(

@@ -8,6 +8,7 @@ import httpx
 from fastapi import HTTPException, status
 
 from app.core.config import settings
+from app.services.self_authorship import LLM_PROTECTED_PROFILE_FIELDS
 
 
 RECENT_CHAT_MESSAGE_LIMIT = 6
@@ -168,9 +169,8 @@ def focused_chat_context(chat_info: dict[str, Any]) -> dict[str, Any]:
 
 def focused_profile_context(profile: dict[str, Any]) -> dict[str, Any]:
     focused_profile = dict(profile or {})
-    if "recent_messages" in focused_profile:
-        focused_profile["recent_messages"] = list(focused_profile["recent_messages"])[-3:]
-    focused_profile.pop("last_user_message", None)
+    for field in LLM_PROTECTED_PROFILE_FIELDS:
+        focused_profile.pop(field, None)
     return focused_profile
 
 
@@ -478,8 +478,11 @@ class LocalTopicLLMClient:
 
 CHAT_SYSTEM_PROMPT = (
     "You are the FeelY Chat-LLM. Reply with valid JSON only. "
-    "The JSON object must contain `assistant_message` as a string and `profile` as the "
-    "complete updated user profile object. It must also contain `map_suggestion`, either "
+    "The JSON object must contain `assistant_message` as a string. It may contain `profile` "
+    "as an object with only ordinary profile fields that should be added or updated. Do not "
+    "repeat unchanged fields or include `last_chat_id`, `last_user_message`, `message_count`, "
+    "`recent_messages`, `self_authorship_map`, `topics`, or `last_confirmed_topic`; the backend "
+    "manages those fields. It must also contain `map_suggestion`, either "
     "null or an object with `category`, `text`, and `reason` strings. Chat directly with "
     "the user in a warm, grounded, non-judgmental, therapeutically reflective style "
     "without claiming to be a psychologist or therapist. FeelY helps the user move from "
@@ -568,7 +571,7 @@ CHAT_RESPONSE_SCHEMA = {
             ]
         },
     },
-    "required": ["assistant_message", "profile", "map_suggestion"],
+    "required": ["assistant_message", "map_suggestion"],
     "additionalProperties": False,
 }
 
@@ -620,8 +623,10 @@ def chat_result_from_payload(payload: dict[str, Any]) -> ChatLLMResult:
     assistant_message = payload.get("assistant_message")
     updated_profile = payload.get("profile")
     map_suggestion = payload.get("map_suggestion")
-    if not isinstance(assistant_message, str) or not isinstance(updated_profile, dict):
+    if not isinstance(assistant_message, str) or not assistant_message.strip():
         raise_bad_gateway("Chat-LLM response did not match the expected schema")
+    if not isinstance(updated_profile, dict):
+        updated_profile = {}
     if map_suggestion is not None:
         valid_categories = {
             "inherited_script",

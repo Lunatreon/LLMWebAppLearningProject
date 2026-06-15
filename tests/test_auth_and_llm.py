@@ -9,6 +9,7 @@ from app.services.llm import (
     LocalChatLLMClient,
     OllamaChatLLMClient,
     OllamaTopicLLMClient,
+    chat_result_from_payload,
     focused_chat_context,
     focused_profile_context,
     get_chat_llm_client,
@@ -249,9 +250,28 @@ def test_llm_profile_merge_preserves_user_confirmed_map():
 
     merged = merge_llm_profile(current, generated)
 
-    assert merged["message_count"] == 3
+    assert merged["message_count"] == 2
     assert merged["topics"] == current["topics"]
     assert merged["self_authorship_map"] == current["self_authorship_map"]
+
+
+def test_chat_result_accepts_missing_or_malformed_optional_profile():
+    missing_profile = chat_result_from_payload(
+        {
+            "assistant_message": "What part of that decision feels most uncertain?",
+            "map_suggestion": None,
+        }
+    )
+    malformed_profile = chat_result_from_payload(
+        {
+            "assistant_message": "What would make the next step feel manageable?",
+            "profile": "unchanged",
+            "map_suggestion": None,
+        }
+    )
+
+    assert missing_profile.profile == {}
+    assert malformed_profile.profile == {}
 
 
 def test_short_emotional_message_does_not_create_topic(client):
@@ -413,12 +433,57 @@ def test_chat_context_prioritizes_recent_messages():
     profile = focused_profile_context(
         {
             "topics": ["relationship strain"],
+            "self_authorship_map": {"topic_spaces": []},
             "last_user_message": "old message",
             "recent_messages": ["one", "two", "three", "four", "five"],
+            "preference": "direct questions",
         }
     )
-    assert profile["recent_messages"] == ["three", "four", "five"]
+    assert profile == {"preference": "direct questions"}
     assert "last_user_message" not in profile
+
+
+def test_user_can_delete_only_their_own_chat(client):
+    client.post(
+        "/api/v1/auth/register",
+        json={"email": "owner@example.com", "username": "owner", "password": "secret-123"},
+    )
+    owner_login = client.post(
+        "/api/v1/auth/login",
+        json={"email_or_username": "owner", "password": "secret-123"},
+    )
+    owner_headers = {"Authorization": f"Bearer {owner_login.json()['access_token']}"}
+    chat = client.post(
+        "/api/v1/llm/chats",
+        json={"title": "Temporary chat"},
+        headers=owner_headers,
+    ).json()
+
+    client.post(
+        "/api/v1/auth/register",
+        json={"email": "other@example.com", "username": "other", "password": "secret-123"},
+    )
+    other_login = client.post(
+        "/api/v1/auth/login",
+        json={"email_or_username": "other", "password": "secret-123"},
+    )
+    other_headers = {"Authorization": f"Bearer {other_login.json()['access_token']}"}
+
+    forbidden_delete = client.delete(
+        f"/api/v1/llm/chats/{chat['chat_id']}",
+        headers=other_headers,
+    )
+    assert forbidden_delete.status_code == 404
+
+    delete_response = client.delete(
+        f"/api/v1/llm/chats/{chat['chat_id']}",
+        headers=owner_headers,
+    )
+    assert delete_response.status_code == 204
+    assert client.get(
+        f"/api/v1/llm/chats/{chat['chat_id']}",
+        headers=owner_headers,
+    ).status_code == 404
 
 
 def test_local_chat_responses_focus_on_each_new_message():
@@ -648,11 +713,7 @@ def test_ollama_clients_use_local_chat_api_and_structured_json_contract():
     assert chat_body["model"] == "qwen3.5:4b"
     assert chat_body["stream"] is False
     assert chat_body["think"] is False
-    assert chat_body["format"]["required"] == [
-        "assistant_message",
-        "profile",
-        "map_suggestion",
-    ]
+    assert chat_body["format"]["required"] == ["assistant_message", "map_suggestion"]
     assert chat_body["options"]["num_ctx"] == 8192
     assert json.loads(chat_body["messages"][1]["content"])["chat_id"] == (
         "chat-local"
