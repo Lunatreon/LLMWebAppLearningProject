@@ -6,14 +6,30 @@ from app.models.user import User, UserProfile
 from app.schemas.profile import (
     MapEntryCreate,
     MapEntryCreateResponse,
+    MapEntryDeleteResponse,
+    MapEntryUpdate,
+    MapEntryUpdateResponse,
     PracticeUpdate,
     PracticeUpdateResponse,
     ProfileRead,
     ProfileUpdate,
     SelfAuthorshipMapRead,
+    TopicSpaceCreate,
+    TopicSpaceDeleteResponse,
+    TopicSpaceResponse,
+    TopicSpaceUpdate,
 )
 from app.schemas.user import UserRead
-from app.services.self_authorship import add_map_entry, read_map, update_practice
+from app.services.self_authorship import (
+    add_map_entry,
+    create_topic_space,
+    delete_map_entry,
+    delete_topic_space,
+    read_map,
+    update_topic_space,
+    update_map_entry,
+    update_practice,
+)
 
 router = APIRouter()
 
@@ -63,6 +79,73 @@ def read_self_authorship_map(
     return SelfAuthorshipMapRead(**read_map(profile_data))
 
 
+@router.post("/me/map/topics", response_model=TopicSpaceResponse)
+def create_map_topic(
+    payload: TopicSpaceCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TopicSpaceResponse:
+    profile = get_or_create_profile(db, current_user)
+    try:
+        profile_data, topic = create_topic_space(
+            profile.data,
+            title=payload.title,
+            description=payload.description,
+            chat_id=payload.chat_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    profile.data = profile_data
+    db.commit()
+    db.refresh(profile)
+    return TopicSpaceResponse(topic=topic, map=read_map(profile.data))
+
+
+@router.patch("/me/map/topics/{topic_space_id}", response_model=TopicSpaceResponse)
+def change_map_topic(
+    topic_space_id: str,
+    payload: TopicSpaceUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TopicSpaceResponse:
+    profile = get_or_create_profile(db, current_user)
+    try:
+        profile_data, topic = update_topic_space(
+            profile.data,
+            topic_space_id=topic_space_id,
+            title=payload.title,
+            description=payload.description,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    profile.data = profile_data
+    db.commit()
+    db.refresh(profile)
+    return TopicSpaceResponse(topic=topic, map=read_map(profile.data))
+
+
+@router.delete("/me/map/topics/{topic_space_id}", response_model=TopicSpaceDeleteResponse)
+def remove_map_topic(
+    topic_space_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TopicSpaceDeleteResponse:
+    profile = get_or_create_profile(db, current_user)
+    try:
+        profile_data, topic = delete_topic_space(profile.data, topic_space_id=topic_space_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    profile.data = profile_data
+    db.commit()
+    db.refresh(profile)
+    return TopicSpaceDeleteResponse(deleted=True, topic=topic, map=read_map(profile.data))
+
+
 @router.post("/me/map/entries", response_model=MapEntryCreateResponse)
 def create_map_entry(
     payload: MapEntryCreate,
@@ -86,6 +169,49 @@ def create_map_entry(
     db.commit()
     db.refresh(profile)
     return MapEntryCreateResponse(entry=entry, map=read_map(profile.data))
+
+
+@router.patch("/me/map/entries/{entry_id}", response_model=MapEntryUpdateResponse)
+def change_map_entry(
+    entry_id: str,
+    payload: MapEntryUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> MapEntryUpdateResponse:
+    profile = get_or_create_profile(db, current_user)
+    try:
+        profile_data, entry = update_map_entry(
+            profile.data,
+            entry_id=entry_id,
+            category=payload.category,
+            text=payload.text,
+            reason=payload.reason,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    profile.data = profile_data
+    db.commit()
+    db.refresh(profile)
+    return MapEntryUpdateResponse(entry=entry, map=read_map(profile.data))
+
+
+@router.delete("/me/map/entries/{entry_id}", response_model=MapEntryDeleteResponse)
+def remove_map_entry(
+    entry_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> MapEntryDeleteResponse:
+    profile = get_or_create_profile(db, current_user)
+    try:
+        profile_data, entry = delete_map_entry(profile.data, entry_id=entry_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    profile.data = profile_data
+    db.commit()
+    db.refresh(profile)
+    return MapEntryDeleteResponse(deleted=True, entry=entry, map=read_map(profile.data))
 
 
 @router.patch("/me/map/practices/{entry_id}", response_model=PracticeUpdateResponse)

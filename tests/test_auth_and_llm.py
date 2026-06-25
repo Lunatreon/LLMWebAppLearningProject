@@ -2,6 +2,10 @@ import asyncio
 import json
 from types import SimpleNamespace
 
+from app.api.routes.llm import (
+    remember_map_suggestion_event,
+    should_surface_map_suggestion,
+)
 from app.core.config import settings
 from app.services.llm import (
     AnthropicChatLLMClient,
@@ -179,7 +183,9 @@ def test_user_can_confirm_map_suggestion_and_complete_practice(client):
         json={
             "context": (
                 "My parents told me to choose safety and obedience, and I still feel "
-                "judged when I make my own decisions."
+                "judged when I make my own decisions. It keeps showing up in my body "
+                "when I need to choose something for myself, because a part of me still "
+                "expects punishment or rejection if I disappoint them."
             )
         },
         headers=headers,
@@ -234,6 +240,149 @@ def test_user_can_confirm_map_suggestion_and_complete_practice(client):
     assert map_response.status_code == 200
     entries = map_response.json()["unassigned_entries"]
     assert {entry["category"] for entry in entries} == {"inherited_script", "practice"}
+
+
+def test_user_can_edit_and_delete_map_entry(client):
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "entry@example.com",
+            "username": "entry_user",
+            "password": "super-secret",
+        },
+    )
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"email_or_username": "entry_user", "password": "super-secret"},
+    )
+    headers = {"Authorization": f"Bearer {login_response.json()['access_token']}"}
+
+    create_response = client.post(
+        "/api/v1/users/me/map/entries",
+        json={"category": "value", "text": "Clarity matters to me."},
+        headers=headers,
+    )
+    assert create_response.status_code == 200
+    entry_id = create_response.json()["entry"]["id"]
+
+    update_response = client.patch(
+        f"/api/v1/users/me/map/entries/{entry_id}",
+        json={"category": "own_perception", "text": "I need clearer language."},
+        headers=headers,
+    )
+    assert update_response.status_code == 200
+    updated_entry = update_response.json()["entry"]
+    assert updated_entry["category"] == "own_perception"
+    assert updated_entry["text"] == "I need clearer language."
+
+    delete_response = client.delete(
+        f"/api/v1/users/me/map/entries/{entry_id}",
+        headers=headers,
+    )
+    assert delete_response.status_code == 200
+    assert delete_response.json()["deleted"] is True
+    assert delete_response.json()["map"]["unassigned_entries"] == []
+
+
+def test_user_can_create_and_rename_map_topic(client):
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "topic-edit@example.com",
+            "username": "topic_edit_user",
+            "password": "super-secret",
+        },
+    )
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"email_or_username": "topic_edit_user", "password": "super-secret"},
+    )
+    headers = {"Authorization": f"Bearer {login_response.json()['access_token']}"}
+
+    create_response = client.post(
+        "/api/v1/users/me/map/topics",
+        json={"title": "Boundaries", "description": "Where I notice limits."},
+        headers=headers,
+    )
+    assert create_response.status_code == 200
+    topic = create_response.json()["topic"]
+    assert topic["title"] == "Boundaries"
+    assert topic["description"] == "Where I notice limits."
+    assert create_response.json()["map"]["topic_spaces"][0]["id"] == topic["id"]
+
+    update_response = client.patch(
+        f"/api/v1/users/me/map/topics/{topic['id']}",
+        json={"title": "Clear boundaries"},
+        headers=headers,
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["topic"]["title"] == "Clear boundaries"
+    assert update_response.json()["map"]["topic_spaces"][0]["title"] == "Clear boundaries"
+
+    entry_response = client.post(
+        "/api/v1/users/me/map/entries",
+        json={
+            "category": "value",
+            "text": "I can name my limit.",
+            "topic_space_id": topic["id"],
+        },
+        headers=headers,
+    )
+    assert entry_response.status_code == 200
+
+    delete_response = client.delete(
+        f"/api/v1/users/me/map/topics/{topic['id']}",
+        headers=headers,
+    )
+    assert delete_response.status_code == 200
+    deleted_map = delete_response.json()["map"]
+    assert deleted_map["topic_spaces"] == []
+    assert deleted_map["unassigned_entries"][0]["text"] == "I can name my limit."
+
+
+def test_map_suggestions_use_hybrid_surface_rule():
+    suggestion = {
+        "category": "body_signal",
+        "text": "My chest tightens when I imagine disappointing her.",
+    }
+
+    assert not should_surface_map_suggestion({"message_count": 0}, "that feels scary", suggestion)
+    assert should_surface_map_suggestion({"message_count": 2}, "still scary", suggestion)
+    assert should_surface_map_suggestion(
+        {"message_count": 0},
+        (
+            "When I imagine disappointing her, my chest tightens and my thoughts start "
+            "racing because it feels like one imperfect sentence could make everything "
+            "fragile between us."
+        ),
+        suggestion,
+    )
+
+    shown_info = remember_map_suggestion_event(
+        {"message_count": 3},
+        "last_surface_map_suggestion",
+        suggestion,
+    )
+    similar_suggestion = {
+        "category": "body_signal",
+        "text": "My chest gets tight whenever I picture disappointing her.",
+    }
+    assert not should_surface_map_suggestion(
+        shown_info,
+        "This is a long message that would normally be enough to save into the map.",
+        similar_suggestion,
+    )
+
+    dismissed_info = remember_map_suggestion_event(
+        {"message_count": 5},
+        "last_dismissed_map_suggestion",
+        suggestion,
+    )
+    assert not should_surface_map_suggestion(
+        dismissed_info,
+        "This keeps showing up strongly in my body and thoughts.",
+        suggestion,
+    )
 
 
 def test_llm_profile_merge_preserves_user_confirmed_map():

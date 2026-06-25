@@ -40,6 +40,45 @@ class MapEntryCreateResponse(BaseModel):
     map: SelfAuthorshipMapRead
 
 
+class MapEntryUpdate(BaseModel):
+    category: MapEntryCategory | None = None
+    text: str | None = Field(default=None, min_length=1, max_length=1000)
+    reason: str | None = Field(default=None, max_length=1000)
+
+
+class MapEntryUpdateResponse(BaseModel):
+    entry: dict[str, Any]
+    map: SelfAuthorshipMapRead
+
+
+class MapEntryDeleteResponse(BaseModel):
+    deleted: bool
+    entry: dict[str, Any]
+    map: SelfAuthorshipMapRead
+
+
+class TopicSpaceCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=1000)
+    chat_id: str | None = Field(default=None, max_length=120)
+
+
+class TopicSpaceUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=120)
+    description: str | None = Field(default=None, max_length=1000)
+
+
+class TopicSpaceResponse(BaseModel):
+    topic: dict[str, Any]
+    map: SelfAuthorshipMapRead
+
+
+class TopicSpaceDeleteResponse(BaseModel):
+    deleted: bool
+    topic: dict[str, Any]
+    map: SelfAuthorshipMapRead
+
+
 class PracticeUpdate(BaseModel):
     status: Literal["active", "paused", "completed"]
     reflection: str | None = Field(default=None, max_length=2000)

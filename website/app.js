@@ -8,6 +8,8 @@ const state = {
   chats: [],
   map: null,
   activeChatId: null,
+  activeMapNodeId: null,
+  mapDetailOpen: true,
   pendingTopic: null,
   pendingMapSuggestion: null,
   completingPracticeId: null,
@@ -60,7 +62,7 @@ const chatWorkspaceButton = document.querySelector("#chat-workspace-button");
 const mapWorkspaceButton = document.querySelector("#map-workspace-button");
 const mapSidebarToggle = document.querySelector("#map-sidebar-toggle");
 const mapContent = document.querySelector("#map-content");
-const addPracticeButton = document.querySelector("#add-practice-button");
+const addTopicButton = document.querySelector("#add-topic-button");
 const practiceDialog = document.querySelector("#practice-dialog");
 const practiceForm = document.querySelector("#practice-form");
 const practiceText = document.querySelector("#practice-text");
@@ -176,6 +178,8 @@ function logout() {
   state.token = null;
   state.user = null;
   state.activeChatId = null;
+  state.activeMapNodeId = null;
+  state.mapDetailOpen = true;
   state.chats = [];
   state.map = null;
   state.pendingTopic = null;
@@ -652,6 +656,10 @@ function closeSidebar() {
 
 function switchWorkspace(view) {
   const showMap = view === "map";
+  if (showMap) {
+    state.activeMapNodeId = null;
+    state.mapDetailOpen = false;
+  }
   conversationView.classList.toggle("hidden", showMap);
   mapView.classList.toggle("hidden", !showMap);
   chatWorkspaceButton.classList.toggle("active", !showMap);
@@ -718,48 +726,628 @@ function createMapEntryElement(entry) {
   return item;
 }
 
-function createTopicSpaceElement(space) {
-  const card = document.createElement("section");
-  card.className = "topic-space";
+function primaryEntryCategory(entries) {
+  const counts = entries.reduce((totals, entry) => {
+    totals[entry.category] = (totals[entry.category] || 0) + 1;
+    return totals;
+  }, {});
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "own_perception";
+}
+
+function mapNodePosition(index) {
+  const positions = [
+    [50, 50],
+    [23, 27],
+    [78, 34],
+    [28, 72],
+    [68, 74],
+    [50, 20],
+    [18, 52],
+    [84, 58],
+    [42, 82],
+  ];
+  const [x, y] = positions[index % positions.length];
+  const lap = Math.floor(index / positions.length);
+  return {
+    x: Math.min(88, Math.max(12, x + lap * 4)),
+    y: Math.min(84, Math.max(16, y + (lap % 2 ? -6 : 6))),
+  };
+}
+
+function createConceptNode(node, index) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "map-node";
+  button.dataset.category = primaryEntryCategory(node.entries || []);
+  button.setAttribute("aria-pressed", String(node.id === state.activeMapNodeId));
+  button.setAttribute("aria-label", `Open ${node.title}`);
+  const position = mapNodePosition(index);
+  button.style.left = `${position.x}%`;
+  button.style.top = `${position.y}%`;
+  button.style.setProperty("--node-delay", `${index * 90}ms`);
+
+  const title = document.createElement("strong");
+  title.textContent = node.title;
+  const meta = document.createElement("span");
+  const entryCount = node.entries?.length || 0;
+  meta.textContent =
+    node.id === state.activeMapNodeId && !state.mapDetailOpen
+      ? "Open details"
+      : `${entryCount} ${entryCount === 1 ? "entry" : "entries"}`;
+  button.append(title, meta);
+
+  button.addEventListener("click", () => {
+    state.activeMapNodeId = node.id;
+    state.mapDetailOpen = true;
+    renderMap();
+  });
+  return button;
+}
+
+async function createThreadMapEntry(node, category, text) {
+  const response = await api("/users/me/map/entries", {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      category,
+      text,
+      topic_space_id: node.kind === "topic" ? node.id : null,
+      source_chat_id: state.activeChatId,
+    }),
+  });
+  state.map = response.map;
+  state.activeMapNodeId = node.id;
+  renderMap();
+}
+
+async function updateMapEntry(entryId, payload) {
+  const response = await api(`/users/me/map/entries/${encodeURIComponent(entryId)}`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  state.map = response.map;
+  renderMap();
+}
+
+async function deleteMapEntry(entry) {
+  if (!window.confirm("Delete this map entry? This cannot be undone.")) return;
+  const response = await api(`/users/me/map/entries/${encodeURIComponent(entry.id)}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  state.map = response.map;
+  renderMap();
+}
+
+function mapTextPreview(text, limit = 86) {
+  const cleaned = String(text || "").replace(/\s+/g, " ").trim();
+  return {
+    full: cleaned,
+    preview: cleaned.length > limit ? `${cleaned.slice(0, limit - 3)}...` : cleaned,
+    truncated: cleaned.length > limit,
+  };
+}
+
+function entryCategoryCounts(entries) {
+  return entries.reduce((counts, entry) => {
+    counts[entry.category] = (counts[entry.category] || 0) + 1;
+    return counts;
+  }, {});
+}
+
+function closeMapActionPopup() {
+  document.querySelector(".map-action-backdrop")?.remove();
+}
+
+function openMapTopicPopup(topic = null) {
+  closeMapActionPopup();
+  const isEdit = Boolean(topic);
+  const backdrop = document.createElement("div");
+  backdrop.className = "map-action-backdrop";
+
+  const popup = document.createElement("section");
+  popup.className = "map-action-popup";
+  popup.setAttribute("role", "dialog");
+  popup.setAttribute("aria-modal", "true");
+  popup.setAttribute("aria-label", isEdit ? "Edit topic" : "Add topic");
+
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.className = "map-action-close";
+  closeButton.setAttribute("aria-label", "Close");
+  closeButton.textContent = "x";
+  closeButton.addEventListener("click", closeMapActionPopup);
+
+  const eyebrow = document.createElement("p");
+  eyebrow.className = "eyebrow";
+  eyebrow.textContent = "Self-authorship map";
+
+  const title = document.createElement("h3");
+  title.textContent = isEdit ? "Edit topic" : "Add a topic";
+
+  const form = document.createElement("form");
+  form.className = "map-action-form";
+
+  const titleInput = document.createElement("input");
+  titleInput.type = "text";
+  titleInput.required = true;
+  titleInput.maxLength = 120;
+  titleInput.placeholder = "Topic title";
+  titleInput.value = topic?.title || "";
+
+  const descriptionInput = document.createElement("textarea");
+  descriptionInput.rows = 3;
+  descriptionInput.maxLength = 1000;
+  descriptionInput.placeholder = "Optional note about this topic";
+  descriptionInput.value = topic?.description || "";
+
+  const submit = document.createElement("button");
+  submit.type = "submit";
+  submit.textContent = isEdit ? "Save topic" : "Create topic";
+  form.append(titleInput, descriptionInput, submit);
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const titleText = titleInput.value.trim();
+    if (!titleText) return;
+    closeMapActionPopup();
+    const payload = {
+      title: titleText,
+      description: descriptionInput.value.trim(),
+    };
+    const request = isEdit
+      ? updateMapTopic(topic.id, payload)
+      : createMapTopic({ ...payload, chat_id: state.activeChatId });
+    request.catch(renderInlineError);
+  });
+
+  popup.append(closeButton, eyebrow, title, form);
+  backdrop.append(popup);
+  backdrop.addEventListener("click", (event) => {
+    if (event.target === backdrop) closeMapActionPopup();
+  });
+  document.body.append(backdrop);
+  titleInput.focus();
+}
+
+async function createMapTopic(payload) {
+  const response = await api("/users/me/map/topics", {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  state.map = response.map;
+  state.activeMapNodeId = response.topic.id;
+  state.mapDetailOpen = true;
+  renderMap();
+}
+
+async function updateMapTopic(topicId, payload) {
+  const response = await api(`/users/me/map/topics/${encodeURIComponent(topicId)}`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  state.map = response.map;
+  state.activeMapNodeId = response.topic.id;
+  state.mapDetailOpen = true;
+  renderMap();
+}
+
+async function deleteMapTopic(topic) {
+  if (
+    !window.confirm(
+      "Delete this topic? Its entries will move to Across topics instead of being deleted.",
+    )
+  ) {
+    return;
+  }
+  const response = await api(`/users/me/map/topics/${encodeURIComponent(topic.id)}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  state.map = response.map;
+  state.activeMapNodeId = null;
+  state.mapDetailOpen = false;
+  renderMap();
+}
+
+function openMapActionPopup(node, mode, entry = null) {
+  closeMapActionPopup();
+
+  const isTask = mode === "task";
+  const isEdit = mode === "edit";
+  const isPracticeEdit = isEdit && entry?.category === "practice";
+  const backdrop = document.createElement("div");
+  backdrop.className = "map-action-backdrop";
+
+  const popup = document.createElement("section");
+  popup.className = "map-action-popup";
+  popup.setAttribute("role", "dialog");
+  popup.setAttribute("aria-modal", "true");
+  popup.setAttribute("aria-label", isEdit ? "Edit entry" : isTask ? "Add task" : "Add entry");
+
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.className = "map-action-close";
+  closeButton.setAttribute("aria-label", "Close");
+  closeButton.textContent = "x";
+  closeButton.addEventListener("click", closeMapActionPopup);
+
+  const eyebrow = document.createElement("p");
+  eyebrow.className = "eyebrow";
+  eyebrow.textContent = node?.title || "Map entry";
+
+  const title = document.createElement("h3");
+  title.textContent = isPracticeEdit ? "Edit task" : isEdit ? "Edit entry" : isTask ? "Add a task" : "Add an entry";
+
+  const form = document.createElement("form");
+  form.className = "map-action-form";
+
+  let categoryInput = null;
+  if (!isTask && !isPracticeEdit) {
+    categoryInput = document.createElement("select");
+    categoryInput.setAttribute("aria-label", "Entry type");
+    [
+      "own_perception",
+      "value",
+      "body_signal",
+      "evidence",
+      "inherited_script",
+    ].forEach((category) => {
+      const option = document.createElement("option");
+      option.value = category;
+      option.textContent = MAP_CATEGORY_LABELS[category] || category;
+      categoryInput.append(option);
+    });
+    form.append(categoryInput);
+    if (entry) categoryInput.value = entry.category;
+  }
+
+  const textInput = document.createElement("textarea");
+  textInput.rows = 4;
+  textInput.required = true;
+  textInput.placeholder = isTask
+    ? "What task or practice belongs to this thread?"
+    : "What observation do you want to save here?";
+  if (entry) textInput.value = entry.text || "";
+
+  const submit = document.createElement("button");
+  submit.type = "submit";
+  submit.textContent = isEdit ? "Save changes" : isTask ? "Save task" : "Save entry";
+  form.append(textInput, submit);
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const text = textInput.value.trim();
+    if (!text) return;
+    closeMapActionPopup();
+    if (isEdit) {
+      updateMapEntry(entry.id, {
+        category: isPracticeEdit ? "practice" : categoryInput.value,
+        text,
+      }).catch(renderInlineError);
+    } else {
+      createThreadMapEntry(node, isTask ? "practice" : categoryInput.value, text).catch(
+        renderInlineError,
+      );
+    }
+  });
+
+  popup.append(closeButton, eyebrow, title, form);
+  backdrop.append(popup);
+  backdrop.addEventListener("click", (event) => {
+    if (event.target === backdrop) closeMapActionPopup();
+  });
+  document.body.append(backdrop);
+  textInput.focus();
+}
+
+function closeEntryMenus() {
+  document.querySelectorAll(".map-entry-preview article.open").forEach((item) => {
+    item.classList.remove("open");
+    item.querySelector(".map-entry-menu-button")?.setAttribute("aria-expanded", "false");
+  });
+}
+
+function practiceStatusLabel(status) {
+  if (status === "paused") return "Paused";
+  if (status === "completed") return "Completed";
+  return "Active";
+}
+
+function updatePracticeFromButton(button, entryId, status, reflection = null) {
+  button.disabled = true;
+  const originalText = button.textContent;
+  button.textContent = "Saving...";
+  updatePractice(entryId, status, reflection)
+    .catch(renderInlineError)
+    .finally(() => {
+      button.disabled = false;
+      button.textContent = originalText;
+    });
+}
+
+function createEntryPreviewElement(node, entry) {
+  const item = document.createElement("article");
+  item.dataset.category = entry.category;
+
+  const label = document.createElement("span");
+  label.className = "map-entry-type";
+  label.textContent = MAP_CATEGORY_LABELS[entry.category] || entry.category;
 
   const header = document.createElement("div");
-  header.className = "topic-space-header";
-  const copy = document.createElement("div");
-  const title = document.createElement("h3");
-  title.textContent = space.title;
-  const description = document.createElement("p");
-  description.textContent = space.description;
-  copy.append(title, description);
+  header.className = "map-entry-preview-head";
 
-  const chatCount = document.createElement("span");
-  chatCount.className = "topic-chat-count";
-  const count = space.chat_ids?.length || 0;
-  chatCount.textContent = `${count} ${count === 1 ? "chat" : "chats"}`;
-  header.append(copy, chatCount);
-  card.append(header);
+  const preview = mapTextPreview(entry.text);
+  const text = document.createElement("p");
+  text.className = "map-entry-text";
+  text.title = entry.text || "";
 
-  const entries = space.entries || [];
-  if (entries.length) {
-    const grid = document.createElement("div");
-    grid.className = "map-entry-grid";
-    entries.forEach((entry) => grid.append(createMapEntryElement(entry)));
-    card.append(grid);
+  const renderEntryText = (expanded = false) => {
+    text.replaceChildren();
+    const previewText = document.createElement("span");
+    previewText.textContent = expanded ? preview.full : preview.preview;
+    text.append(previewText);
+    if (!preview.truncated) return;
+
+    const toggleButton = document.createElement("button");
+    toggleButton.type = "button";
+    toggleButton.className = "map-entry-more";
+    toggleButton.textContent = expanded ? "less" : "more";
+    toggleButton.setAttribute("aria-expanded", String(expanded));
+    toggleButton.addEventListener("click", () => renderEntryText(!expanded));
+    text.append(" ", toggleButton);
+  };
+  renderEntryText();
+
+  let taskPanel = null;
+  if (entry.category === "practice") {
+    taskPanel = document.createElement("div");
+    taskPanel.className = "map-task-panel";
+
+    const statusChip = document.createElement("span");
+    statusChip.className = "map-task-status";
+    statusChip.dataset.status = entry.status || "active";
+    statusChip.textContent = practiceStatusLabel(entry.status);
+    taskPanel.append(statusChip);
+
+    if (entry.reflection) {
+      const reflection = document.createElement("p");
+      reflection.className = "map-task-reflection";
+      reflection.textContent = entry.reflection;
+      taskPanel.append(reflection);
+    }
+
+    const taskActions = document.createElement("div");
+    taskActions.className = "map-task-actions";
+
+    if (entry.status === "completed") {
+      const reactivateTaskButton = document.createElement("button");
+      reactivateTaskButton.type = "button";
+      reactivateTaskButton.textContent = "Practice again";
+      reactivateTaskButton.addEventListener("click", () =>
+        updatePracticeFromButton(reactivateTaskButton, entry.id, "active"),
+      );
+      taskActions.append(reactivateTaskButton);
+    } else {
+      const pauseTaskButton = document.createElement("button");
+      pauseTaskButton.type = "button";
+      pauseTaskButton.textContent = entry.status === "paused" ? "Resume" : "Pause";
+      pauseTaskButton.addEventListener("click", () =>
+        updatePracticeFromButton(
+          pauseTaskButton,
+          entry.id,
+          entry.status === "paused" ? "active" : "paused",
+        ),
+      );
+
+      const completeTaskButton = document.createElement("button");
+      completeTaskButton.type = "button";
+      completeTaskButton.className = "primary";
+      completeTaskButton.textContent = "Complete";
+      completeTaskButton.addEventListener("click", () => openReflectionDialog(entry.id));
+
+      taskActions.append(pauseTaskButton, completeTaskButton);
+    }
+
+    taskPanel.append(taskActions);
   }
-  return card;
+
+  const menuButton = document.createElement("button");
+  menuButton.type = "button";
+  menuButton.className = "map-entry-menu-button";
+  menuButton.setAttribute("aria-label", "Entry actions");
+  menuButton.setAttribute("aria-expanded", "false");
+  menuButton.textContent = "...";
+
+  const menu = document.createElement("div");
+  menu.className = "map-entry-menu";
+
+  const editEntry = () => {
+    closeEntryMenus();
+    openMapActionPopup(node, "edit", entry);
+  };
+
+  const deleteEntry = () => {
+    closeEntryMenus();
+    deleteMapEntry(entry).catch(renderInlineError);
+  };
+
+  const editButton = document.createElement("button");
+  editButton.type = "button";
+  editButton.textContent = "Edit";
+  editButton.addEventListener("click", editEntry);
+  menu.append(editButton);
+
+  if (entry.category === "practice") {
+    if (entry.status === "completed") {
+      const reactivateButton = document.createElement("button");
+      reactivateButton.type = "button";
+      reactivateButton.textContent = "Practice again";
+      reactivateButton.addEventListener("click", () => {
+        closeEntryMenus();
+        updatePractice(entry.id, "active").catch(renderInlineError);
+      });
+      menu.append(reactivateButton);
+    } else {
+      const statusButton = document.createElement("button");
+      statusButton.type = "button";
+      statusButton.textContent = entry.status === "paused" ? "Resume task" : "Pause task";
+      statusButton.addEventListener("click", () => {
+        closeEntryMenus();
+        updatePractice(entry.id, entry.status === "paused" ? "active" : "paused").catch(
+          renderInlineError,
+        );
+      });
+      menu.append(statusButton);
+
+      const completeButton = document.createElement("button");
+      completeButton.type = "button";
+      completeButton.textContent = "Complete task";
+      completeButton.addEventListener("click", () => {
+        closeEntryMenus();
+        openReflectionDialog(entry.id);
+      });
+      menu.append(completeButton);
+    }
+  }
+
+  const deleteButton = document.createElement("button");
+  deleteButton.type = "button";
+  deleteButton.className = "danger";
+  deleteButton.textContent = "Delete";
+  deleteButton.addEventListener("click", deleteEntry);
+  menu.append(deleteButton);
+
+  menuButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const open = !item.classList.contains("open");
+    closeEntryMenus();
+    item.classList.toggle("open", open);
+    menuButton.setAttribute("aria-expanded", String(open));
+  });
+
+  header.append(label, menuButton);
+  item.append(header, text);
+  if (taskPanel) item.append(taskPanel);
+  item.append(menu);
+  return item;
+}
+
+function createThreadActions(node) {
+  const actions = document.createElement("section");
+  actions.className = "map-thread-actions";
+
+  [
+    ["entry", "+ Entry"],
+    ["task", "+ Task"],
+  ].forEach(([mode, label]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "map-thread-button";
+    button.textContent = label;
+    button.addEventListener("click", () => openMapActionPopup(node, mode));
+    actions.append(button);
+  });
+  return actions;
+}
+
+function createConceptDetails(node) {
+  const panel = document.createElement("aside");
+  panel.className = "map-node-detail";
+
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.className = "map-detail-close";
+  closeButton.setAttribute("aria-label", "Close thread details");
+  closeButton.textContent = "x";
+  closeButton.addEventListener("click", () => {
+    state.mapDetailOpen = false;
+    renderMap();
+  });
+
+  const eyebrow = document.createElement("p");
+  eyebrow.className = "eyebrow";
+  eyebrow.textContent = node.kind === "unassigned" ? "Across topics" : "Selected thread";
+
+  const titleRow = document.createElement("div");
+  titleRow.className = "map-detail-title-row";
+
+  const title = document.createElement("h3");
+  title.textContent = node.title;
+  titleRow.append(title);
+
+  if (node.kind === "topic") {
+    const titleActions = document.createElement("div");
+    titleActions.className = "map-title-actions";
+
+    const editTopicButton = document.createElement("button");
+    editTopicButton.type = "button";
+    editTopicButton.className = "map-title-edit-button";
+    editTopicButton.textContent = "Edit title";
+    editTopicButton.addEventListener("click", () => openMapTopicPopup(node));
+    titleActions.append(editTopicButton);
+
+    const deleteTopicButton = document.createElement("button");
+    deleteTopicButton.type = "button";
+    deleteTopicButton.className = "map-title-edit-button danger";
+    deleteTopicButton.textContent = "Delete";
+    deleteTopicButton.addEventListener("click", () => deleteMapTopic(node).catch(renderInlineError));
+    titleActions.append(deleteTopicButton);
+
+    titleRow.append(titleActions);
+  }
+
+  const stats = document.createElement("div");
+  stats.className = "map-node-stats";
+  const chats = node.chat_ids?.length || 0;
+  const entries = node.entries || [];
+  [`${chats} ${chats === 1 ? "chat" : "chats"}`, `${entries.length} ${entries.length === 1 ? "entry" : "entries"}`].forEach(
+    (value) => {
+      const item = document.createElement("span");
+      item.textContent = value;
+      stats.append(item);
+    },
+  );
+
+  const signals = document.createElement("div");
+  signals.className = "map-node-signals";
+  Object.entries(entryCategoryCounts(entries)).forEach(([category, count]) => {
+    const signal = document.createElement("span");
+    signal.dataset.category = category;
+    signal.textContent = `${MAP_CATEGORY_LABELS[category] || category} ${count}`;
+    signals.append(signal);
+  });
+  if (!signals.children.length) {
+    const signal = document.createElement("span");
+    signal.textContent = "No saved signals";
+    signals.append(signal);
+  }
+
+  panel.append(closeButton, eyebrow, titleRow, stats, signals);
+  panel.append(createThreadActions(node));
+
+  if (entries.length) {
+    const preview = document.createElement("div");
+    preview.className = "map-entry-preview";
+    entries.slice(-3).reverse().forEach((entry) => {
+      preview.append(createEntryPreviewElement(node, entry));
+    });
+    panel.append(preview);
+  } else {
+    const empty = document.createElement("p");
+    empty.className = "map-empty compact";
+    empty.textContent = "No saved observations here yet.";
+    panel.append(empty);
+  }
+  return panel;
 }
 
 function renderMap() {
   mapContent.replaceChildren();
 
-  const intro = document.createElement("section");
-  intro.className = "map-intro";
-  const heading = document.createElement("h3");
-  heading.textContent = "What you are learning and choosing";
-  const copy = document.createElement("p");
-  copy.textContent =
-    "Your map grows only from topics and observations you choose to save. It is a working record, not a fixed definition of who you are.";
-  intro.append(heading, copy);
-  mapContent.append(intro);
 
   const map = state.map || { topic_spaces: [], unassigned_entries: [] };
   const spaces = map.topic_spaces || [];
@@ -773,24 +1361,50 @@ function renderMap() {
     return;
   }
 
-  if (spaces.length) {
-    const grid = document.createElement("div");
-    grid.className = "topic-space-grid";
-    spaces.forEach((space) => grid.append(createTopicSpaceElement(space)));
-    mapContent.append(grid);
+  const nodes = spaces.map((space) => ({
+    ...space,
+    kind: "topic",
+    title: space.title || "Untitled",
+    description: space.description || "A thread you chose to keep visible.",
+    entries: space.entries || [],
+  }));
+  if (unassigned.length) {
+    nodes.push({
+      id: "__across_topics",
+      kind: "unassigned",
+      title: "Across topics",
+      description: "Observations and practices that belong to more than one thread.",
+      chat_ids: [],
+      entries: unassigned,
+    });
   }
 
-  if (unassigned.length) {
-    const section = document.createElement("section");
-    section.className = "unassigned-section";
-    const title = document.createElement("h3");
-    title.textContent = "Across topics";
-    const grid = document.createElement("div");
-    grid.className = "map-entry-grid";
-    unassigned.forEach((entry) => grid.append(createMapEntryElement(entry)));
-    section.append(title, grid);
-    mapContent.append(section);
+  if (!nodes.some((node) => node.id === state.activeMapNodeId)) {
+    state.activeMapNodeId = null;
+    state.mapDetailOpen = false;
   }
+  const activeNode = nodes.find((node) => node.id === state.activeMapNodeId) || null;
+
+  const layout = document.createElement("section");
+  layout.className = "map-concept-layout";
+
+  const board = document.createElement("div");
+  board.className = "map-concept-board";
+  board.setAttribute("aria-label", "Interactive concept map");
+  ["one", "two", "three"].forEach((name) => {
+    const line = document.createElement("span");
+    line.className = `map-connection map-connection-${name}`;
+    board.append(line);
+  });
+  nodes.forEach((node, index) => board.append(createConceptNode(node, index)));
+
+  const detailWrap = document.createElement("div");
+  detailWrap.className = "map-detail-drawer";
+  if (!state.mapDetailOpen || !activeNode) detailWrap.classList.add("hidden");
+  if (state.mapDetailOpen && activeNode) detailWrap.append(createConceptDetails(activeNode));
+
+  layout.append(board, detailWrap);
+  mapContent.append(layout);
 }
 
 function openPracticeDialog() {
@@ -813,6 +1427,11 @@ function openPracticeDialog() {
 function openReflectionDialog(entryId) {
   state.completingPracticeId = entryId;
   practiceReflection.value = "";
+  const submit = reflectionForm.querySelector(".primary-button");
+  if (submit) {
+    submit.disabled = false;
+    submit.textContent = "Mark complete";
+  }
   reflectionDialog.showModal();
   practiceReflection.focus();
 }
@@ -849,13 +1468,25 @@ async function updatePractice(entryId, status, reflection = null) {
 async function completePractice(event) {
   event.preventDefault();
   if (!state.completingPracticeId) return;
-  await updatePractice(
-    state.completingPracticeId,
-    "completed",
-    practiceReflection.value.trim() || null,
-  );
-  state.completingPracticeId = null;
-  reflectionDialog.close();
+  const submit = reflectionForm.querySelector(".primary-button");
+  if (submit) {
+    submit.disabled = true;
+    submit.textContent = "Completing...";
+  }
+  try {
+    await updatePractice(
+      state.completingPracticeId,
+      "completed",
+      practiceReflection.value.trim() || null,
+    );
+    state.completingPracticeId = null;
+    reflectionDialog.close();
+  } finally {
+    if (submit) {
+      submit.disabled = false;
+      submit.textContent = "Mark complete";
+    }
+  }
 }
 
 loginTab.addEventListener("click", () => setMode("login"));
@@ -881,7 +1512,7 @@ mapSuggestionAccept.addEventListener("click", () =>
 mapSuggestionDismiss.addEventListener("click", () =>
   confirmMapSuggestion(false).catch(renderInlineError),
 );
-addPracticeButton.addEventListener("click", openPracticeDialog);
+addTopicButton.addEventListener("click", () => openMapTopicPopup());
 practiceForm.addEventListener("submit", (event) => createPractice(event).catch(renderInlineError));
 reflectionForm.addEventListener("submit", (event) =>
   completePractice(event).catch(renderInlineError),
@@ -893,9 +1524,14 @@ document.addEventListener("click", (event) => {
   ) {
     closeChatActionsMenu();
   }
+  if (!event.target.closest(".map-entry-menu") && !event.target.closest(".map-entry-menu-button")) {
+    closeEntryMenus();
+  }
 });
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") closeChatActionsMenu();
+  if (event.key === "Escape") closeMapActionPopup();
+  if (event.key === "Escape") closeEntryMenus();
 });
 chatList.addEventListener("scroll", closeChatActionsMenu);
 window.addEventListener("resize", closeChatActionsMenu);

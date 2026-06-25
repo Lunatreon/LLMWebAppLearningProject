@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -41,6 +42,16 @@ GENERIC_TOPIC_TITLES = {
     "mood",
     "feelings",
 }
+MAP_SUGGESTION_LONG_MESSAGE_CHARS = 140
+MAP_SUGGESTION_LONG_MESSAGE_WORDS = 35
+MAP_SUGGESTION_SMALL_MESSAGE_TURNS = 3
+MAP_SUGGESTION_REPEAT_COOLDOWN_TURNS = 5
+MAP_SUGGESTION_HISTORY_KEYS = (
+    "last_surface_map_suggestion",
+    "last_saved_map_suggestion",
+    "last_dismissed_map_suggestion",
+)
+MAP_SUGGESTION_TOKEN_PATTERN = re.compile(r"\w+", re.UNICODE)
 
 
 def current_timestamp() -> str:
@@ -53,6 +64,119 @@ def is_generic_topic(topic: Any) -> bool:
 
 def normalized_topic(value: Any) -> str:
     return str(value or "").strip().lower()
+
+
+def normalized_map_suggestion_text(value: Any) -> str:
+    return " ".join(str(value or "").strip().lower().split())
+
+
+def map_suggestion_tokens(value: Any) -> set[str]:
+    return {
+        token
+        for token in MAP_SUGGESTION_TOKEN_PATTERN.findall(normalized_map_suggestion_text(value))
+        if len(token) > 3
+    }
+
+
+def map_suggestion_signature(suggestion: dict[str, Any] | None) -> str:
+    if not isinstance(suggestion, dict):
+        return ""
+    category = str(suggestion.get("category") or "").strip().lower()
+    text = normalized_map_suggestion_text(suggestion.get("text"))
+    return f"{category}:{text[:220]}"
+
+
+def map_suggestions_are_similar(
+    first: dict[str, Any] | None,
+    second: dict[str, Any] | None,
+) -> bool:
+    if not isinstance(first, dict) or not isinstance(second, dict):
+        return False
+    if str(first.get("category") or "").lower() != str(second.get("category") or "").lower():
+        return False
+
+    first_text = normalized_map_suggestion_text(first.get("text"))
+    second_text = normalized_map_suggestion_text(second.get("text"))
+    if not first_text or not second_text:
+        return False
+    if first_text == second_text or first_text in second_text or second_text in first_text:
+        return True
+
+    first_tokens = map_suggestion_tokens(first_text)
+    second_tokens = map_suggestion_tokens(second_text)
+    if min(len(first_tokens), len(second_tokens)) < 3:
+        return False
+    overlap = len(first_tokens & second_tokens) / min(len(first_tokens), len(second_tokens))
+    return overlap >= 0.7
+
+
+def map_suggestion_marker(
+    suggestion: dict[str, Any],
+    *,
+    message_count: int,
+) -> dict[str, Any]:
+    return {
+        "category": suggestion.get("category"),
+        "text": normalized_map_suggestion_text(suggestion.get("text"))[:220],
+        "signature": map_suggestion_signature(suggestion),
+        "message_count": message_count,
+        "created_at": current_timestamp(),
+    }
+
+
+def map_suggestion_from_marker(marker: Any) -> dict[str, Any] | None:
+    if not isinstance(marker, dict):
+        return None
+    return {
+        "category": marker.get("category"),
+        "text": marker.get("text"),
+    }
+
+
+def should_surface_map_suggestion(
+    chat_info: dict[str, Any],
+    user_input: str,
+    suggestion: dict[str, Any] | None,
+) -> bool:
+    if not suggestion:
+        return False
+
+    next_message_count = int((chat_info or {}).get("message_count", 0)) + 1
+    for key in MAP_SUGGESTION_HISTORY_KEYS:
+        marker = (chat_info or {}).get(key)
+        if not isinstance(marker, dict):
+            continue
+        marker_count = int(marker.get("message_count", 0))
+        if next_message_count - marker_count >= MAP_SUGGESTION_REPEAT_COOLDOWN_TURNS:
+            continue
+        if map_suggestions_are_similar(suggestion, map_suggestion_from_marker(marker)):
+            return False
+
+    stripped_input = user_input.strip()
+    if (
+        len(stripped_input) >= MAP_SUGGESTION_LONG_MESSAGE_CHARS
+        or len(stripped_input.split()) >= MAP_SUGGESTION_LONG_MESSAGE_WORDS
+    ):
+        return True
+
+    last_surface = (chat_info or {}).get("last_surface_map_suggestion")
+    last_surface_count = (
+        int(last_surface.get("message_count", 0)) if isinstance(last_surface, dict) else 0
+    )
+    return next_message_count - last_surface_count >= MAP_SUGGESTION_SMALL_MESSAGE_TURNS
+
+
+def remember_map_suggestion_event(
+    chat_info: dict[str, Any],
+    key: str,
+    suggestion: dict[str, Any],
+) -> dict[str, Any]:
+    next_info = dict(chat_info)
+    next_info[key] = map_suggestion_marker(
+        suggestion,
+        message_count=int(next_info.get("message_count", 0)),
+    )
+    return next_info
 
 
 def default_chat_info(user_id: int, chat_id: str, title: str | None = None) -> dict[str, Any]:
@@ -369,16 +493,23 @@ async def send_message_to_llm(
         chat_id=chat_session.chat_id,
     )
 
-    map_suggestion = None
+    raw_map_suggestion = None
     if chat_result.map_suggestion:
         topic_space = find_topic_space_for_chat(profile.data, chat_session.chat_id)
-        map_suggestion = {
+        raw_map_suggestion = {
             **chat_result.map_suggestion,
             "source_chat_id": chat_session.chat_id,
             "topic_space_id": topic_space.get("id") if topic_space else None,
             "topic_title": topic_space.get("title") if topic_space else None,
         }
-    chat_session.info = append_chat_exchange(
+
+    base_chat_info = chat_session.info or {}
+    map_suggestion = (
+        raw_map_suggestion
+        if should_surface_map_suggestion(base_chat_info, payload.input_text, raw_map_suggestion)
+        else None
+    )
+    next_chat_info = append_chat_exchange(
         chat_session.info or {},
         user_id=current_user.id,
         chat_id=chat_session.chat_id,
@@ -386,6 +517,13 @@ async def send_message_to_llm(
         assistant_message=chat_result.assistant_message,
         map_suggestion=map_suggestion,
     )
+    if map_suggestion:
+        next_chat_info = remember_map_suggestion_event(
+            next_chat_info,
+            "last_surface_map_suggestion",
+            map_suggestion,
+        )
+    chat_session.info = next_chat_info
     db.commit()
     db.refresh(profile)
     db.refresh(chat_session)
@@ -491,6 +629,9 @@ def confirm_map_suggestion(
     if chat_session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")
 
+    chat_info = dict(chat_session.info or {})
+    pending_map_suggestion = chat_info.get("pending_map_suggestion")
+
     entry = None
     if payload.accepted:
         topic_space = find_topic_space_for_chat(profile.data, payload.chat_id)
@@ -508,7 +649,15 @@ def confirm_map_suggestion(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
         profile.data = profile_data
 
-    chat_info = dict(chat_session.info or {})
+    suggestion_event = pending_map_suggestion if isinstance(pending_map_suggestion, dict) else {
+        "category": payload.category,
+        "text": payload.text,
+    }
+    chat_info = remember_map_suggestion_event(
+        chat_info,
+        "last_saved_map_suggestion" if payload.accepted else "last_dismissed_map_suggestion",
+        suggestion_event,
+    )
     chat_info.pop("pending_map_suggestion", None)
     chat_info["updated_at"] = current_timestamp()
     chat_session.info = chat_info

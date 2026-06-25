@@ -128,6 +128,88 @@ def create_or_link_topic_space(
     return write_map(profile_data, map_data), space
 
 
+def create_topic_space(
+    profile_data: dict[str, Any] | None,
+    *,
+    title: str,
+    description: str = "",
+    chat_id: str | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    map_data = read_map(profile_data)
+    normalized_title = title.strip().lower()
+    now = current_timestamp()
+
+    if not normalized_title:
+        raise ValueError("Topic title is required")
+
+    for space in map_data["topic_spaces"]:
+        if str(space.get("title", "")).strip().lower() != normalized_title:
+            continue
+        if chat_id:
+            chat_ids = list(space.get("chat_ids", []))
+            if chat_id not in chat_ids:
+                chat_ids.append(chat_id)
+            space["chat_ids"] = chat_ids
+        if description.strip():
+            space["description"] = description.strip()
+        space["updated_at"] = now
+        return write_map(profile_data, map_data), space
+
+    space = {
+        "id": uuid4().hex,
+        "title": title.strip(),
+        "description": description.strip(),
+        "chat_ids": [chat_id] if chat_id else [],
+        "entries": [],
+        "created_at": now,
+        "updated_at": now,
+    }
+    map_data["topic_spaces"].append(space)
+    return write_map(profile_data, map_data), space
+
+
+def update_topic_space(
+    profile_data: dict[str, Any] | None,
+    *,
+    topic_space_id: str,
+    title: str | None = None,
+    description: str | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    map_data = read_map(profile_data)
+
+    for space in map_data["topic_spaces"]:
+        if space.get("id") != topic_space_id:
+            continue
+        if title is not None:
+            cleaned_title = title.strip()
+            if not cleaned_title:
+                raise ValueError("Topic title is required")
+            space["title"] = cleaned_title
+        if description is not None:
+            space["description"] = description.strip()
+        space["updated_at"] = current_timestamp()
+        return write_map(profile_data, map_data), space
+
+    raise LookupError("Topic space not found")
+
+
+def delete_topic_space(
+    profile_data: dict[str, Any] | None,
+    *,
+    topic_space_id: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    map_data = read_map(profile_data)
+
+    for space in map_data["topic_spaces"]:
+        if space.get("id") != topic_space_id:
+            continue
+        map_data["topic_spaces"].remove(space)
+        map_data["unassigned_entries"].extend(space.get("entries", []))
+        return write_map(profile_data, map_data), space
+
+    raise LookupError("Topic space not found")
+
+
 def find_topic_space_for_chat(
     profile_data: dict[str, Any] | None,
     chat_id: str,
@@ -177,6 +259,58 @@ def add_map_entry(
     return write_map(profile_data, map_data), entry
 
 
+def find_entry_group(map_data: dict[str, Any], entry_id: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    entry_groups = [map_data["unassigned_entries"]]
+    entry_groups.extend(space.get("entries", []) for space in map_data["topic_spaces"])
+
+    for entries in entry_groups:
+        for entry in entries:
+            if entry.get("id") == entry_id:
+                return entries, entry
+    raise LookupError("Map entry not found")
+
+
+def update_map_entry(
+    profile_data: dict[str, Any] | None,
+    *,
+    entry_id: str,
+    category: str | None = None,
+    text: str | None = None,
+    reason: str | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    if category is not None and category not in ENTRY_CATEGORIES:
+        raise ValueError(f"Unsupported map category: {category}")
+
+    map_data = read_map(profile_data)
+    _, entry = find_entry_group(map_data, entry_id)
+
+    if category is not None and category != entry.get("category"):
+        entry["category"] = category
+        if category == "practice":
+            entry.setdefault("status", "active")
+            entry.setdefault("reflection", None)
+        else:
+            entry.pop("status", None)
+            entry.pop("reflection", None)
+    if text is not None:
+        entry["text"] = text.strip()
+    if reason is not None:
+        entry["reason"] = reason.strip() if reason else None
+    entry["updated_at"] = current_timestamp()
+    return write_map(profile_data, map_data), entry
+
+
+def delete_map_entry(
+    profile_data: dict[str, Any] | None,
+    *,
+    entry_id: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    map_data = read_map(profile_data)
+    entries, entry = find_entry_group(map_data, entry_id)
+    entries.remove(entry)
+    return write_map(profile_data, map_data), entry
+
+
 def update_practice(
     profile_data: dict[str, Any] | None,
     *,
@@ -188,15 +322,10 @@ def update_practice(
         raise ValueError(f"Unsupported practice status: {practice_status}")
 
     map_data = read_map(profile_data)
-    entry_groups = [map_data["unassigned_entries"]]
-    entry_groups.extend(space.get("entries", []) for space in map_data["topic_spaces"])
-
-    for entries in entry_groups:
-        for entry in entries:
-            if entry.get("id") != entry_id or entry.get("category") != "practice":
-                continue
-            entry["status"] = practice_status
-            entry["reflection"] = reflection.strip() if reflection else None
-            entry["updated_at"] = current_timestamp()
-            return write_map(profile_data, map_data), entry
-    raise LookupError("Practice not found")
+    _, entry = find_entry_group(map_data, entry_id)
+    if entry.get("category") != "practice":
+        raise LookupError("Practice not found")
+    entry["status"] = practice_status
+    entry["reflection"] = reflection.strip() if reflection else None
+    entry["updated_at"] = current_timestamp()
+    return write_map(profile_data, map_data), entry
