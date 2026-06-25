@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.services.llm import (
     AnthropicChatLLMClient,
     AnthropicTopicLLMClient,
+    CHAT_SYSTEM_PROMPT,
     LocalChatLLMClient,
     OllamaChatLLMClient,
     OllamaTopicLLMClient,
@@ -674,6 +675,11 @@ def test_local_chat_responses_focus_on_each_new_message():
     assert "own perception" in reset_response
     assert "thesis" not in reset_response
 
+    girlfriend_response = client.local_response("My girlfriend doesn't like me.", chat_info)
+    assert "do not treat it as fact" in girlfriend_response
+    assert "What makes you think" in girlfriend_response
+    assert "evidence points another way" in girlfriend_response
+
     fallback_responses = [
         client.local_response(
             "Maybe speaking English gives me distance from how my family sees me.",
@@ -691,6 +697,14 @@ def test_local_chat_responses_focus_on_each_new_message():
     forbidden_openings = ("You wrote", "You said", "That adds useful detail", "I hear that")
     assert all(not response.startswith(forbidden_openings) for response in fallback_responses)
     assert len(set(fallback_responses)) == 3
+
+
+def test_chat_system_prompt_is_solution_oriented_without_over_mirroring():
+    assert "Reflect emotion only briefly" in CHAT_SYSTEM_PROMPT
+    assert "do not mirror the same feeling or wording again" in CHAT_SYSTEM_PROMPT
+    assert "Separate observation from interpretation" in CHAT_SYSTEM_PROMPT
+    assert "what evidence points another way" in CHAT_SYSTEM_PROMPT
+    assert "one small next step" in CHAT_SYSTEM_PROMPT
 
 
 def test_llm_message_still_accepts_legacy_message_payload(client):

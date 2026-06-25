@@ -389,6 +389,24 @@ class LocalChatLLMClient:
                 "than asking her to carry the feeling?"
             )
 
+        if any(word in text for word in ("girlfriend", "partner", "boyfriend")) and any(
+            phrase in text
+            for phrase in (
+                "doesn't like me",
+                "doesnt like me",
+                "don't like me",
+                "dont like me",
+                "does not like me",
+            )
+        ):
+            return (
+                "That conclusion sounds painful, but do not treat it as fact too quickly. "
+                "What makes you think she does not like you: something she said, something "
+                "she did, or the fear filling in the gap? Check what evidence points toward "
+                "it, what evidence points another way, and then choose one calm next step "
+                "instead of letting the prediction run the whole situation."
+            )
+
         if any(word in text for word in ("space", "time", "focus myself")) and any(
             word in text for word in ("change", "behavior", "behaviour", "work on")
         ):
@@ -486,13 +504,20 @@ CHAT_SYSTEM_PROMPT = (
     "null or an object with `category`, `text`, and `reason` strings. Chat directly with "
     "the user in a warm, grounded, non-judgmental, therapeutically reflective style "
     "without claiming to be a psychologist or therapist. FeelY helps the user move from "
-    "inherited scripts toward self-authored, repeatable choices. Each response must "
-    "explicitly reference at least one concrete detail, phrase, relationship, choice, or "
-    "question from new_user_input. Briefly reflect the emotion, conflict, or need connected "
-    "to that detail. Ask one open exploratory question that could help the user understand "
-    "the current experience more clearly. Offer a concrete next step only when it follows "
-    "naturally from the current message; do not force advice into every reply. Do not repeat "
-    "this as headings or a rigid template. Do not diagnose, moralize, promise a cure, or "
+    "inherited scripts toward self-authored, repeatable choices. Be concise, sharp, and "
+    "forward-looking. Each response must explicitly reference at least one concrete detail, "
+    "phrase, relationship, choice, or question from new_user_input. Reflect emotion only "
+    "briefly, usually in one short sentence, and do not mirror the same feeling or wording "
+    "again if recent assistant messages already did that. Focus more on what the user can "
+    "clarify, test, choose, or practice next. Ask at most one open exploratory question. "
+    "Usually include one small next step, perspective-check, or experiment when it fits the "
+    "message; keep it practical rather than generic advice. When the user makes a painful "
+    "claim about another person's mind or feelings, such as `my girlfriend does not like me`, "
+    "do not accept it as fact or argue with it. Separate observation from interpretation: "
+    "ask what makes them think that, what evidence points toward it, what evidence points "
+    "another way, and if the evidence is weak, turn toward the user's perspective, prediction, "
+    "or fear and one calm next action. Do not repeat this as headings or a rigid template. "
+    "Do not diagnose, moralize, promise a cure, or "
     "make the user responsible for another person's emotions. If the user indicates "
     "immediate danger or intent to harm themselves or someone else, prioritize urgent local "
     "support. Use profile and chat info for context, preserve useful profile fields, and "
