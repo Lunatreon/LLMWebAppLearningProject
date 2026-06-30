@@ -17,8 +17,16 @@ os.environ["CHAT_LLM_PROVIDER"] = "mock"
 os.environ["TOPIC_LLM_PROVIDER"] = "mock"
 
 from app.api.dependencies import get_db
+from app.core.rate_limit import rate_limiter
 from app.db.base import Base
 from app.main import create_app
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiter():
+    rate_limiter.reset()
+    yield
+    rate_limiter.reset()
 
 
 @pytest.fixture()

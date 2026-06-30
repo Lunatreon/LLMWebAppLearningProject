@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
 from app.core.config import settings
+from app.core.middleware import RequestSizeLimitMiddleware, SecurityHeadersMiddleware
 from app.db.init_db import init_db
 
 
@@ -16,11 +17,19 @@ async def lifespan(app: FastAPI, init_database: bool = True):
 
 
 def create_app(init_database: bool = True) -> FastAPI:
+    settings.validate_runtime_security()
+
     async def app_lifespan(app: FastAPI):
         async with lifespan(app, init_database=init_database):
             yield
 
     app = FastAPI(title=settings.app_name, lifespan=app_lifespan)
+
+    app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(
+        RequestSizeLimitMiddleware,
+        max_body_bytes=settings.max_request_body_bytes,
+    )
 
     app.add_middleware(
         CORSMiddleware,

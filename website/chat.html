@@ -89,6 +89,20 @@
                 required
               />
             </label>
+            <label class="bot-field" aria-hidden="true">
+              <span>Website</span>
+              <input
+                id="website"
+                name="website"
+                type="text"
+                autocomplete="off"
+                tabindex="-1"
+              />
+            </label>
+            <div id="captcha-field" class="captcha-field hidden">
+              <div id="captcha-widget"></div>
+              <p id="captcha-status" class="captcha-status" role="status"></p>
+            </div>
             <button id="auth-submit" class="primary-button" type="submit">Login</button>
             <p id="auth-error" class="form-error" role="alert"></p>
           </form>

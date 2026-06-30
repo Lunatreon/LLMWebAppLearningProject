@@ -1,11 +1,12 @@
 from collections.abc import Generator
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jwt import InvalidTokenError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.rate_limit import client_fingerprint, enforce_rate_limit
 from app.core.security import decode_access_token
 from app.db.session import SessionLocal
 from app.models.user import User
@@ -19,6 +20,23 @@ def get_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
+
+
+def rate_limit_api(request: Request) -> None:
+    enforce_rate_limit(
+        f"api:{client_fingerprint(request)}",
+        max_attempts=settings.rate_limit_api_per_minute,
+        window_seconds=60,
+    )
+
+
+def rate_limit_auth(request: Request) -> None:
+    enforce_rate_limit(
+        f"auth:{client_fingerprint(request)}",
+        max_attempts=settings.rate_limit_auth_ip_per_minute,
+        window_seconds=60,
+        detail="Too many account attempts. Please wait a moment and try again.",
+    )
 
 
 def get_current_user(

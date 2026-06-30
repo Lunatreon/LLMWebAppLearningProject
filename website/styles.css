@@ -64,6 +64,29 @@ a:focus-visible {
   display: none !important;
 }
 
+.bot-field {
+  position: absolute;
+  left: -100vw;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.captcha-field {
+  display: grid;
+  min-height: 86px;
+  align-content: center;
+}
+
+.captcha-status {
+  min-height: 18px;
+  margin: 8px 0 0;
+  color: #6f625d;
+  font-size: 12px;
+}
+
 .shell {
   min-height: 100vh;
 }

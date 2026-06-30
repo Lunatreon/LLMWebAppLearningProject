@@ -8,6 +8,8 @@ per-user LLM requests, and persistent user profiles.
 - FastAPI application with modular route files under `app/api/routes`
 - User registration and login
 - JWT bearer authentication
+- Basic bot and abuse protection for auth, API, and LLM endpoints
+- Request-size limits, security headers, and production config checks
 - SQLite by default, configurable through `DATABASE_URL`
 - Per-user profile storage
 - Chat-LLM endpoint that sends chat context, chat history, and the saved profile to the LLM
@@ -188,9 +190,58 @@ require their matching API key; Ollama runs locally without one.
 
 Change `SECRET_KEY` before deploying.
 
+### Bot And Abuse Protection
+
+The backend includes lightweight in-memory throttles for public account routes,
+general API traffic, and per-user LLM messages. These are useful for local or
+single-process deployments and can be tuned in `.env`:
+
+```env
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_API_PER_MINUTE=300
+RATE_LIMIT_AUTH_IP_PER_MINUTE=30
+RATE_LIMIT_REGISTER_IP_PER_HOUR=20
+RATE_LIMIT_LOGIN_IDENTIFIER_ATTEMPTS=8
+RATE_LIMIT_LOGIN_IDENTIFIER_WINDOW_SECONDS=900
+RATE_LIMIT_LLM_USER_PER_MINUTE=30
+RATE_LIMIT_LLM_USER_PER_DAY=400
+MAX_REQUEST_BODY_BYTES=128000
+```
+
+The frontend registration form also sends an invisible honeypot field. Real
+users leave it empty; simple form-fill bots often populate it and are rejected.
+
+Registration can also require Cloudflare Turnstile CAPTCHA verification before
+the backend creates a user. Create a Turnstile widget in Cloudflare, copy the
+site key and secret key into `.env`, then enable it:
+
+```env
+CAPTCHA_ENABLED=true
+CAPTCHA_PROVIDER="turnstile"
+TURNSTILE_SITE_KEY="your-public-site-key"
+TURNSTILE_SECRET_KEY="your-private-secret-key"
+TURNSTILE_VERIFY_URL="https://challenges.cloudflare.com/turnstile/v0/siteverify"
+TURNSTILE_TIMEOUT_SECONDS=5
+```
+
+The static website reads `GET /api/v1/auth/captcha/config`, renders the
+Turnstile widget on the Register tab, and sends the returned token as
+`captcha_token` to `POST /api/v1/auth/register`. The backend verifies that token
+with Turnstile before any user row is created. Local development can keep
+`CAPTCHA_ENABLED=false`; non-local environments refuse to start unless CAPTCHA
+is enabled and both keys are configured.
+
+For production, also put a reverse proxy or hosting firewall in front of the
+app. If the app runs behind a trusted proxy that sets `X-Forwarded-For`, set
+`TRUST_PROXY_HEADERS=true`; otherwise leave it `false` so clients cannot spoof
+their IP address. Non-local environments refuse to start with the default
+`SECRET_KEY`, unsafe CORS origins such as `*` or `null`, or missing CAPTCHA
+configuration.
+
 ## Main Endpoints
 
 - `GET /api/v1/health`
+- `GET /api/v1/auth/captcha/config`
 - `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
 - `GET /api/v1/users/me`

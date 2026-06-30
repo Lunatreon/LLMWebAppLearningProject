@@ -14,6 +14,12 @@ const state = {
   pendingMapSuggestion: null,
   completingPracticeId: null,
   pollTimer: null,
+  captcha: {
+    config: { enabled: false, provider: null, site_key: null },
+    loading: false,
+    token: "",
+    widgetId: null,
+  },
 };
 
 const authView = document.querySelector("#auth-view");
@@ -28,6 +34,10 @@ const usernameField = document.querySelector("#username-field");
 const emailInput = document.querySelector("#email");
 const usernameInput = document.querySelector("#username");
 const passwordInput = document.querySelector("#password");
+const websiteInput = document.querySelector("#website");
+const captchaField = document.querySelector("#captcha-field");
+const captchaWidget = document.querySelector("#captcha-widget");
+const captchaStatus = document.querySelector("#captcha-status");
 const logoutButton = document.querySelector("#logout-button");
 const refreshButton = document.querySelector("#refresh-button");
 const newChatButton = document.querySelector("#new-chat-button");
@@ -82,6 +92,18 @@ const MAP_CATEGORY_LABELS = {
   evidence: "Evidence",
 };
 
+let lastAuthSubmitAt = 0;
+let turnstileScriptPromise = null;
+
+class ApiError extends Error {
+  constructor(message, status, retryAfter = null) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.retryAfter = retryAfter;
+  }
+}
+
 function setMode(mode) {
   state.mode = mode;
   const isLogin = mode === "login";
@@ -95,6 +117,9 @@ function setMode(mode) {
   authHeading.textContent = isLogin ? "Return to your space" : "Create your private space";
   authSubmit.textContent = isLogin ? "Login" : "Create account";
   authError.textContent = "";
+  renderCaptcha().catch((error) => {
+    captchaStatus.textContent = error instanceof Error ? error.message : String(error);
+  });
 }
 
 function authHeaders() {
@@ -125,10 +150,87 @@ async function api(path, options = {}) {
 
   if (!response.ok) {
     const detail = payload && payload.detail ? payload.detail : "Request failed";
-    const message = Array.isArray(detail) ? detail[0]?.msg : detail;
-    throw new Error(message || "Request failed");
+    let message = Array.isArray(detail) ? detail[0]?.msg : detail;
+    const retryAfter = response.headers.get("Retry-After");
+    if (response.status === 429 && retryAfter) {
+      message = `${message || "Too many requests."} Try again in ${retryAfter} seconds.`;
+    }
+    throw new ApiError(message || "Request failed", response.status, retryAfter);
   }
   return payload;
+}
+
+async function loadCaptchaConfig() {
+  try {
+    state.captcha.config = await api("/auth/captcha/config");
+  } catch {
+    state.captcha.config = { enabled: false, provider: null, site_key: null };
+  }
+}
+
+function loadTurnstileScript() {
+  if (window.turnstile) return Promise.resolve();
+  if (turnstileScriptPromise) return turnstileScriptPromise;
+
+  turnstileScriptPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    script.async = true;
+    script.defer = true;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error("Could not load verification. Please try again."));
+    document.head.append(script);
+  });
+  return turnstileScriptPromise;
+}
+
+function resetCaptchaWidget() {
+  state.captcha.token = "";
+  if (window.turnstile && state.captcha.widgetId !== null) {
+    window.turnstile.reset(state.captcha.widgetId);
+  }
+}
+
+async function renderCaptcha() {
+  if (!captchaField || !captchaWidget || !captchaStatus) return;
+
+  const needsCaptcha = state.mode === "register" && state.captcha.config.enabled;
+  captchaField.classList.toggle("hidden", !needsCaptcha);
+  if (!needsCaptcha) {
+    state.captcha.token = "";
+    captchaStatus.textContent = "";
+    return;
+  }
+
+  if (state.captcha.config.provider !== "turnstile" || !state.captcha.config.site_key) {
+    captchaStatus.textContent = "Account verification is not configured.";
+    return;
+  }
+
+  captchaStatus.textContent = "Loading verification...";
+  await loadTurnstileScript();
+  if (state.mode !== "register") return;
+
+  if (state.captcha.widgetId === null) {
+    state.captcha.widgetId = window.turnstile.render(captchaWidget, {
+      sitekey: state.captcha.config.site_key,
+      callback(token) {
+        state.captcha.token = token;
+        captchaStatus.textContent = "";
+      },
+      "expired-callback"() {
+        state.captcha.token = "";
+        captchaStatus.textContent = "Verification expired. Please verify again.";
+      },
+      "error-callback"() {
+        state.captcha.token = "";
+        captchaStatus.textContent = "Verification failed to load. Please try again.";
+      },
+    });
+  } else {
+    resetCaptchaWidget();
+  }
+  captchaStatus.textContent = "";
 }
 
 function showAuth() {
@@ -150,12 +252,19 @@ async function showChat() {
 }
 
 async function registerAndLogin() {
+  const captchaIsEnabled = state.captcha.config.enabled;
+  if (captchaIsEnabled && !state.captcha.token) {
+    throw new Error("Please complete the verification before creating an account.");
+  }
+
   await api("/auth/register", {
     method: "POST",
     body: JSON.stringify({
       email: emailInput.value.trim(),
       username: usernameInput.value.trim(),
       password: passwordInput.value,
+      website: websiteInput?.value.trim() || "",
+      captcha_token: captchaIsEnabled ? state.captcha.token : null,
     }),
   });
   await login();
@@ -1567,6 +1676,12 @@ messageInput.addEventListener("keydown", (event) => {
 authForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   authError.textContent = "";
+  const now = Date.now();
+  if (now - lastAuthSubmitAt < 1200) {
+    authError.textContent = "Please wait a moment before trying again.";
+    return;
+  }
+  lastAuthSubmitAt = now;
   authSubmit.disabled = true;
   const submitLabel = state.mode === "register" ? "Creating account..." : "Logging in...";
   authSubmit.textContent = submitLabel;
@@ -1578,16 +1693,26 @@ authForm.addEventListener("submit", async (event) => {
     }
   } catch (error) {
     authError.textContent = error instanceof Error ? error.message : String(error);
+    if (state.mode === "register") resetCaptchaWidget();
   } finally {
     authSubmit.disabled = false;
     authSubmit.textContent = state.mode === "register" ? "Create account" : "Login";
   }
 });
 
-setMode("login");
-renderUser();
-if (state.token) {
-  showChat().catch(() => logout());
-} else {
-  showAuth();
+async function init() {
+  await loadCaptchaConfig();
+  setMode("login");
+  renderUser();
+  if (state.token) {
+    showChat().catch(() => logout());
+  } else {
+    showAuth();
+  }
 }
+
+init().catch(() => {
+  setMode("login");
+  renderUser();
+  showAuth();
+});

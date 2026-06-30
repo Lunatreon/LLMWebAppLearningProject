@@ -8,6 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.api.dependencies import get_current_user, get_db
+from app.core.config import settings
+from app.core.rate_limit import enforce_rate_limit
 from app.db.session import SessionLocal
 from app.models.user import ChatSession, User, UserProfile
 from app.schemas.llm import (
@@ -477,6 +479,19 @@ async def send_message_to_llm(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> LLMResponse:
+    enforce_rate_limit(
+        f"llm-minute:user:{current_user.id}",
+        max_attempts=settings.rate_limit_llm_user_per_minute,
+        window_seconds=60,
+        detail="Too many messages sent too quickly. Please pause for a moment.",
+    )
+    enforce_rate_limit(
+        f"llm-day:user:{current_user.id}",
+        max_attempts=settings.rate_limit_llm_user_per_day,
+        window_seconds=86_400,
+        detail="Daily message limit reached. Please try again later.",
+    )
+
     profile = get_or_create_profile(db, current_user)
     chat_session = get_or_create_chat_session(db, current_user, payload.chat_id)
 

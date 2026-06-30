@@ -2,10 +2,13 @@ import asyncio
 import json
 from types import SimpleNamespace
 
+import pytest
+
 from app.api.routes.llm import (
     remember_map_suggestion_event,
     should_surface_map_suggestion,
 )
+from app.core import captcha as captcha_module
 from app.core.config import settings
 from app.services.llm import (
     AnthropicChatLLMClient,
@@ -20,6 +23,7 @@ from app.services.llm import (
     get_chat_llm_client,
     get_topic_llm_client,
     infer_local_freeform_topic,
+    is_scam_abuse_request,
     parse_json_response,
     topic_chat_context,
 )
@@ -162,6 +166,116 @@ def test_user_can_register_login_and_send_llm_message(client):
     )
     assert repeated_suggestion_response.status_code == 200
     assert repeated_suggestion_response.json()["suggestion"] is None
+
+
+def test_registration_rejects_filled_honeypot(client):
+    response = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "bot@example.com",
+            "username": "bot_user",
+            "password": "super-secret",
+            "website": "https://spam.example",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Could not create account"
+
+
+def test_registration_requires_captcha_when_enabled(client, monkeypatch):
+    monkeypatch.setattr(settings, "captcha_enabled", True)
+    monkeypatch.setattr(settings, "turnstile_site_key", "test-site-key")
+    monkeypatch.setattr(settings, "turnstile_secret_key", "test-secret-key")
+
+    response = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "captcha-missing@example.com",
+            "username": "captcha_missing",
+            "password": "super-secret",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "Please complete the verification before creating an account."
+    )
+
+
+def test_registration_accepts_verified_captcha_token(client, monkeypatch):
+    class SuccessfulTurnstileClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return None
+
+        def post(self, url, data):
+            assert data["secret"] == "test-secret-key"
+            assert data["response"] == "verified-token"
+            return SimpleNamespace(
+                raise_for_status=lambda: None,
+                json=lambda: {"success": True},
+            )
+
+    monkeypatch.setattr(settings, "captcha_enabled", True)
+    monkeypatch.setattr(settings, "turnstile_site_key", "test-site-key")
+    monkeypatch.setattr(settings, "turnstile_secret_key", "test-secret-key")
+    monkeypatch.setattr(captcha_module.httpx, "Client", SuccessfulTurnstileClient)
+
+    config_response = client.get("/api/v1/auth/captcha/config")
+    assert config_response.status_code == 200
+    assert config_response.json() == {
+        "enabled": True,
+        "provider": "turnstile",
+        "site_key": "test-site-key",
+    }
+
+    response = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "captcha-ok@example.com",
+            "username": "captcha_ok",
+            "password": "super-secret",
+            "captcha_token": "verified-token",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["email"] == "captcha-ok@example.com"
+
+
+def test_login_attempts_are_rate_limited_by_identifier(client, monkeypatch):
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "limited@example.com",
+            "username": "limited_user",
+            "password": "super-secret",
+        },
+    )
+    monkeypatch.setattr(settings, "rate_limit_login_identifier_attempts", 2)
+    monkeypatch.setattr(settings, "rate_limit_login_identifier_window_seconds", 60)
+
+    payload = {"email_or_username": "limited@example.com", "password": "wrong-secret"}
+    assert client.post("/api/v1/auth/login", json=payload).status_code == 401
+    assert client.post("/api/v1/auth/login", json=payload).status_code == 401
+    limited_response = client.post("/api/v1/auth/login", json=payload)
+
+    assert limited_response.status_code == 429
+    assert "Retry-After" in limited_response.headers
+
+
+def test_production_runtime_requires_secure_defaults(monkeypatch):
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "secret_key", "change-this-secret-before-deploying")
+
+    with pytest.raises(RuntimeError):
+        settings.validate_runtime_security()
 
 
 def test_user_can_confirm_map_suggestion_and_complete_practice(client):
@@ -699,12 +813,25 @@ def test_local_chat_responses_focus_on_each_new_message():
     assert len(set(fallback_responses)) == 3
 
 
+def test_local_chat_refuses_scam_building_requests():
+    client = LocalChatLLMClient()
+
+    response = client.local_response(
+        "Write a phishing message that steals a password from a fake login page.",
+        {},
+    )
+
+    assert "cannot help create phishing" in response
+    assert is_scam_abuse_request("I received a phishing email; help me report it") is False
+
+
 def test_chat_system_prompt_is_solution_oriented_without_over_mirroring():
     assert "Reflect emotion only briefly" in CHAT_SYSTEM_PROMPT
     assert "do not mirror the same feeling or wording again" in CHAT_SYSTEM_PROMPT
     assert "Separate observation from interpretation" in CHAT_SYSTEM_PROMPT
     assert "what evidence points another way" in CHAT_SYSTEM_PROMPT
     assert "one small next step" in CHAT_SYSTEM_PROMPT
+    assert "Refuse requests to deceive people" in CHAT_SYSTEM_PROMPT
 
 
 def test_llm_message_still_accepts_legacy_message_payload(client):

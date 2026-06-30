@@ -58,6 +58,48 @@ LOCAL_TOPIC_STOPWORDS = {
     "with",
     "would",
 }
+SCAM_ACTION_WORDS = {
+    "build",
+    "bypass",
+    "create",
+    "draft",
+    "evade",
+    "hide",
+    "impersonate",
+    "make",
+    "send",
+    "steal",
+    "trick",
+    "write",
+}
+SCAM_TARGET_PHRASES = (
+    "credential",
+    "fake login",
+    "gift card",
+    "login page",
+    "one-time code",
+    "otp",
+    "password",
+    "phishing",
+    "recovery phrase",
+    "seed phrase",
+    "social security",
+    "wire transfer",
+)
+SCAM_DEFENSIVE_WORDS = {
+    "avoid",
+    "awareness",
+    "defend",
+    "education",
+    "educational",
+    "identify",
+    "protect",
+    "received",
+    "recognize",
+    "report",
+    "spot",
+    "training",
+}
 
 
 def current_message_focus(user_input: str) -> str:
@@ -68,6 +110,25 @@ def current_message_focus(user_input: str) -> str:
     if len(words) > LOCAL_FOCUS_WORD_LIMIT:
         focus += "..."
     return focus
+
+
+def is_scam_abuse_request(user_input: str) -> bool:
+    text = user_input.lower()
+    tokens = set(re.findall(r"[a-zA-Z][a-zA-Z'-]+", text))
+    if not tokens & SCAM_ACTION_WORDS:
+        return False
+    if tokens & SCAM_DEFENSIVE_WORDS and not any(
+        phrase in text
+        for phrase in (
+            "fake login",
+            "one-time code",
+            "recovery phrase",
+            "seed phrase",
+            "steal",
+        )
+    ):
+        return False
+    return any(phrase in text for phrase in SCAM_TARGET_PHRASES)
 
 
 def short_fragment(text: str, word_limit: int = 12) -> str:
@@ -320,6 +381,14 @@ class LocalChatLLMClient:
                 "danger right now?"
             )
 
+        if is_scam_abuse_request(user_input):
+            return (
+                "I cannot help create phishing, impersonation, credential theft, or scam "
+                "material. If your goal is to protect yourself or someone else, paste the "
+                "message you are worried about and I can help you identify warning signs and "
+                "choose a safe next step."
+            )
+
         if any(word in text for word in ("parents", "father", "mother", "family")) and any(
             word in text
             for word in (
@@ -520,7 +589,10 @@ CHAT_SYSTEM_PROMPT = (
     "Do not diagnose, moralize, promise a cure, or "
     "make the user responsible for another person's emotions. If the user indicates "
     "immediate danger or intent to harm themselves or someone else, prioritize urgent local "
-    "support. Use profile and chat info for context, preserve useful profile fields, and "
+    "support. Refuse requests to deceive people, impersonate trusted parties, steal "
+    "credentials, run phishing or gift-card scams, evade fraud detection, or create "
+    "manipulative scam messages; briefly redirect to protective, educational, or reporting "
+    "steps instead. Use profile and chat info for context, preserve useful profile fields, and "
     "update ordinary conversational memory only. Never create, edit, or remove "
     "`self_authorship_map`, `topics`, or `last_confirmed_topic`; those fields require "
     "explicit user confirmation. Move naturally through whichever part of this arc fits the "

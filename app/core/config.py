@@ -22,6 +22,22 @@ class Settings(BaseSettings):
             "null",
         ]
     )
+    trust_proxy_headers: bool = False
+    max_request_body_bytes: int = 128_000
+    rate_limit_enabled: bool = True
+    rate_limit_api_per_minute: int = 300
+    rate_limit_auth_ip_per_minute: int = 30
+    rate_limit_register_ip_per_hour: int = 20
+    rate_limit_login_identifier_attempts: int = 8
+    rate_limit_login_identifier_window_seconds: int = 900
+    rate_limit_llm_user_per_minute: int = 30
+    rate_limit_llm_user_per_day: int = 400
+    captcha_enabled: bool = False
+    captcha_provider: str = "turnstile"
+    turnstile_site_key: str | None = None
+    turnstile_secret_key: str | None = None
+    turnstile_verify_url: str = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+    turnstile_timeout_seconds: float = 5.0
 
     llm_provider: str = "mock"
     chat_llm_provider: str | None = None
@@ -44,6 +60,29 @@ class Settings(BaseSettings):
     ollama_max_tokens: int = 1024
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    @property
+    def is_local_environment(self) -> bool:
+        return self.environment.lower() in {"local", "development", "dev", "test"}
+
+    def validate_runtime_security(self) -> None:
+        if self.is_local_environment:
+            return
+
+        if self.secret_key == "change-this-secret-before-deploying" or len(self.secret_key) < 32:
+            raise RuntimeError("SECRET_KEY must be changed to a long random value before deployment.")
+
+        unsafe_origins = {"*", "null"} & set(self.cors_origins)
+        if unsafe_origins:
+            origins = ", ".join(sorted(unsafe_origins))
+            raise RuntimeError(f"CORS_ORIGINS contains unsafe production origin(s): {origins}.")
+
+        if not self.captcha_enabled:
+            raise RuntimeError("CAPTCHA_ENABLED must be true before deployment.")
+        if self.captcha_provider.lower() != "turnstile":
+            raise RuntimeError("CAPTCHA_PROVIDER must be 'turnstile'.")
+        if not self.turnstile_site_key or not self.turnstile_secret_key:
+            raise RuntimeError("TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY must be configured.")
 
 
 @lru_cache
