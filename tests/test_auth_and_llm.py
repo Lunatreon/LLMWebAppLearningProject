@@ -1,8 +1,10 @@
 import asyncio
 import json
+from base64 import b64encode
 from types import SimpleNamespace
 
 import pytest
+from fastapi.testclient import TestClient
 
 from app.api.routes.llm import (
     remember_map_suggestion_event,
@@ -10,6 +12,7 @@ from app.api.routes.llm import (
 )
 from app.core import captcha as captcha_module
 from app.core.config import settings
+from app.main import create_app
 from app.services.llm import (
     AnthropicChatLLMClient,
     AnthropicTopicLLMClient,
@@ -43,6 +46,31 @@ def test_local_website_cors_preflight(client):
 
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:5500"
+
+
+def test_basic_auth_gate_can_protect_health_endpoint(monkeypatch):
+    monkeypatch.setattr(settings, "basic_auth_enabled", True)
+    monkeypatch.setattr(settings, "basic_auth_username", "preview")
+    monkeypatch.setattr(settings, "basic_auth_password", "secret")
+
+    app = create_app(init_database=False)
+    with pytest.MonkeyPatch.context() as patch_context:
+        patch_context.setattr(settings, "basic_auth_enabled", True)
+        patch_context.setattr(settings, "basic_auth_username", "preview")
+        patch_context.setattr(settings, "basic_auth_password", "secret")
+
+        with TestClient(app) as test_client:
+            blocked = test_client.get("/api/v1/health")
+            assert blocked.status_code == 401
+            assert blocked.headers["www-authenticate"] == 'Basic realm="Restricted"'
+
+            token = b64encode(b"preview:secret").decode("ascii")
+            allowed = test_client.get(
+                "/api/v1/health",
+                headers={"Authorization": f"Basic {token}"},
+            )
+            assert allowed.status_code == 200
+            assert allowed.json() == {"status": "ok"}
 
 
 def test_user_can_register_login_and_send_llm_message(client):

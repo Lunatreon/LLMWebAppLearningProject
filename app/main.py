@@ -5,7 +5,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
 from app.core.config import settings
-from app.core.middleware import RequestSizeLimitMiddleware, SecurityHeadersMiddleware
+from app.core.middleware import (
+    BasicAuthMiddleware,
+    RequestSizeLimitMiddleware,
+    SecurityHeadersMiddleware,
+)
 from app.db.init_db import init_db
 
 
@@ -26,6 +30,7 @@ def create_app(init_database: bool = True) -> FastAPI:
     app = FastAPI(title=settings.app_name, lifespan=app_lifespan)
 
     app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(BasicAuthMiddleware)
     app.add_middleware(
         RequestSizeLimitMiddleware,
         max_body_bytes=settings.max_request_body_bytes,
@@ -33,9 +38,9 @@ def create_app(init_database: bool = True) -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins,
+        allow_origins=settings.cors_origins if not settings.basic_auth_enabled else ["*"],
         allow_origin_regex=(
-            r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+            r"^https?://(localhost|127\.0\.0\.1|.*\.trycloudflare\.com)(:\d+)?$"
             if settings.environment.lower() == "local"
             else None
         ),

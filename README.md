@@ -190,6 +190,20 @@ require their matching API key; Ollama runs locally without one.
 
 Change `SECRET_KEY` before deploying.
 
+### Temporary Public Preview Protection
+
+If you want the app reachable over the internet but not open to everyone yet, the easiest reversible option is HTTP basic auth.
+
+Set these values in your environment:
+
+```env
+BASIC_AUTH_ENABLED=true
+BASIC_AUTH_USERNAME="preview"
+BASIC_AUTH_PASSWORD="choose-a-strong-password"
+```
+
+Then restart the backend. Anyone opening the site will be prompted for those credentials. When you are ready to remove the gate, set `BASIC_AUTH_ENABLED=false` and restart the app again.
+
 ### Bot And Abuse Protection
 
 The backend includes lightweight in-memory throttles for public account routes,

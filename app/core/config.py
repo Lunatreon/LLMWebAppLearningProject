@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     )
     trust_proxy_headers: bool = False
     max_request_body_bytes: int = 128_000
+    basic_auth_enabled: bool = False
+    basic_auth_username: str | None = None
+    basic_auth_password: str | None = None
     rate_limit_enabled: bool = True
     rate_limit_api_per_minute: int = 300
     rate_limit_auth_ip_per_minute: int = 30
