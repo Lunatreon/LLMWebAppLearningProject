@@ -19,6 +19,7 @@ from app.services.llm import (
     AnthropicTopicLLMClient,
     CHAT_SYSTEM_PROMPT,
     LocalChatLLMClient,
+    LocalTopicLLMClient,
     OllamaChatLLMClient,
     OllamaTopicLLMClient,
     chat_result_from_payload,
@@ -47,6 +48,30 @@ def test_local_website_cors_preflight(client):
 
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:5500"
+
+    unspecified_host_response = client.options(
+        "/api/v1/auth/register",
+        headers={
+            "Origin": "http://0.0.0.0:5500",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+    assert unspecified_host_response.status_code == 200
+    assert unspecified_host_response.headers["access-control-allow-origin"] == (
+        "http://0.0.0.0:5500"
+    )
+
+    local_file_response = client.options(
+        "/api/v1/auth/login",
+        headers={
+            "Origin": "null",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+    assert local_file_response.status_code == 200
+    assert local_file_response.headers["access-control-allow-origin"] == "null"
 
 
 def test_basic_auth_gate_can_protect_health_endpoint(monkeypatch):
@@ -248,7 +273,7 @@ def test_registration_accepts_verified_captcha_token(client, monkeypatch):
             assert data["response"] == "verified-token"
             return SimpleNamespace(
                 raise_for_status=lambda: None,
-                json=lambda: {"success": True},
+                json=lambda: {"success": True, "action": "register"},
             )
 
     monkeypatch.setattr(settings, "captcha_enabled", True)
@@ -262,6 +287,7 @@ def test_registration_accepts_verified_captcha_token(client, monkeypatch):
         "enabled": True,
         "provider": "turnstile",
         "site_key": "test-site-key",
+        "action": "register",
     }
 
     response = client.post(
@@ -276,6 +302,17 @@ def test_registration_accepts_verified_captcha_token(client, monkeypatch):
 
     assert response.status_code == 201
     assert response.json()["email"] == "captcha-ok@example.com"
+
+
+def test_captcha_rejects_a_token_for_another_action():
+    assert captcha_module.turnstile_succeeded(
+        {"success": True, "action": "register"},
+        expected_action="register",
+    )
+    assert not captcha_module.turnstile_succeeded(
+        {"success": True, "action": "login"},
+        expected_action="register",
+    )
 
 
 def test_user_can_edit_account_change_password_and_delete_account(client):
@@ -431,6 +468,23 @@ def test_production_runtime_requires_secure_defaults(monkeypatch):
     monkeypatch.setattr(settings, "secret_key", "change-this-secret-before-deploying")
 
     with pytest.raises(RuntimeError):
+        settings.validate_runtime_security()
+
+
+def test_production_runtime_rejects_turnstile_test_keys(monkeypatch):
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "secret_key", "a-production-secret-that-is-long-enough")
+    monkeypatch.setattr(settings, "cors_origins", ["https://app.example.com"])
+    monkeypatch.setattr(settings, "captcha_enabled", True)
+    monkeypatch.setattr(settings, "captcha_provider", "turnstile")
+    monkeypatch.setattr(settings, "turnstile_site_key", "1x00000000000000000000AA")
+    monkeypatch.setattr(
+        settings,
+        "turnstile_secret_key",
+        "1x0000000000000000000000000000000AA",
+    )
+
+    with pytest.raises(RuntimeError, match="test keys cannot be used in production"):
         settings.validate_runtime_security()
 
 
@@ -1200,6 +1254,12 @@ def test_provider_factories_can_select_ollama_per_role(monkeypatch):
     assert chat_client.model == "qwen3.5:4b"
     assert isinstance(topic_client, OllamaTopicLLMClient)
     assert topic_client.model == "phi4-mini"
+
+
+def test_topic_provider_can_avoid_a_second_external_model_call(monkeypatch):
+    monkeypatch.setattr(settings, "topic_llm_provider", "local")
+
+    assert isinstance(get_topic_llm_client(), LocalTopicLLMClient)
 
 
 def test_json_parser_accepts_markdown_fenced_provider_output():

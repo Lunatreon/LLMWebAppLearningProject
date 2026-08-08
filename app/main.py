@@ -38,9 +38,9 @@ def create_app(init_database: bool = True) -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins if not settings.basic_auth_enabled else ["*"],
+        allow_origins=settings.cors_origins,
         allow_origin_regex=(
-            r"^https?://(localhost|127\.0\.0\.1|.*\.trycloudflare\.com)(:\d+)?$"
+            r"^https?://(localhost|127\.0\.0\.1|0\.0\.0\.0|.*\.trycloudflare\.com)(:\d+)?$"
             if settings.environment.lower() == "local"
             else None
         ),

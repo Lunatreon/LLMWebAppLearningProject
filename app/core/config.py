@@ -4,6 +4,20 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+TURNSTILE_TEST_SITE_KEYS = {
+    "1x00000000000000000000AA",
+    "2x00000000000000000000AB",
+    "1x00000000000000000000BB",
+    "2x00000000000000000000BB",
+    "3x00000000000000000000FF",
+}
+TURNSTILE_TEST_SECRET_KEYS = {
+    "1x0000000000000000000000000000000AA",
+    "2x0000000000000000000000000000000AA",
+    "3x0000000000000000000000000000000AA",
+}
+
+
 class Settings(BaseSettings):
     app_name: str = "FeelY Backend"
     api_v1_prefix: str = "/api/v1"
@@ -39,6 +53,7 @@ class Settings(BaseSettings):
     captcha_provider: str = "turnstile"
     turnstile_site_key: str | None = None
     turnstile_secret_key: str | None = None
+    turnstile_action: str = "register"
     turnstile_verify_url: str = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
     turnstile_timeout_seconds: float = 5.0
     google_auth_enabled: bool = False
@@ -57,7 +72,7 @@ class Settings(BaseSettings):
 
     llm_provider: str = "mock"
     chat_llm_provider: str | None = None
-    topic_llm_provider: str | None = None
+    topic_llm_provider: str | None = "local"
     openai_api_key: str | None = None
     openai_model: str = "gpt-5.4-mini"
     openai_chat_model: str | None = None
@@ -99,6 +114,13 @@ class Settings(BaseSettings):
             raise RuntimeError("CAPTCHA_PROVIDER must be 'turnstile'.")
         if not self.turnstile_site_key or not self.turnstile_secret_key:
             raise RuntimeError("TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY must be configured.")
+        if (
+            self.turnstile_site_key in TURNSTILE_TEST_SITE_KEYS
+            or self.turnstile_secret_key in TURNSTILE_TEST_SECRET_KEYS
+        ):
+            raise RuntimeError("Cloudflare Turnstile test keys cannot be used in production.")
+        if not self.turnstile_action.strip():
+            raise RuntimeError("TURNSTILE_ACTION must be configured.")
         if self.google_auth_enabled and not self.google_client_id:
             raise RuntimeError("GOOGLE_CLIENT_ID must be configured when Google auth is enabled.")
         if self.email_verification_required and not self.email_verification_enabled:

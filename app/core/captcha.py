@@ -13,6 +13,7 @@ def captcha_public_config() -> dict[str, str | bool | None]:
         "enabled": settings.captcha_enabled,
         "provider": settings.captcha_provider.lower() if settings.captcha_enabled else None,
         "site_key": settings.turnstile_site_key if settings.captcha_enabled else None,
+        "action": settings.turnstile_action if settings.captcha_enabled else None,
     }
 
 
@@ -67,13 +68,16 @@ def verify_registration_captcha(token: str | None, request: Request) -> None:
             detail="Verification service is unavailable. Please try again.",
         ) from exc
 
-    if not turnstile_succeeded(payload):
+    if not turnstile_succeeded(payload, expected_action=settings.turnstile_action):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Verification failed. Please try again.",
         )
 
 
-def turnstile_succeeded(payload: Any) -> bool:
-    return isinstance(payload, dict) and payload.get("success") is True
-
+def turnstile_succeeded(payload: Any, *, expected_action: str) -> bool:
+    return (
+        isinstance(payload, dict)
+        and payload.get("success") is True
+        and payload.get("action") == expected_action
+    )

@@ -1,5 +1,22 @@
-const API_BASE =
-  localStorage.getItem("feely_api_base") || "http://127.0.0.1:8000/api/v1";
+function resolveApiBase() {
+  const urlBase = new URLSearchParams(window.location.search).get("api_base")?.trim();
+  if (urlBase) return urlBase.replace(/\/$/, "");
+
+  const configuredBase = document
+    .querySelector('meta[name="feely-api-base"]')
+    ?.content.trim();
+  if (configuredBase) return configuredBase.replace(/\/$/, "");
+
+  const storedBase = localStorage.getItem("feely_api_base")?.trim();
+  if (storedBase) return storedBase.replace(/\/$/, "");
+
+  if (["localhost", "127.0.0.1", "0.0.0.0", "::1"].includes(window.location.hostname)) {
+    return "http://127.0.0.1:8000/api/v1";
+  }
+  return `${window.location.origin}/api/v1`;
+}
+
+const API_BASE = resolveApiBase();
 
 const state = {
   mode: "login",
@@ -15,7 +32,7 @@ const state = {
   completingPracticeId: null,
   pollTimer: null,
   captcha: {
-    config: { enabled: false, provider: null, site_key: null },
+    config: { enabled: false, provider: null, site_key: null, action: null },
     loading: false,
     token: "",
     widgetId: null,
@@ -116,6 +133,8 @@ const MAP_CATEGORY_LABELS = {
   evidence: "Evidence",
 };
 
+const TOPIC_POLL_DELAYS = [700, 1800, 4000, 8000];
+
 let lastAuthSubmitAt = 0;
 let turnstileScriptPromise = null;
 let googleScriptPromise = null;
@@ -158,26 +177,41 @@ function authHeaders() {
 }
 
 async function api(path, options = {}) {
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
-  });
+  let response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers || {}),
+      },
+    });
+  } catch {
+    throw new ApiError(
+      "Could not reach the FeelY backend. Start it on port 8000 or configure the API URL.",
+      0,
+    );
+  }
 
   const responseText = await response.text();
   let payload = null;
+  const responseType = response.headers.get("Content-Type") || "";
   if (responseText) {
-    try {
-      payload = JSON.parse(responseText);
-    } catch {
-      payload = { detail: responseText };
+    if (responseType.includes("application/json")) {
+      try {
+        payload = JSON.parse(responseText);
+      } catch {
+        payload = null;
+      }
     }
   }
 
   if (!response.ok) {
-    const detail = payload && payload.detail ? payload.detail : "Request failed";
+    const detail = payload?.detail || (
+      responseType.includes("text/html") || responseText.includes("trusted folder")
+        ? "The FeelY page reached a file server instead of the backend. Check the API URL."
+        : "Request failed"
+    );
     let message = Array.isArray(detail) ? detail[0]?.msg : detail;
     const retryAfter = response.headers.get("Retry-After");
     if (response.status === 429 && retryAfter) {
@@ -192,7 +226,7 @@ async function loadCaptchaConfig() {
   try {
     state.captcha.config = await api("/auth/captcha/config");
   } catch {
-    state.captcha.config = { enabled: false, provider: null, site_key: null };
+    state.captcha.config = { enabled: false, provider: null, site_key: null, action: null };
   }
 }
 
@@ -242,6 +276,8 @@ async function renderCaptcha() {
   if (state.captcha.widgetId === null) {
     state.captcha.widgetId = window.turnstile.render(captchaWidget, {
       sitekey: state.captcha.config.site_key,
+      action: state.captcha.config.action || "register",
+      size: "flexible",
       callback(token) {
         state.captcha.token = token;
         captchaStatus.textContent = "";
@@ -885,31 +921,38 @@ function renderInlineError(error) {
   messages.scrollTop = messages.scrollHeight;
 }
 
-function pollTopicSoon() {
-  setTimeout(() => {
-    pollTopicOnce().catch(() => {});
-  }, 700);
+function pollTopicSoon(attempt = 0) {
+  stopPolling();
+  if (attempt >= TOPIC_POLL_DELAYS.length) return;
+  state.pollTimer = setTimeout(async () => {
+    state.pollTimer = null;
+    try {
+      const topicReady = await pollTopicOnce();
+      if (!topicReady) pollTopicSoon(attempt + 1);
+    } catch {
+      pollTopicSoon(attempt + 1);
+    }
+  }, TOPIC_POLL_DELAYS[attempt]);
 }
 
 async function pollTopicOnce() {
-  if (!state.activeChatId || !state.token) return;
+  if (!state.activeChatId || !state.token) return false;
   const payload = await api(
     `/llm/chats/${encodeURIComponent(state.activeChatId)}/topic-suggestion`,
     { headers: authHeaders() },
   );
   renderTopic(payload.suggestion);
+  return Boolean(payload.suggestion);
 }
 
 function startPolling() {
   stopPolling();
-  state.pollTimer = setInterval(() => {
-    pollTopicOnce().catch(() => {});
-  }, 2500);
+  pollTopicOnce().catch(() => {});
 }
 
 function stopPolling() {
   if (state.pollTimer) {
-    clearInterval(state.pollTimer);
+    clearTimeout(state.pollTimer);
     state.pollTimer = null;
   }
 }
@@ -1928,7 +1971,8 @@ authForm.addEventListener("submit", async (event) => {
 
 async function init() {
   await Promise.all([loadCaptchaConfig(), loadGoogleConfig()]);
-  setMode("login");
+  const requestedMode = new URLSearchParams(window.location.search).get("mode");
+  setMode(requestedMode === "register" ? "register" : "login");
   renderUser();
   await confirmEmailVerificationFromUrl();
   if (state.token) {

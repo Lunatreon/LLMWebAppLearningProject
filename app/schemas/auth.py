@@ -20,6 +20,7 @@ class CaptchaConfig(BaseModel):
     enabled: bool
     provider: str | None = None
     site_key: str | None = None
+    action: str | None = None
 
 
 class GoogleAuthConfig(BaseModel):

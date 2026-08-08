@@ -80,6 +80,10 @@ a:focus-visible {
   align-content: center;
 }
 
+#captcha-widget {
+  width: 100%;
+}
+
 .captcha-status {
   min-height: 18px;
   margin: 8px 0 0;

@@ -85,6 +85,11 @@ localStorage.setItem("feely_api_base", "http://127.0.0.1:8001/api/v1")
 
 Then refresh the website.
 
+The development HTML points `feely-api-base` to
+`http://127.0.0.1:8000/api/v1`. Replace that meta value with the deployed API
+URL for production (or use the `api_base` query parameter), and include the
+frontend origin in `CORS_ORIGINS`.
+
 ### Reset The Environment
 
 Only use this if the venv is broken. First close every terminal running the
@@ -107,6 +112,7 @@ Local development works without an external LLM by keeping:
 
 ```env
 LLM_PROVIDER="mock"
+TOPIC_LLM_PROVIDER="local"
 ```
 
 To use OpenAI, set:
@@ -166,7 +172,7 @@ Configure FeelY to use the local model:
 ```env
 LLM_PROVIDER="ollama"
 CHAT_LLM_PROVIDER="ollama"
-TOPIC_LLM_PROVIDER="ollama"
+TOPIC_LLM_PROVIDER="local"
 OLLAMA_BASE_URL="http://127.0.0.1:11434"
 OLLAMA_MODEL="qwen3.5:4b"
 OLLAMA_CHAT_MODEL="qwen3.5:4b"
@@ -176,17 +182,19 @@ OLLAMA_CONTEXT_WINDOW=8192
 OLLAMA_MAX_TOKENS=1024
 ```
 
-No API key is needed. `OLLAMA_CHAT_MODEL` and `OLLAMA_TOPIC_MODEL` fall back to
-`OLLAMA_MODEL` when empty. A smaller model can be assigned to topic generation,
-or Ollama can be mixed with either hosted provider using the role-specific
-provider settings.
+No API key is needed. `TOPIC_LLM_PROVIDER="local"` uses the pattern analyser's
+topic hint and deterministic local topic naming, so each user message triggers
+only the Chat-LLM generation. Set `TOPIC_LLM_PROVIDER="ollama"` only when the
+extra model call and latency are explicitly wanted. `OLLAMA_CHAT_MODEL` and
+`OLLAMA_TOPIC_MODEL` fall back to `OLLAMA_MODEL` when empty.
 
 With `LLM_PROVIDER="mock"`, no external model is called. The backend uses local,
 deterministic development responses instead. Set `LLM_PROVIDER` to `openai`,
 `anthropic`, or `ollama` to receive generated responses. OpenAI and Anthropic
 require their matching API key; Ollama runs locally without one.
 `CHAT_LLM_PROVIDER` and `TOPIC_LLM_PROVIDER` can independently override
-`LLM_PROVIDER`, which is useful while testing the two LLM roles separately.
+`LLM_PROVIDER`. Topic generation defaults to `local` to avoid a second costly
+model request.
 
 Change `SECRET_KEY` before deploying.
 
@@ -202,7 +210,10 @@ BASIC_AUTH_USERNAME="preview"
 BASIC_AUTH_PASSWORD="choose-a-strong-password"
 ```
 
-Then restart the backend. Anyone opening the site will be prompted for those credentials. When you are ready to remove the gate, set `BASIC_AUTH_ENABLED=false` and restart the app again.
+This is only intended for a private preview and is separate from FeelY user
+accounts. Keep `BASIC_AUTH_ENABLED=false` for the public app so people can
+register normally. When enabled, API clients must use conventional
+`Authorization: Basic ...` credentials.
 
 ### Bot And Abuse Protection
 
@@ -234,6 +245,7 @@ CAPTCHA_ENABLED=true
 CAPTCHA_PROVIDER="turnstile"
 TURNSTILE_SITE_KEY="your-public-site-key"
 TURNSTILE_SECRET_KEY="your-private-secret-key"
+TURNSTILE_ACTION="register"
 TURNSTILE_VERIFY_URL="https://challenges.cloudflare.com/turnstile/v0/siteverify"
 TURNSTILE_TIMEOUT_SECONDS=5
 ```
@@ -241,9 +253,20 @@ TURNSTILE_TIMEOUT_SECONDS=5
 The static website reads `GET /api/v1/auth/captcha/config`, renders the
 Turnstile widget on the Register tab, and sends the returned token as
 `captcha_token` to `POST /api/v1/auth/register`. The backend verifies that token
-with Turnstile before any user row is created. Local development can keep
-`CAPTCHA_ENABLED=false`; non-local environments refuse to start unless CAPTCHA
-is enabled and both keys are configured.
+with Turnstile before any user row is created. Local development can keep the
+CAPTCHA enabled with Cloudflare's documented test keys:
+
+```env
+CAPTCHA_ENABLED=true
+TURNSTILE_SITE_KEY="1x00000000000000000000AA"
+TURNSTILE_SECRET_KEY="1x0000000000000000000000000000000AA"
+TURNSTILE_ACTION="register"
+```
+
+These development keys always pass and therefore do not protect a public site.
+Non-local environments refuse to start unless CAPTCHA is enabled with real
+keys; the backend also rejects Cloudflare test keys in production. Restrict the
+production widget to the website's real hostname in the Cloudflare dashboard.
 
 Google account sign-in is optional. Create a Google OAuth Web Client ID for the
 website origin, then enable it:
