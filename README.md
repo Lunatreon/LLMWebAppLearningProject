@@ -90,6 +90,21 @@ The development HTML points `feely-api-base` to
 URL for production (or use the `api_base` query parameter), and include the
 frontend origin in `CORS_ORIGINS`.
 
+For Cloudflare-deployed usage with your current tunnel, set the API base to:
+
+```javascript
+localStorage.setItem("feely_api_base", "https://api.feel-y.com/api/v1")
+```
+
+Then refresh the website.
+
+In `.env`, add or keep:
+
+```env
+PUBLIC_APP_URL="https://app.feel-y.com"
+CORS_ORIGINS='["https://app.feel-y.com", "http://localhost:3000", "http://localhost:5173", "http://localhost:5500", "http://127.0.0.1:5500", "http://localhost:8080", "http://127.0.0.1:8080", "http://0.0.0.0:8080", "null"]'
+```
+
 ### Reset The Environment
 
 Only use this if the venv is broken. First close every terminal running the
