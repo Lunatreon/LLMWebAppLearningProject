@@ -20,6 +20,11 @@ const state = {
     token: "",
     widgetId: null,
   },
+  google: {
+    config: { enabled: false, client_id: null },
+    buttonRendered: false,
+  },
+  account: null,
 };
 
 const authView = document.querySelector("#auth-view");
@@ -30,6 +35,7 @@ const authForm = document.querySelector("#auth-form");
 const authHeading = document.querySelector("#auth-heading");
 const authSubmit = document.querySelector("#auth-submit");
 const authError = document.querySelector("#auth-error");
+const authStatus = document.querySelector("#auth-status");
 const usernameField = document.querySelector("#username-field");
 const emailInput = document.querySelector("#email");
 const usernameInput = document.querySelector("#username");
@@ -38,7 +44,10 @@ const websiteInput = document.querySelector("#website");
 const captchaField = document.querySelector("#captcha-field");
 const captchaWidget = document.querySelector("#captcha-widget");
 const captchaStatus = document.querySelector("#captcha-status");
+const googleAuthField = document.querySelector("#google-auth-field");
+const googleButton = document.querySelector("#google-button");
 const logoutButton = document.querySelector("#logout-button");
+const accountButton = document.querySelector("#account-button");
 const refreshButton = document.querySelector("#refresh-button");
 const newChatButton = document.querySelector("#new-chat-button");
 const chatList = document.querySelector("#chat-list");
@@ -80,6 +89,21 @@ const practiceTopic = document.querySelector("#practice-topic");
 const reflectionDialog = document.querySelector("#reflection-dialog");
 const reflectionForm = document.querySelector("#reflection-form");
 const practiceReflection = document.querySelector("#practice-reflection");
+const accountDialog = document.querySelector("#account-dialog");
+const accountForm = document.querySelector("#account-form");
+const passwordForm = document.querySelector("#password-form");
+const accountStatus = document.querySelector("#account-status");
+const accountDisplayName = document.querySelector("#account-display-name");
+const accountUsername = document.querySelector("#account-username");
+const accountEmail = document.querySelector("#account-email");
+const accountAvatarUrl = document.querySelector("#account-avatar-url");
+const accountBio = document.querySelector("#account-bio");
+const accountEmailStatus = document.querySelector("#account-email-status");
+const requestVerificationButton = document.querySelector("#request-verification-button");
+const currentPasswordField = document.querySelector("#current-password-field");
+const accountCurrentPassword = document.querySelector("#account-current-password");
+const accountNewPassword = document.querySelector("#account-new-password");
+const deleteAccountButton = document.querySelector("#delete-account-button");
 const lensToggle = document.querySelector("#lens-toggle");
 const lensPanel = document.querySelector("#lens-panel");
 
@@ -94,6 +118,7 @@ const MAP_CATEGORY_LABELS = {
 
 let lastAuthSubmitAt = 0;
 let turnstileScriptPromise = null;
+let googleScriptPromise = null;
 
 class ApiError extends Error {
   constructor(message, status, retryAfter = null) {
@@ -119,6 +144,9 @@ function setMode(mode) {
   authError.textContent = "";
   renderCaptcha().catch((error) => {
     captchaStatus.textContent = error instanceof Error ? error.message : String(error);
+  });
+  renderGoogleAuth().catch((error) => {
+    if (authStatus) authStatus.textContent = error instanceof Error ? error.message : String(error);
   });
 }
 
@@ -233,6 +261,68 @@ async function renderCaptcha() {
   captchaStatus.textContent = "";
 }
 
+async function loadGoogleConfig() {
+  try {
+    state.google.config = await api("/auth/google/config");
+  } catch {
+    state.google.config = { enabled: false, client_id: null };
+  }
+}
+
+function loadGoogleScript() {
+  if (window.google?.accounts?.id) return Promise.resolve();
+  if (googleScriptPromise) return googleScriptPromise;
+
+  googleScriptPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error("Could not load Google sign-in."));
+    document.head.append(script);
+  });
+  return googleScriptPromise;
+}
+
+async function renderGoogleAuth() {
+  if (!googleAuthField || !googleButton) return;
+  const enabled = state.google.config.enabled && state.google.config.client_id;
+  googleAuthField.classList.toggle("hidden", !enabled);
+  if (!enabled || state.google.buttonRendered) return;
+
+  await loadGoogleScript();
+  window.google.accounts.id.initialize({
+    client_id: state.google.config.client_id,
+    callback: handleGoogleCredential,
+  });
+  window.google.accounts.id.renderButton(googleButton, {
+    theme: "outline",
+    size: "large",
+    width: googleButton.offsetWidth || 320,
+    text: state.mode === "register" ? "signup_with" : "signin_with",
+  });
+  state.google.buttonRendered = true;
+}
+
+async function handleGoogleCredential(response) {
+  if (!response?.credential) return;
+  if (authStatus) authStatus.textContent = "Signing in with Google...";
+  try {
+    const payload = await api("/auth/google", {
+      method: "POST",
+      body: JSON.stringify({ credential: response.credential }),
+    });
+    state.token = payload.access_token;
+    localStorage.setItem("feely_token", state.token);
+    if (authStatus) authStatus.textContent = "";
+    await showChat();
+  } catch (error) {
+    authError.textContent = error instanceof Error ? error.message : String(error);
+    if (authStatus) authStatus.textContent = "";
+  }
+}
+
 function showAuth() {
   authView.classList.remove("hidden");
   chatView.classList.add("hidden");
@@ -286,6 +376,7 @@ async function login() {
 function logout() {
   state.token = null;
   state.user = null;
+  state.account = null;
   state.activeChatId = null;
   state.activeMapNodeId = null;
   state.mapDetailOpen = true;
@@ -304,7 +395,8 @@ function logout() {
 }
 
 async function loadUser() {
-  state.user = await api("/users/me", { headers: authHeaders() });
+  state.user = await api("/users/me/account", { headers: authHeaders() });
+  state.account = state.user;
   renderUser();
 }
 
@@ -314,10 +406,125 @@ async function loadMap() {
 }
 
 function renderUser() {
-  const username = state.user?.username || "Your space";
+  const username = state.user?.display_name || state.user?.username || "Your space";
   userName.textContent = username;
   userEmail.textContent = state.user?.email || "Private account";
   userAvatar.textContent = username.charAt(0) || "Y";
+}
+
+function renderAccountDialog() {
+  const account = state.account || state.user || {};
+  accountDisplayName.value = account.display_name || "";
+  accountUsername.value = account.username || "";
+  accountEmail.value = account.email || "";
+  accountAvatarUrl.value = account.avatar_url || "";
+  accountBio.value = account.bio || "";
+  accountEmailStatus.textContent = account.is_email_verified
+    ? "Email verified"
+    : "Email not verified";
+  requestVerificationButton.hidden = Boolean(account.is_email_verified);
+  currentPasswordField.classList.toggle("hidden", !account.has_password);
+  accountCurrentPassword.required = Boolean(account.has_password);
+  accountNewPassword.value = "";
+  accountCurrentPassword.value = "";
+}
+
+async function openAccountDialog() {
+  state.account = await api("/users/me/account", { headers: authHeaders() });
+  state.user = state.account;
+  renderUser();
+  accountStatus.textContent = "";
+  renderAccountDialog();
+  accountDialog.showModal();
+}
+
+async function saveAccount(event) {
+  event.preventDefault();
+  accountStatus.textContent = "Saving...";
+  const response = await api("/users/me/account", {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      display_name: accountDisplayName.value.trim() || null,
+      username: accountUsername.value.trim(),
+      email: accountEmail.value.trim(),
+      avatar_url: accountAvatarUrl.value.trim() || null,
+      bio: accountBio.value.trim() || null,
+    }),
+  });
+  state.account = response;
+  state.user = response;
+  renderUser();
+  renderAccountDialog();
+  accountStatus.textContent = "Saved.";
+}
+
+async function requestEmailVerification() {
+  accountStatus.textContent = "Sending verification email...";
+  const response = await api("/auth/email-verification/request", {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ email: accountEmail.value.trim() }),
+  });
+  accountStatus.textContent = response.detail || "Verification email requested.";
+}
+
+async function updateAccountPassword(event) {
+  event.preventDefault();
+  if (!accountNewPassword.value.trim()) {
+    accountStatus.textContent = "Enter a new password.";
+    return;
+  }
+  accountStatus.textContent = "Updating password...";
+  const response = await api("/users/me/password", {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      current_password: accountCurrentPassword.value || null,
+      new_password: accountNewPassword.value,
+    }),
+  });
+  state.account = response;
+  state.user = response;
+  renderAccountDialog();
+  accountStatus.textContent = "Password updated.";
+}
+
+async function deleteAccount() {
+  if (!window.confirm("Delete your account and all conversations? This cannot be undone.")) return;
+  const password = state.account?.has_password
+    ? window.prompt("Enter your password to delete this account.")
+    : "";
+  if (state.account?.has_password && !password) return;
+
+  await api("/users/me/account", {
+    method: "DELETE",
+    headers: authHeaders(),
+    body: JSON.stringify({ password }),
+  });
+  accountDialog.close();
+  logout();
+}
+
+async function confirmEmailVerificationFromUrl() {
+  const url = new URL(window.location.href);
+  const token = url.searchParams.get("verify_email_token");
+  if (!token) return;
+
+  try {
+    const response = await api("/auth/email-verification/confirm", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    });
+    if (authStatus) authStatus.textContent = response.detail || "Email verified.";
+  } catch (error) {
+    if (authStatus) {
+      authStatus.textContent = error instanceof Error ? error.message : String(error);
+    }
+  } finally {
+    url.searchParams.delete("verify_email_token");
+    window.history.replaceState({}, document.title, url.toString());
+  }
 }
 
 async function loadChats() {
@@ -1601,6 +1808,7 @@ async function completePractice(event) {
 loginTab.addEventListener("click", () => setMode("login"));
 registerTab.addEventListener("click", () => setMode("register"));
 logoutButton.addEventListener("click", logout);
+accountButton.addEventListener("click", () => openAccountDialog().catch(renderInlineError));
 refreshButton.addEventListener("click", () => loadChats().catch(renderInlineError));
 newChatButton.addEventListener("click", () => {
   switchWorkspace("chat");
@@ -1625,6 +1833,24 @@ addTopicButton.addEventListener("click", () => openMapTopicPopup());
 practiceForm.addEventListener("submit", (event) => createPractice(event).catch(renderInlineError));
 reflectionForm.addEventListener("submit", (event) =>
   completePractice(event).catch(renderInlineError),
+);
+accountForm.addEventListener("submit", (event) => saveAccount(event).catch((error) => {
+  accountStatus.textContent = error instanceof Error ? error.message : String(error);
+}));
+passwordForm.addEventListener("submit", (event) =>
+  updateAccountPassword(event).catch((error) => {
+    accountStatus.textContent = error instanceof Error ? error.message : String(error);
+  }),
+);
+requestVerificationButton.addEventListener("click", () =>
+  requestEmailVerification().catch((error) => {
+    accountStatus.textContent = error instanceof Error ? error.message : String(error);
+  }),
+);
+deleteAccountButton.addEventListener("click", () =>
+  deleteAccount().catch((error) => {
+    accountStatus.textContent = error instanceof Error ? error.message : String(error);
+  }),
 );
 document.addEventListener("click", (event) => {
   if (
@@ -1701,9 +1927,10 @@ authForm.addEventListener("submit", async (event) => {
 });
 
 async function init() {
-  await loadCaptchaConfig();
+  await Promise.all([loadCaptchaConfig(), loadGoogleConfig()]);
   setMode("login");
   renderUser();
+  await confirmEmailVerificationFromUrl();
   if (state.token) {
     showChat().catch(() => logout());
   } else {

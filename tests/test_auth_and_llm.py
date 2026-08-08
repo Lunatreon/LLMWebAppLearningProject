@@ -10,6 +10,7 @@ from app.api.routes.llm import (
     remember_map_suggestion_event,
     should_surface_map_suggestion,
 )
+from app.api.routes import auth as auth_routes
 from app.core import captcha as captcha_module
 from app.core.config import settings
 from app.main import create_app
@@ -275,6 +276,133 @@ def test_registration_accepts_verified_captcha_token(client, monkeypatch):
 
     assert response.status_code == 201
     assert response.json()["email"] == "captcha-ok@example.com"
+
+
+def test_user_can_edit_account_change_password_and_delete_account(client):
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "account@example.com",
+            "username": "account_user",
+            "password": "super-secret",
+        },
+    )
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"email_or_username": "account_user", "password": "super-secret"},
+    )
+    headers = {"Authorization": f"Bearer {login_response.json()['access_token']}"}
+
+    update_response = client.patch(
+        "/api/v1/users/me/account",
+        json={
+            "email": "new-account@example.com",
+            "username": "new_account_user",
+            "display_name": "New Account",
+            "bio": "Learning to use FeelY.",
+            "avatar_url": "https://example.com/avatar.png",
+        },
+        headers=headers,
+    )
+    assert update_response.status_code == 200
+    account = update_response.json()
+    assert account["email"] == "new-account@example.com"
+    assert account["display_name"] == "New Account"
+
+    password_response = client.patch(
+        "/api/v1/users/me/password",
+        json={"current_password": "super-secret", "new_password": "new-secret-123"},
+        headers=headers,
+    )
+    assert password_response.status_code == 200
+    assert password_response.json()["has_password"] is True
+
+    assert client.post(
+        "/api/v1/auth/login",
+        json={"email_or_username": "new_account_user", "password": "new-secret-123"},
+    ).status_code == 200
+
+    delete_response = client.request(
+        "DELETE",
+        "/api/v1/users/me/account",
+        json={"password": "new-secret-123"},
+        headers=headers,
+    )
+    assert delete_response.status_code == 204
+    assert client.get("/api/v1/users/me", headers=headers).status_code == 401
+
+
+def test_google_login_can_create_account(client, monkeypatch):
+    monkeypatch.setattr(settings, "google_auth_enabled", True)
+    monkeypatch.setattr(settings, "google_client_id", "google-client-id.apps.googleusercontent.com")
+    monkeypatch.setattr(
+        auth_routes,
+        "verify_google_credential",
+        lambda credential: {
+            "sub": "google-sub-123",
+            "email": "google-user@gmail.com",
+            "email_verified": True,
+            "name": "Google User",
+            "picture": "https://example.com/google.png",
+        },
+    )
+
+    config_response = client.get("/api/v1/auth/google/config")
+    assert config_response.status_code == 200
+    assert config_response.json()["client_id"] == "google-client-id.apps.googleusercontent.com"
+
+    login_response = client.post(
+        "/api/v1/auth/google",
+        json={"credential": "header.payload.signature-from-google"},
+    )
+    assert login_response.status_code == 200
+    token = login_response.json()["access_token"]
+    account_response = client.get(
+        "/api/v1/users/me/account",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    account = account_response.json()
+    assert account["email"] == "google-user@gmail.com"
+    assert account["google_connected"] is True
+    assert account["is_email_verified"] is True
+    assert account["has_password"] is False
+
+
+def test_email_verification_request_and_confirm(client, monkeypatch):
+    sent_tokens = []
+
+    def record_verification_email(user, token):
+        sent_tokens.append(token)
+
+    monkeypatch.setattr(settings, "email_verification_enabled", True)
+    monkeypatch.setattr(auth_routes, "send_email_verification_message", record_verification_email)
+
+    register_response = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "verify@example.com",
+            "username": "verify_user",
+            "password": "super-secret",
+        },
+    )
+    assert register_response.status_code == 201
+    assert register_response.json()["is_email_verified"] is False
+    assert len(sent_tokens) == 1
+
+    confirm_response = client.post(
+        "/api/v1/auth/email-verification/confirm",
+        json={"token": sent_tokens[0]},
+    )
+    assert confirm_response.status_code == 200
+    assert confirm_response.json()["verified"] is True
+
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"email_or_username": "verify_user", "password": "super-secret"},
+    )
+    headers = {"Authorization": f"Bearer {login_response.json()['access_token']}"}
+    account_response = client.get("/api/v1/users/me/account", headers=headers)
+    assert account_response.json()["is_email_verified"] is True
 
 
 def test_login_attempts_are_rate_limited_by_identifier(client, monkeypatch):

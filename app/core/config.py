@@ -41,6 +41,19 @@ class Settings(BaseSettings):
     turnstile_secret_key: str | None = None
     turnstile_verify_url: str = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
     turnstile_timeout_seconds: float = 5.0
+    google_auth_enabled: bool = False
+    google_client_id: str | None = None
+    google_allowed_hosted_domain: str | None = None
+    email_verification_enabled: bool = False
+    email_verification_required: bool = False
+    email_verification_token_expire_hours: int = 24
+    public_app_url: str = "http://127.0.0.1:5500"
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from_email: str | None = None
+    smtp_use_tls: bool = True
 
     llm_provider: str = "mock"
     chat_llm_provider: str | None = None
@@ -86,6 +99,23 @@ class Settings(BaseSettings):
             raise RuntimeError("CAPTCHA_PROVIDER must be 'turnstile'.")
         if not self.turnstile_site_key or not self.turnstile_secret_key:
             raise RuntimeError("TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY must be configured.")
+        if self.google_auth_enabled and not self.google_client_id:
+            raise RuntimeError("GOOGLE_CLIENT_ID must be configured when Google auth is enabled.")
+        if self.email_verification_required and not self.email_verification_enabled:
+            raise RuntimeError(
+                "EMAIL_VERIFICATION_ENABLED must be true when email verification is required."
+            )
+        if self.email_verification_enabled and not self.email_delivery_configured:
+            raise RuntimeError("SMTP settings must be configured when email verification is enabled.")
+
+    @property
+    def email_delivery_configured(self) -> bool:
+        return bool(
+            self.smtp_host
+            and self.smtp_port
+            and self.smtp_from_email
+            and (not self.smtp_username or self.smtp_password)
+        )
 
 
 @lru_cache

@@ -87,6 +87,34 @@ a:focus-visible {
   font-size: 12px;
 }
 
+.google-auth-field {
+  display: grid;
+  gap: 12px;
+  justify-items: stretch;
+}
+
+.auth-divider {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 10px;
+  color: #8c7d76;
+  font-size: 12px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  height: 1px;
+  background: var(--line-light);
+  content: "";
+}
+
+.auth-status {
+  min-height: 18px;
+  color: #6f625d;
+  font-size: 12px;
+}
+
 .shell {
   min-height: 100vh;
 }
@@ -2045,11 +2073,17 @@ textarea {
   font-size: 27px;
 }
 
+.app-dialog input,
 .app-dialog textarea,
 .app-dialog select {
   border: 1px solid var(--line-light);
   background: var(--white);
   color: var(--ink);
+}
+
+.app-dialog input {
+  min-height: 44px;
+  padding: 0 11px;
 }
 
 .app-dialog textarea {
@@ -2072,6 +2106,40 @@ textarea {
   background: transparent;
   color: var(--ink);
   font-size: 24px;
+}
+
+.account-dialog {
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
+.account-dialog form + form,
+.account-danger {
+  border-top: 1px solid var(--line-light);
+}
+
+.account-dialog form {
+  padding-bottom: 24px;
+}
+
+.account-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #6f625d;
+  font-size: 13px;
+}
+
+.account-danger {
+  display: grid;
+  gap: 12px;
+  padding: 24px 30px 30px;
+}
+
+.secondary-button.danger {
+  border-color: rgba(162, 63, 43, 0.34);
+  color: #a23f2b;
 }
 
 .sidebar-backdrop {

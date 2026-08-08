@@ -15,7 +15,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=20260624-11" />
+    <link rel="stylesheet" href="styles.css?v=20260807-1" />
   </head>
   <body>
     <main class="shell">
@@ -56,6 +56,10 @@
           </div>
 
           <form id="auth-form" class="auth-form">
+            <div id="google-auth-field" class="google-auth-field hidden">
+              <div id="google-button"></div>
+              <div class="auth-divider"><span>or</span></div>
+            </div>
             <label>
               <span>Email</span>
               <input
@@ -107,6 +111,7 @@
             <p id="auth-error" class="form-error" role="alert"></p>
           </form>
 
+          <p id="auth-status" class="auth-status" role="status"></p>
           <p class="privacy-note">Your conversations remain connected to your private account.</p>
         </div>
       </section>
@@ -160,6 +165,15 @@
               <strong id="user-name">Your space</strong>
               <span id="user-email">Private account</span>
             </div>
+            <button
+              id="account-button"
+              class="icon-button"
+              type="button"
+              title="Account settings"
+              aria-label="Account settings"
+            >
+              <span aria-hidden="true">&#9881;</span>
+            </button>
             <button
               id="logout-button"
               class="icon-button"
@@ -324,6 +338,56 @@
       </form>
     </dialog>
 
-    <script src="app.js?v=20260624-11"></script>
+    <dialog id="account-dialog" class="app-dialog account-dialog">
+      <form id="account-form" method="dialog">
+        <button class="dialog-close" type="button" data-close-dialog="account-dialog" aria-label="Close">&times;</button>
+        <p class="eyebrow">Account</p>
+        <h2>Edit profile</h2>
+        <p id="account-status" class="form-error" role="status"></p>
+        <label>
+          <span>Display name</span>
+          <input id="account-display-name" type="text" maxlength="120" />
+        </label>
+        <label>
+          <span>Username</span>
+          <input id="account-username" type="text" minlength="3" maxlength="80" required />
+        </label>
+        <label>
+          <span>Email</span>
+          <input id="account-email" type="email" required />
+        </label>
+        <label>
+          <span>Avatar URL</span>
+          <input id="account-avatar-url" type="url" maxlength="500" />
+        </label>
+        <label>
+          <span>Bio</span>
+          <textarea id="account-bio" rows="4" maxlength="500"></textarea>
+        </label>
+        <div class="account-row">
+          <span id="account-email-status">Email status unknown</span>
+          <button id="request-verification-button" class="secondary-button" type="button">Verify email</button>
+        </div>
+        <button class="primary-button" type="submit">Save profile</button>
+      </form>
+      <form id="password-form" method="dialog">
+        <p class="eyebrow">Password</p>
+        <label id="current-password-field">
+          <span>Current password</span>
+          <input id="account-current-password" type="password" autocomplete="current-password" />
+        </label>
+        <label>
+          <span>New password</span>
+          <input id="account-new-password" type="password" minlength="8" autocomplete="new-password" />
+        </label>
+        <button class="secondary-button" type="submit">Update password</button>
+      </form>
+      <section class="account-danger">
+        <p class="eyebrow">Danger zone</p>
+        <button id="delete-account-button" class="secondary-button danger" type="button">Delete account</button>
+      </section>
+    </dialog>
+
+    <script src="app.js?v=20260807-1"></script>
   </body>
 </html>

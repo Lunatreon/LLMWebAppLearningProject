@@ -245,6 +245,43 @@ with Turnstile before any user row is created. Local development can keep
 `CAPTCHA_ENABLED=false`; non-local environments refuse to start unless CAPTCHA
 is enabled and both keys are configured.
 
+Google account sign-in is optional. Create a Google OAuth Web Client ID for the
+website origin, then enable it:
+
+```env
+GOOGLE_AUTH_ENABLED=true
+GOOGLE_CLIENT_ID="your-google-web-client-id"
+GOOGLE_ALLOWED_HOSTED_DOMAIN=""
+```
+
+The frontend loads Google Identity Services only when enabled. It sends the
+Google ID token to `POST /api/v1/auth/google`; the backend verifies the token,
+checks the configured client ID, and links the account through Google's stable
+subject ID.
+
+Verification email is also possible, but it needs an email delivery provider.
+Use SMTP credentials from a service such as your domain host, Postmark,
+SendGrid, Mailgun, AWS SES, or another transactional email provider. You also
+need a public frontend URL so the email link can point back to the app:
+
+```env
+EMAIL_VERIFICATION_ENABLED=true
+EMAIL_VERIFICATION_REQUIRED=false
+EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS=24
+PUBLIC_APP_URL="https://your-site.example"
+SMTP_HOST="smtp.example.com"
+SMTP_PORT=587
+SMTP_USERNAME="smtp-user"
+SMTP_PASSWORD="smtp-password"
+SMTP_FROM_EMAIL="hello@your-site.example"
+SMTP_USE_TLS=true
+```
+
+When enabled, registration creates an unverified account and emails a one-time
+verification link. Users can also request another email from Account settings.
+Set `EMAIL_VERIFICATION_REQUIRED=true` only after SMTP delivery is working,
+because unverified password users cannot log in when it is required.
+
 For production, also put a reverse proxy or hosting firewall in front of the
 app. If the app runs behind a trusted proxy that sets `X-Forwarded-For`, set
 `TRUST_PROXY_HEADERS=true`; otherwise leave it `false` so clients cannot spoof
@@ -256,9 +293,17 @@ configuration.
 
 - `GET /api/v1/health`
 - `GET /api/v1/auth/captcha/config`
+- `GET /api/v1/auth/google/config`
 - `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
+- `POST /api/v1/auth/google`
+- `POST /api/v1/auth/email-verification/request`
+- `POST /api/v1/auth/email-verification/confirm`
 - `GET /api/v1/users/me`
+- `GET /api/v1/users/me/account`
+- `PATCH /api/v1/users/me/account`
+- `PATCH /api/v1/users/me/password`
+- `DELETE /api/v1/users/me/account`
 - `GET /api/v1/users/me/profile`
 - `PUT /api/v1/users/me/profile`
 - `GET /api/v1/users/me/map`

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class LoginRequest(BaseModel):
@@ -20,3 +20,30 @@ class CaptchaConfig(BaseModel):
     enabled: bool
     provider: str | None = None
     site_key: str | None = None
+
+
+class GoogleAuthConfig(BaseModel):
+    enabled: bool
+    client_id: str | None = None
+
+
+class GoogleLoginRequest(BaseModel):
+    credential: str = Field(min_length=20, max_length=8192)
+
+
+class EmailVerificationRequest(BaseModel):
+    email: EmailStr
+
+
+class EmailVerificationRequestResponse(BaseModel):
+    sent: bool
+    detail: str
+
+
+class EmailVerificationConfirmRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=512)
+
+
+class EmailVerificationConfirmResponse(BaseModel):
+    verified: bool
+    detail: str

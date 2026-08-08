@@ -1,7 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_user, get_db
+from app.core.config import settings
+from app.core.security import hash_password, verify_password
 from app.models.user import User, UserProfile
 from app.schemas.profile import (
     MapEntryCreate,
@@ -19,7 +23,13 @@ from app.schemas.profile import (
     TopicSpaceResponse,
     TopicSpaceUpdate,
 )
-from app.schemas.user import UserRead
+from app.schemas.user import (
+    AccountDeleteRequest,
+    PasswordChangeRequest,
+    UserAccountRead,
+    UserAccountUpdate,
+    UserRead,
+)
 from app.services.self_authorship import (
     add_map_entry,
     create_topic_space,
@@ -37,6 +47,130 @@ router = APIRouter()
 @router.get("/me", response_model=UserRead)
 def read_current_user(current_user: User = Depends(get_current_user)) -> User:
     return current_user
+
+
+def account_read(user: User) -> UserAccountRead:
+    return UserAccountRead(
+        id=user.id,
+        email=user.email,
+        username=user.username,
+        display_name=user.display_name,
+        bio=user.bio,
+        avatar_url=user.avatar_url,
+        is_email_verified=user.is_email_verified,
+        is_active=user.is_active,
+        created_at=user.created_at,
+        auth_provider=user.auth_provider,
+        google_connected=bool(user.google_sub),
+        has_password=bool(user.hashed_password),
+        email_verified_at=user.email_verified_at,
+        last_login_at=user.last_login_at,
+    )
+
+
+@router.get("/me/account", response_model=UserAccountRead)
+def read_current_user_account(current_user: User = Depends(get_current_user)) -> UserAccountRead:
+    return account_read(current_user)
+
+
+@router.patch("/me/account", response_model=UserAccountRead)
+def update_current_user_account(
+    payload: UserAccountUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UserAccountRead:
+    if payload.email is not None:
+        email = str(payload.email).strip().lower()
+        existing_email = db.scalar(
+            select(User).where(User.id != current_user.id, User.email == email)
+        )
+        if existing_email is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A user with this email already exists",
+            )
+        if email != current_user.email:
+            current_user.email = email
+            current_user.is_email_verified = not settings.email_verification_enabled
+            current_user.email_verified_at = None
+            current_user.email_verification_token_hash = None
+            current_user.email_verification_sent_at = None
+
+    if payload.username is not None:
+        username = payload.username.strip()
+        existing_username = db.scalar(
+            select(User).where(
+                User.id != current_user.id,
+                func.lower(User.username) == username.lower(),
+            )
+        )
+        if existing_username is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A user with this username already exists",
+            )
+        current_user.username = username
+
+    if "display_name" in payload.model_fields_set:
+        current_user.display_name = payload.display_name
+    if "bio" in payload.model_fields_set:
+        current_user.bio = payload.bio
+    if "avatar_url" in payload.model_fields_set:
+        current_user.avatar_url = payload.avatar_url
+
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Could not update account with those values",
+        ) from exc
+    db.refresh(current_user)
+    return account_read(current_user)
+
+
+@router.patch("/me/password", response_model=UserAccountRead)
+def change_current_user_password(
+    payload: PasswordChangeRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UserAccountRead:
+    if current_user.hashed_password and not verify_password(
+        payload.current_password or "",
+        current_user.hashed_password,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Current password is incorrect",
+        )
+
+    current_user.hashed_password = hash_password(payload.new_password)
+    if current_user.auth_provider == "google":
+        current_user.auth_provider = "google,password"
+    db.commit()
+    db.refresh(current_user)
+    return account_read(current_user)
+
+
+@router.delete("/me/account", status_code=status.HTTP_204_NO_CONTENT)
+def delete_current_user_account(
+    payload: AccountDeleteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    if current_user.hashed_password and not verify_password(
+        payload.password or "",
+        current_user.hashed_password,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Password is required to delete this account",
+        )
+
+    db.delete(current_user)
+    db.commit()
+    return None
 
 
 @router.get("/me/profile", response_model=ProfileRead)

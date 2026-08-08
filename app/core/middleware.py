@@ -72,10 +72,8 @@ class BasicAuthMiddleware:
             await self.app(scope, receive, send)
             return
 
-        path = scope.get("path", "")
-        
-        # Allow API endpoints and CORS preflight requests to bypass basic auth
-        if path.startswith("/api/") or scope.get("method") == "OPTIONS":
+        # Allow CORS preflight requests to bypass basic auth.
+        if scope.get("method") == "OPTIONS":
             await self.app(scope, receive, send)
             return
 
@@ -139,4 +137,3 @@ async def send_json_error(send: Callable, *, status_code: int, detail: str) -> N
         }
     )
     await send({"type": "http.response.body", "body": body})
-

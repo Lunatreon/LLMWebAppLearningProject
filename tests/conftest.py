@@ -17,13 +17,19 @@ os.environ["CHAT_LLM_PROVIDER"] = "mock"
 os.environ["TOPIC_LLM_PROVIDER"] = "mock"
 
 from app.api.dependencies import get_db
+from app.core.config import settings
 from app.core.rate_limit import rate_limiter
 from app.db.base import Base
 from app.main import create_app
 
 
 @pytest.fixture(autouse=True)
-def reset_rate_limiter():
+def reset_security_test_state(monkeypatch):
+    monkeypatch.setattr(settings, "basic_auth_enabled", False)
+    monkeypatch.setattr(settings, "captcha_enabled", False)
+    monkeypatch.setattr(settings, "google_auth_enabled", False)
+    monkeypatch.setattr(settings, "email_verification_enabled", False)
+    monkeypatch.setattr(settings, "email_verification_required", False)
     rate_limiter.reset()
     yield
     rate_limiter.reset()
