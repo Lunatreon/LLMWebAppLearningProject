@@ -2,6 +2,13 @@ function resolveApiBase() {
   const urlBase = new URLSearchParams(window.location.search).get("api_base")?.trim();
   if (urlBase) return urlBase.replace(/\/$/, "");
 
+  if (
+    window.location.protocol === "file:" ||
+    ["localhost", "127.0.0.1", "0.0.0.0", "::1"].includes(window.location.hostname)
+  ) {
+    return "http://127.0.0.1:8000/api/v1";
+  }
+
   const configuredBase = document
     .querySelector('meta[name="feely-api-base"]')
     ?.content.trim();
@@ -10,9 +17,6 @@ function resolveApiBase() {
   const storedBase = localStorage.getItem("feely_api_base")?.trim();
   if (storedBase) return storedBase.replace(/\/$/, "");
 
-  if (["localhost", "127.0.0.1", "0.0.0.0", "::1"].includes(window.location.hostname)) {
-    return "http://127.0.0.1:8000/api/v1";
-  }
   return `${window.location.origin}/api/v1`;
 }
 
@@ -187,8 +191,10 @@ async function api(path, options = {}) {
       },
     });
   } catch {
+    const frontendOrigin =
+      window.location.origin === "null" ? "the file:// origin" : window.location.origin;
     throw new ApiError(
-      "Could not reach the FeelY backend. Start it on port 8000 or configure the API URL.",
+      `The browser could not use the FeelY API at ${API_BASE}. If the API is running, add ${frontendOrigin} to CORS_ORIGINS.`,
       0,
     );
   }

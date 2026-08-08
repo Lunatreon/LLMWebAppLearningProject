@@ -85,10 +85,11 @@ localStorage.setItem("feely_api_base", "http://127.0.0.1:8001/api/v1")
 
 Then refresh the website.
 
-The development HTML points `feely-api-base` to
-`http://127.0.0.1:8000/api/v1`. Replace that meta value with the deployed API
-URL for production (or use the `api_base` query parameter), and include the
-frontend origin in `CORS_ORIGINS`.
+The HTML points `feely-api-base` to `https://api.feel-y.com/api/v1`. Pages
+served from localhost or opened directly from disk automatically use
+`http://127.0.0.1:8000/api/v1`; the `api_base` query parameter can explicitly
+override either behavior. Include every public frontend origin in
+`CORS_ORIGINS`.
 
 ### Reset The Environment
 

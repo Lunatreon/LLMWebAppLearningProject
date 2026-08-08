@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./feely.db"
     cors_origins: list[str] = Field(
         default_factory=lambda: [
+            "https://app.feel-y.com",
+            "https://dev.feel-y.com",
             "http://localhost:3000",
             "http://localhost:5173",
             "http://localhost:5500",

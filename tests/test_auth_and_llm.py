@@ -73,6 +73,18 @@ def test_local_website_cors_preflight(client):
     assert local_file_response.status_code == 200
     assert local_file_response.headers["access-control-allow-origin"] == "null"
 
+    for public_origin in ("https://app.feel-y.com", "https://dev.feel-y.com"):
+        public_response = client.options(
+            "/api/v1/auth/login",
+            headers={
+                "Origin": public_origin,
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+        assert public_response.status_code == 200
+        assert public_response.headers["access-control-allow-origin"] == public_origin
+
 
 def test_basic_auth_gate_can_protect_health_endpoint(monkeypatch):
     monkeypatch.setattr(settings, "basic_auth_enabled", True)
