@@ -182,21 +182,28 @@ function authHeaders() {
 
 async function api(path, options = {}) {
   let response;
-  try {
-    response = await fetch(`${API_BASE}${path}`, {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...(options.headers || {}),
-      },
-    });
-  } catch {
-    const frontendOrigin =
-      window.location.origin === "null" ? "the file:// origin" : window.location.origin;
-    throw new ApiError(
-      `The browser could not use the FeelY API at ${API_BASE}. If the API is running, add ${frontendOrigin} to CORS_ORIGINS.`,
-      0,
-    );
+  const canRetry = !options.method || options.method.toUpperCase() === "GET";
+  const attempts = canRetry ? 2 : 1;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      response = await fetch(`${API_BASE}${path}`, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          ...(options.headers || {}),
+        },
+      });
+      break;
+    } catch {
+      if (attempt + 1 < attempts) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        continue;
+      }
+      throw new ApiError(
+        "FeelY temporarily lost its connection. Please try again in a moment.",
+        0,
+      );
+    }
   }
 
   const responseText = await response.text();
@@ -226,6 +233,40 @@ async function api(path, options = {}) {
     throw new ApiError(message || "Request failed", response.status, retryAfter);
   }
   return payload;
+}
+
+async function apiStream(path, options, onEvent) {
+  let response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, options);
+  } catch {
+    throw new ApiError(
+      "FeelY temporarily lost its connection. Your message is still in the input box so you can retry.",
+      0,
+    );
+  }
+  if (!response.ok || !response.body) {
+    let detail = "Request failed";
+    try {
+      detail = (await response.json()).detail || detail;
+    } catch {}
+    throw new ApiError(detail, response.status);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+    for (const line of lines) {
+      if (line.trim()) onEvent(JSON.parse(line));
+    }
+    if (done) break;
+  }
+  if (buffer.trim()) onEvent(JSON.parse(buffer));
 }
 
 async function loadCaptchaConfig() {
@@ -875,16 +916,29 @@ async function sendMessage(event) {
   const existingMessages = currentChat?.messages || [];
   renderMessages([...existingMessages, { role: "user", content: context }]);
   const waitingMessage = showWaitingMessage();
+  const waitingLabel = waitingMessage.querySelector(".waiting-label");
 
   try {
-    const response = await api("/llm/message", {
+    let response = null;
+    await apiStream("/llm/message/stream", {
       method: "POST",
       headers: authHeaders(),
       body: JSON.stringify({
         chat_id: state.activeChatId,
         context,
       }),
+    }, (event) => {
+      if (event.type === "status" && waitingLabel) {
+        const elapsed = event.elapsed_seconds ? ` - ${event.elapsed_seconds}s` : "";
+        waitingLabel.textContent = `${event.message}${elapsed}`;
+        messages.scrollTop = messages.scrollHeight;
+      } else if (event.type === "result") {
+        response = event.data;
+      } else if (event.type === "error") {
+        throw new ApiError(event.message || "Request failed", event.status || 500);
+      }
     });
+    if (!response) throw new ApiError("The response stream ended unexpectedly.", 502);
     const updatedChat = {
       chat_id: response.chat_id,
       title: response.chat_info.title || "New conversation",
@@ -905,6 +959,8 @@ async function sendMessage(event) {
     pollTopicSoon();
   } catch (error) {
     waitingMessage.remove();
+    messageInput.value = context;
+    autoresizeMessageInput();
     renderInlineError(error);
   } finally {
     waitingMessage.remove();

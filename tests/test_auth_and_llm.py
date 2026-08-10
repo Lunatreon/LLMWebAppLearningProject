@@ -234,6 +234,30 @@ def test_user_can_register_login_and_send_llm_message(client):
     assert repeated_suggestion_response.json()["suggestion"] is None
 
 
+def test_llm_stream_acknowledges_work_and_returns_result(client):
+    client.post(
+        "/api/v1/auth/register",
+        json={"email": "stream@example.com", "username": "stream", "password": "secret-pass"},
+    )
+    token = client.post(
+        "/api/v1/auth/login",
+        json={"email_or_username": "stream@example.com", "password": "secret-pass"},
+    ).json()["access_token"]
+
+    response = client.post(
+        "/api/v1/llm/message/stream",
+        json={"context": "I want to understand why finishing this matters."},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/x-ndjson")
+    events = [json.loads(line) for line in response.text.splitlines()]
+    assert events[0] == {"type": "status", "message": "Connected to FeelY"}
+    assert events[-1]["type"] == "result"
+    assert events[-1]["data"]["assistant_message"]
+
+
 def test_registration_rejects_filled_honeypot(client):
     response = client.post(
         "/api/v1/auth/register",
@@ -1225,6 +1249,7 @@ def test_ollama_clients_use_local_chat_api_and_structured_json_contract():
     assert chat_body["model"] == "qwen3.5:4b"
     assert chat_body["stream"] is False
     assert chat_body["think"] is False
+    assert chat_body["keep_alive"] == settings.ollama_keep_alive
     assert chat_body["format"]["required"] == ["assistant_message", "map_suggestion"]
     assert chat_body["options"]["num_ctx"] == 8192
     assert json.loads(chat_body["messages"][1]["content"])["chat_id"] == (

@@ -173,7 +173,7 @@ default for any role without an override.
 Install [Ollama](https://ollama.com/download), then download the default model:
 
 ```powershell
-ollama pull qwen3.5:4b
+ollama pull qwen3:1.7b
 ```
 
 The Ollama desktop application normally starts its local service automatically.
@@ -190,12 +190,14 @@ LLM_PROVIDER="ollama"
 CHAT_LLM_PROVIDER="ollama"
 TOPIC_LLM_PROVIDER="local"
 OLLAMA_BASE_URL="http://127.0.0.1:11434"
-OLLAMA_MODEL="qwen3.5:4b"
-OLLAMA_CHAT_MODEL="qwen3.5:4b"
-OLLAMA_TOPIC_MODEL="qwen3.5:4b"
+OLLAMA_MODEL="qwen3:1.7b"
+OLLAMA_CHAT_MODEL="qwen3:1.7b"
+OLLAMA_TOPIC_MODEL="qwen3:1.7b"
 OLLAMA_TIMEOUT_SECONDS=180
-OLLAMA_CONTEXT_WINDOW=8192
-OLLAMA_MAX_TOKENS=1024
+OLLAMA_CONTEXT_WINDOW=3072
+OLLAMA_MAX_TOKENS=256
+OLLAMA_KEEP_ALIVE="30m"
+OLLAMA_PREWARM=true
 ```
 
 No API key is needed. `TOPIC_LLM_PROVIDER="local"` uses the pattern analyser's
@@ -203,6 +205,12 @@ topic hint and deterministic local topic naming, so each user message triggers
 only the Chat-LLM generation. Set `TOPIC_LLM_PROVIDER="ollama"` only when the
 extra model call and latency are explicitly wanted. `OLLAMA_CHAT_MODEL` and
 `OLLAMA_TOPIC_MODEL` fall back to `OLLAMA_MODEL` when empty.
+The website uses the streaming message endpoint to show a live connection and
+elapsed generation status while it waits for Ollama's structured response.
+`OLLAMA_KEEP_ALIVE` keeps the model in memory between messages to avoid repeated
+cold starts. `OLLAMA_PREWARM` loads it in the background when FastAPI starts, so
+the first user is less likely to pay the model-load delay. Smaller context and
+output limits can further reduce local latency.
 
 With `LLM_PROVIDER="mock"`, no external model is called. The backend uses local,
 deterministic development responses instead. Set `LLM_PROVIDER` to `openai`,
@@ -451,3 +459,6 @@ $env:FEELY_RUN_SERVER_TESTS = "1"
 $env:FEELY_TEST_SERVER_URL = "http://127.0.0.1:8001"
 .\.venv\Scripts\python.exe -m pytest tests/test_running_server.py
 ```
+
+
+tunnel --config 'C:\Program Files\cloudflared\config.yml' run feely-backend

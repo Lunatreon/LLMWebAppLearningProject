@@ -1,7 +1,10 @@
+import asyncio
 import json
+import logging
 import re
 from collections import Counter
 from dataclasses import dataclass
+from time import monotonic
 from typing import Any, NoReturn, Protocol
 
 import httpx
@@ -9,6 +12,10 @@ from fastapi import HTTPException, status
 
 from app.core.config import settings
 from app.services.self_authorship import LLM_PROTECTED_PROFILE_FIELDS
+
+
+logger = logging.getLogger(__name__)
+ollama_generation_lock = asyncio.Lock()
 
 
 RECENT_CHAT_MESSAGE_LIMIT = 6
@@ -58,6 +65,34 @@ LOCAL_TOPIC_STOPWORDS = {
     "with",
     "would",
 }
+
+
+async def warm_ollama_model() -> None:
+    """Load the configured chat model without blocking application startup."""
+    if (settings.chat_llm_provider or settings.llm_provider).lower() != "ollama":
+        return
+    model = settings.ollama_chat_model or settings.ollama_model
+    try:
+        async with ollama_generation_lock:
+            async with httpx.AsyncClient(
+                base_url=settings.ollama_base_url.rstrip("/"),
+                timeout=settings.ollama_timeout_seconds,
+            ) as client:
+                response = await client.post(
+                    "/api/generate",
+                    json={
+                        "model": model,
+                        "prompt": "",
+                        "stream": False,
+                        "keep_alive": settings.ollama_keep_alive,
+                        "options": {"num_ctx": settings.ollama_context_window},
+                    },
+                )
+                response.raise_for_status()
+        logger.info("Ollama model %s is warm and ready", model)
+    except Exception:
+        # Readiness must not prevent auth, stored chats, or other API features.
+        logger.exception("Could not prewarm Ollama model %s", model)
 SCAM_ACTION_WORDS = {
     "build",
     "bypass",
@@ -914,13 +949,17 @@ class OllamaBaseClient:
         response_schema: dict[str, Any],
         temperature: float,
     ) -> dict[str, Any]:
+        started_at = monotonic()
         try:
-            response = await self.post(
-                "/api/chat",
-                {
+            # Avoid competing local generations fighting over the same RAM/VRAM.
+            async with ollama_generation_lock:
+                response = await self.post(
+                    "/api/chat",
+                    {
                     "model": self.model,
                     "stream": False,
                     "think": False,
+                    "keep_alive": settings.ollama_keep_alive,
                     "format": response_schema,
                     "messages": [
                         {"role": "system", "content": system_prompt},
@@ -931,8 +970,8 @@ class OllamaBaseClient:
                         "num_predict": self.max_tokens,
                         "temperature": temperature,
                     },
-                },
-            )
+                    },
+                )
             response.raise_for_status()
         except httpx.ConnectError as exc:
             raise HTTPException(
@@ -958,6 +997,12 @@ class OllamaBaseClient:
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"Ollama request failed: {exc}",
             ) from exc
+
+        logger.info(
+            "Ollama model %s completed in %.2fs",
+            self.model,
+            monotonic() - started_at,
+        )
 
         try:
             response_payload = response.json()

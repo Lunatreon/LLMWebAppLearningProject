@@ -1,9 +1,13 @@
+import asyncio
+import json
+import logging
 import re
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -35,6 +39,7 @@ from app.services.self_authorship import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 GENERIC_TOPIC_TITLES = {
     "feel",
     "feeling",
@@ -479,6 +484,15 @@ async def send_message_to_llm(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> LLMResponse:
+    return await process_llm_message(payload, background_tasks, db, current_user)
+
+
+async def process_llm_message(
+    payload: LLMRequest,
+    background_tasks: BackgroundTasks,
+    db: Session,
+    current_user: User,
+) -> LLMResponse:
     enforce_rate_limit(
         f"llm-minute:user:{current_user.id}",
         max_attempts=settings.rate_limit_llm_user_per_minute,
@@ -562,6 +576,84 @@ async def send_message_to_llm(
         chat_info=chat_session.info,
         map_suggestion=map_suggestion,
         topic_analysis_status="queued",
+    )
+
+
+@router.post("/message/stream")
+async def stream_message_to_llm(
+    payload: LLMRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Acknowledge generation immediately and stream progress until the result is ready."""
+
+    user_id = current_user.id
+    stream_session_factory = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        bind=db.get_bind(),
+    )
+    # Authentication starts a transaction. Release it before a potentially slow
+    # model call; the generator owns a separate, short-lived session.
+    db.rollback()
+
+    async def events():
+        yield json.dumps({"type": "status", "message": "Connected to FeelY"}) + "\n"
+        stream_db = stream_session_factory()
+        stream_user = stream_db.get(User, user_id)
+        if stream_user is None or not stream_user.is_active:
+            stream_db.close()
+            yield json.dumps(
+                {"type": "error", "message": "Your session is no longer valid.", "status": 401}
+            ) + "\n"
+            return
+
+        task = asyncio.create_task(
+            process_llm_message(payload, background_tasks, stream_db, stream_user)
+        )
+        elapsed = 0
+        try:
+            while not task.done():
+                try:
+                    result = await asyncio.wait_for(asyncio.shield(task), timeout=1.0)
+                    break
+                except asyncio.TimeoutError:
+                    elapsed += 1
+                    yield json.dumps(
+                        {
+                            "type": "status",
+                            "message": "Ollama is generating locally",
+                            "elapsed_seconds": elapsed,
+                        }
+                    ) + "\n"
+            else:
+                result = await task
+            yield json.dumps({"type": "result", "data": result.model_dump(mode="json")}) + "\n"
+        except HTTPException as exc:
+            stream_db.rollback()
+            yield json.dumps(
+                {"type": "error", "message": str(exc.detail), "status": exc.status_code}
+            ) + "\n"
+        except asyncio.CancelledError:
+            task.cancel()
+            raise
+        except Exception as exc:
+            stream_db.rollback()
+            logger.exception("Streaming chat generation failed", exc_info=exc)
+            yield json.dumps(
+                {"type": "error", "message": "FeelY could not finish this response."}
+            ) + "\n"
+        finally:
+            if not task.done():
+                task.cancel()
+            stream_db.close()
+
+    return StreamingResponse(
+        events(),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        background=background_tasks,
     )
 
 

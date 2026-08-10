@@ -1,4 +1,5 @@
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,13 +12,23 @@ from app.core.middleware import (
     SecurityHeadersMiddleware,
 )
 from app.db.init_db import init_db
+from app.services.llm import warm_ollama_model
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI, init_database: bool = True):
     if init_database:
         init_db()
-    yield
+    warm_task = None
+    if settings.ollama_prewarm:
+        warm_task = asyncio.create_task(warm_ollama_model())
+    try:
+        yield
+    finally:
+        if warm_task is not None and not warm_task.done():
+            warm_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await warm_task
 
 
 def create_app(init_database: bool = True) -> FastAPI:

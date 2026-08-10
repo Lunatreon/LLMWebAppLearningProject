@@ -85,12 +85,14 @@ class Settings(BaseSettings):
     anthropic_topic_model: str | None = None
     anthropic_max_tokens: int = 4096
     ollama_base_url: str = "http://127.0.0.1:11434"
-    ollama_model: str = "qwen3.5:4b"
+    ollama_model: str = "qwen3:1.7b"
     ollama_chat_model: str | None = None
     ollama_topic_model: str | None = None
     ollama_timeout_seconds: float = 180.0
-    ollama_context_window: int = 8192
-    ollama_max_tokens: int = 1024
+    ollama_context_window: int = 3072
+    ollama_max_tokens: int = 256
+    ollama_keep_alive: str = "30m"
+    ollama_prewarm: bool = True
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
