@@ -173,7 +173,8 @@ default for any role without an override.
 Install [Ollama](https://ollama.com/download), then download the default model:
 
 ```powershell
-ollama pull qwen3:1.7b
+ollama pull qwen3.5:4b
+ollama pull qwen3.5:2b
 ```
 
 The Ollama desktop application normally starts its local service automatically.
@@ -188,27 +189,31 @@ Configure FeelY to use the local model:
 ```env
 LLM_PROVIDER="ollama"
 CHAT_LLM_PROVIDER="ollama"
-TOPIC_LLM_PROVIDER="local"
+TOPIC_LLM_PROVIDER="ollama"
 OLLAMA_BASE_URL="http://127.0.0.1:11434"
-OLLAMA_MODEL="qwen3:1.7b"
-OLLAMA_CHAT_MODEL="qwen3:1.7b"
-OLLAMA_TOPIC_MODEL="qwen3:1.7b"
+OLLAMA_MODEL="qwen3.5:4b"
+OLLAMA_CHAT_MODEL="qwen3.5:4b"
+OLLAMA_TOPIC_MODEL="qwen3.5:2b"
 OLLAMA_TIMEOUT_SECONDS=180
-OLLAMA_CONTEXT_WINDOW=3072
-OLLAMA_MAX_TOKENS=256
-OLLAMA_KEEP_ALIVE="30m"
+OLLAMA_CONTEXT_WINDOW=2048
+OLLAMA_CHAT_MAX_TOKENS=192
+OLLAMA_TOPIC_MAX_TOKENS=96
+OLLAMA_CHAT_NUM_GPU=0
+OLLAMA_TOPIC_NUM_GPU=999
+OLLAMA_KEEP_ALIVE=-1
 OLLAMA_PREWARM=true
 ```
 
-No API key is needed. `TOPIC_LLM_PROVIDER="local"` uses the pattern analyser's
-topic hint and deterministic local topic naming, so each user message triggers
-only the Chat-LLM generation. Set `TOPIC_LLM_PROVIDER="ollama"` only when the
-extra model call and latency are explicitly wanted. `OLLAMA_CHAT_MODEL` and
-`OLLAMA_TOPIC_MODEL` fall back to `OLLAMA_MODEL` when empty.
+No API key is needed. The pattern analyser decides when topic analysis is useful;
+the 2B Topic-LLM then creates the topic and description. `OLLAMA_CHAT_NUM_GPU=0`
+forces the 4B chat model onto CPU, while `OLLAMA_TOPIC_NUM_GPU=999` lets Ollama
+offload every possible layer of the 2B topic model to GPU. `OLLAMA_KEEP_ALIVE=-1`
+keeps both models resident until Ollama stops, and startup prewarm loads both.
+`OLLAMA_CHAT_MODEL` and `OLLAMA_TOPIC_MODEL` fall back to `OLLAMA_MODEL` when empty.
 The website uses the streaming message endpoint to show a live connection and
 elapsed generation status while it waits for Ollama's structured response.
-`OLLAMA_KEEP_ALIVE` keeps the model in memory between messages to avoid repeated
-cold starts. `OLLAMA_PREWARM` loads it in the background when FastAPI starts, so
+`OLLAMA_KEEP_ALIVE` keeps the models in memory between messages to avoid repeated
+cold starts. `OLLAMA_PREWARM` loads them in the background when FastAPI starts, so
 the first user is less likely to pay the model-load delay. Smaller context and
 output limits can further reduce local latency.
 

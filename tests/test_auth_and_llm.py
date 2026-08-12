@@ -73,7 +73,12 @@ def test_local_website_cors_preflight(client):
     assert local_file_response.status_code == 200
     assert local_file_response.headers["access-control-allow-origin"] == "null"
 
-    for public_origin in ("https://app.feel-y.com", "https://dev.feel-y.com"):
+    for public_origin in (
+        "https://app.feel-y.com",
+        "https://dev.feel-y.com",
+        "https://selinabernard.com",
+        "https://www.selinabernard.com",
+    ):
         public_response = client.options(
             "/api/v1/auth/login",
             headers={
@@ -1220,6 +1225,7 @@ def make_ollama_client(client_class, response_payload):
     client.model = "qwen3.5:4b"
     client.context_window = 8192
     client.max_tokens = 2048
+    client.num_gpu = 0 if client_class is OllamaChatLLMClient else 999
     return client
 
 
@@ -1252,6 +1258,7 @@ def test_ollama_clients_use_local_chat_api_and_structured_json_contract():
     assert chat_body["keep_alive"] == settings.ollama_keep_alive
     assert chat_body["format"]["required"] == ["assistant_message", "map_suggestion"]
     assert chat_body["options"]["num_ctx"] == 8192
+    assert chat_body["options"]["num_gpu"] == 0
     assert json.loads(chat_body["messages"][1]["content"])["chat_id"] == (
         "chat-local"
     )
@@ -1276,6 +1283,7 @@ def test_ollama_clients_use_local_chat_api_and_structured_json_contract():
     topic_body = topic_request["json"]
     assert topic_body["format"]["required"] == ["topic", "description"]
     assert topic_body["options"]["temperature"] == 0.2
+    assert topic_body["options"]["num_gpu"] == 999
 
 
 def test_provider_factories_can_select_ollama_per_role(monkeypatch):

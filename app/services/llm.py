@@ -68,31 +68,50 @@ LOCAL_TOPIC_STOPWORDS = {
 
 
 async def warm_ollama_model() -> None:
-    """Load the configured chat model without blocking application startup."""
-    if (settings.chat_llm_provider or settings.llm_provider).lower() != "ollama":
-        return
-    model = settings.ollama_chat_model or settings.ollama_model
-    try:
-        async with ollama_generation_lock:
-            async with httpx.AsyncClient(
-                base_url=settings.ollama_base_url.rstrip("/"),
-                timeout=settings.ollama_timeout_seconds,
-            ) as client:
-                response = await client.post(
-                    "/api/generate",
-                    json={
-                        "model": model,
-                        "prompt": "",
-                        "stream": False,
-                        "keep_alive": settings.ollama_keep_alive,
-                        "options": {"num_ctx": settings.ollama_context_window},
-                    },
-                )
-                response.raise_for_status()
-        logger.info("Ollama model %s is warm and ready", model)
-    except Exception:
-        # Readiness must not prevent auth, stored chats, or other API features.
-        logger.exception("Could not prewarm Ollama model %s", model)
+    """Load configured Ollama role models without blocking application startup."""
+    role_models: list[tuple[str, str, int]] = []
+    if (settings.chat_llm_provider or settings.llm_provider).lower() == "ollama":
+        role_models.append(
+            (
+                "chat",
+                settings.ollama_chat_model or settings.ollama_model,
+                settings.ollama_chat_num_gpu,
+            )
+        )
+    if (settings.topic_llm_provider or settings.llm_provider).lower() == "ollama":
+        role_models.append(
+            (
+                "topic",
+                settings.ollama_topic_model or settings.ollama_model,
+                settings.ollama_topic_num_gpu,
+            )
+        )
+
+    for role, model, num_gpu in role_models:
+        try:
+            async with ollama_generation_lock:
+                async with httpx.AsyncClient(
+                    base_url=settings.ollama_base_url.rstrip("/"),
+                    timeout=settings.ollama_timeout_seconds,
+                ) as client:
+                    response = await client.post(
+                        "/api/generate",
+                        json={
+                            "model": model,
+                            "prompt": "",
+                            "stream": False,
+                            "keep_alive": settings.ollama_keep_alive,
+                            "options": {
+                                "num_ctx": settings.ollama_context_window,
+                                "num_gpu": num_gpu,
+                            },
+                        },
+                    )
+                    response.raise_for_status()
+            logger.info("Ollama %s model %s is warm and ready", role, model)
+        except Exception:
+            # Readiness must not prevent auth, stored chats, or other API features.
+            logger.exception("Could not prewarm Ollama %s model %s", role, model)
 SCAM_ACTION_WORDS = {
     "build",
     "bypass",
@@ -609,7 +628,8 @@ CHAT_SYSTEM_PROMPT = (
     "the user in a warm, grounded, non-judgmental, therapeutically reflective style "
     "without claiming to be a psychologist or therapist. FeelY helps the user move from "
     "inherited scripts toward self-authored, repeatable choices. Be concise, sharp, and "
-    "forward-looking. Each response must explicitly reference at least one concrete detail, "
+    "forward-looking. Keep assistant_message under 80 words. Each response must explicitly "
+    "reference at least one concrete detail, "
     "phrase, relationship, choice, or question from new_user_input. Reflect emotion only "
     "briefly, usually in one short sentence, and do not mirror the same feeling or wording "
     "again if recent assistant messages already did that. Focus more on what the user can "
@@ -639,8 +659,9 @@ CHAT_SYSTEM_PROMPT = (
     "map_suggestion only when the newest message clearly expresses a durable "
     "inherited_script, own_perception, value, body_signal, practice, or evidence. Use exactly "
     "one of those category values. Write the text in the user's first person, keep it "
-    "specific and editable, and explain the reason without presenting an interpretation as "
-    "fact. Otherwise return null. The new_user_input is the primary message you must answer. "
+    "specific and editable, and explain the reason in one short sentence without presenting "
+    "an interpretation as fact. Otherwise return null. The new_user_input is the primary "
+    "message you must answer. "
     "Treat the recent chat context only as background for references and continuity. Do not "
     "continue answering an older message when the newest message changes focus. Respond "
     "specifically to concrete words, choices, or questions in the newest message. Avoid "
@@ -925,6 +946,7 @@ class OllamaBaseClient:
         timeout_seconds: float,
         context_window: int,
         max_tokens: int,
+        num_gpu: int,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
@@ -932,6 +954,7 @@ class OllamaBaseClient:
         self.model = model
         self.context_window = context_window
         self.max_tokens = max_tokens
+        self.num_gpu = num_gpu
 
     async def post(self, path: str, payload: dict[str, Any]) -> httpx.Response:
         if self.client is not None:
@@ -968,6 +991,7 @@ class OllamaBaseClient:
                     "options": {
                         "num_ctx": self.context_window,
                         "num_predict": self.max_tokens,
+                        "num_gpu": self.num_gpu,
                         "temperature": temperature,
                     },
                     },
@@ -1132,7 +1156,8 @@ def get_chat_llm_client() -> ChatLLMClient:
             model=settings.ollama_chat_model or settings.ollama_model,
             timeout_seconds=settings.ollama_timeout_seconds,
             context_window=settings.ollama_context_window,
-            max_tokens=settings.ollama_max_tokens,
+            max_tokens=settings.ollama_chat_max_tokens,
+            num_gpu=settings.ollama_chat_num_gpu,
         )
     if provider in {"mock", "local"}:
         return LocalChatLLMClient()
@@ -1158,7 +1183,8 @@ def get_topic_llm_client() -> TopicLLMClient:
             model=settings.ollama_topic_model or settings.ollama_model,
             timeout_seconds=settings.ollama_timeout_seconds,
             context_window=settings.ollama_context_window,
-            max_tokens=settings.ollama_max_tokens,
+            max_tokens=settings.ollama_topic_max_tokens,
+            num_gpu=settings.ollama_topic_num_gpu,
         )
     if provider in {"mock", "local"}:
         return LocalTopicLLMClient()
