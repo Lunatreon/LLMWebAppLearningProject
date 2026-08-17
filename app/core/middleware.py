@@ -72,8 +72,9 @@ class BasicAuthMiddleware:
             await self.app(scope, receive, send)
             return
 
-        # Allow CORS preflight requests to bypass basic auth.
-        if scope.get("method") == "OPTIONS":
+        # CORS preflights and Stripe-signed webhooks use their own authentication.
+        stripe_webhook_path = f"{settings.api_v1_prefix}/billing/webhook"
+        if scope.get("method") == "OPTIONS" or scope.get("path") == stripe_webhook_path:
             await self.app(scope, receive, send)
             return
 

@@ -1,10 +1,13 @@
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.billing import BillingSubscription
 
 
 def utc_now() -> datetime:
@@ -51,6 +54,11 @@ class User(Base):
     chat_sessions: Mapped[list["ChatSession"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
+    )
+    billing_subscription: Mapped["BillingSubscription | None"] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        uselist=False,
     )
 
 

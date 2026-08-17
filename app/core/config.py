@@ -74,6 +74,15 @@ class Settings(BaseSettings):
     smtp_from_email: str | None = None
     smtp_use_tls: bool = True
 
+    stripe_enabled: bool = False
+    stripe_secret_key: str | None = None
+    stripe_webhook_secret: str | None = None
+    stripe_price_monthly: str | None = None
+    stripe_price_yearly: str | None = None
+    stripe_checkout_success_url: str | None = None
+    stripe_checkout_cancel_url: str | None = None
+    stripe_portal_return_url: str | None = None
+
     llm_provider: str = "mock"
     chat_llm_provider: str | None = None
     topic_llm_provider: str | None = "local"
@@ -146,6 +155,43 @@ class Settings(BaseSettings):
             and self.smtp_port
             and self.smtp_from_email
             and (not self.smtp_username or self.smtp_password)
+        )
+
+    @property
+    def stripe_checkout_configured(self) -> bool:
+        required_values = (
+            self.stripe_secret_key,
+            self.stripe_checkout_success_url,
+            self.stripe_checkout_cancel_url,
+        )
+        price_ids = (
+            self.stripe_price_monthly,
+            self.stripe_price_yearly,
+        )
+        return (
+            self.stripe_enabled
+            and all(value and value.strip() for value in required_values)
+            and any(value and value.strip() for value in price_ids)
+        )
+
+    @property
+    def stripe_portal_configured(self) -> bool:
+        return self.stripe_enabled and all(
+            value and value.strip()
+            for value in (
+                self.stripe_secret_key,
+                self.stripe_portal_return_url,
+            )
+        )
+
+    @property
+    def stripe_webhook_configured(self) -> bool:
+        return self.stripe_enabled and all(
+            value and value.strip()
+            for value in (
+                self.stripe_secret_key,
+                self.stripe_webhook_secret,
+            )
         )
 
 

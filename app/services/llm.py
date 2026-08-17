@@ -89,25 +89,24 @@ async def warm_ollama_model() -> None:
 
     for role, model, num_gpu in role_models:
         try:
-            async with ollama_generation_lock:
-                async with httpx.AsyncClient(
-                    base_url=settings.ollama_base_url.rstrip("/"),
-                    timeout=settings.ollama_timeout_seconds,
-                ) as client:
-                    response = await client.post(
-                        "/api/generate",
-                        json={
-                            "model": model,
-                            "prompt": "",
-                            "stream": False,
-                            "keep_alive": settings.ollama_keep_alive,
-                            "options": {
-                                "num_ctx": settings.ollama_context_window,
-                                "num_gpu": num_gpu,
-                            },
+            async with ollama_generation_lock, httpx.AsyncClient(
+                base_url=settings.ollama_base_url.rstrip("/"),
+                timeout=settings.ollama_timeout_seconds,
+            ) as client:
+                response = await client.post(
+                    "/api/generate",
+                    json={
+                        "model": model,
+                        "prompt": "",
+                        "stream": False,
+                        "keep_alive": settings.ollama_keep_alive,
+                        "options": {
+                            "num_ctx": settings.ollama_context_window,
+                            "num_gpu": num_gpu,
                         },
-                    )
-                    response.raise_for_status()
+                    },
+                )
+                response.raise_for_status()
             logger.info("Ollama %s model %s is warm and ready", role, model)
         except Exception:
             # Readiness must not prevent auth, stored chats, or other API features.

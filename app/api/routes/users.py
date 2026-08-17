@@ -170,7 +170,6 @@ def delete_current_user_account(
 
     db.delete(current_user)
     db.commit()
-    return None
 
 
 @router.get("/me/profile", response_model=ProfileRead)

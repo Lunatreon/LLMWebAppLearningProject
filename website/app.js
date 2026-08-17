@@ -1,3 +1,26 @@
+function scrubSensitiveAuthParams() {
+  const url = new URL(window.location.href);
+  const sensitiveNames = new Set([
+    "email",
+    "email_or_username",
+    "username",
+    "password",
+    "current_password",
+    "new_password",
+    "website",
+  ]);
+  let changed = false;
+  [...url.searchParams.keys()].forEach((name) => {
+    if (sensitiveNames.has(name.toLowerCase())) {
+      url.searchParams.delete(name);
+      changed = true;
+    }
+  });
+  if (changed) window.history.replaceState({}, document.title, url.toString());
+}
+
+scrubSensitiveAuthParams();
+
 function resolveApiBase() {
   const urlBase = new URLSearchParams(window.location.search).get("api_base")?.trim();
   if (urlBase) return urlBase.replace(/\/$/, "");
@@ -46,6 +69,7 @@ const state = {
     buttonRendered: false,
   },
   account: null,
+  subscription: null,
 };
 
 const authView = document.querySelector("#auth-view");
@@ -125,6 +149,28 @@ const currentPasswordField = document.querySelector("#current-password-field");
 const accountCurrentPassword = document.querySelector("#account-current-password");
 const accountNewPassword = document.querySelector("#account-new-password");
 const deleteAccountButton = document.querySelector("#delete-account-button");
+const billingPlan = document.querySelector("#billing-plan");
+const billingStatus = document.querySelector("#billing-status");
+const billingSubscribeActions = document.querySelector("#billing-subscribe-actions");
+const subscribeMonthlyButton = document.querySelector("#subscribe-monthly-button");
+const subscribeYearlyButton = document.querySelector("#subscribe-yearly-button");
+const resumeSubscriptionButton = document.querySelector("#resume-subscription-button");
+const manageSubscriptionButton = document.querySelector("#manage-subscription-button");
+const cancelSubscriptionButton = document.querySelector("#cancel-subscription-button");
+const billingManagementNote = document.querySelector("#billing-management-note");
+const billingSubscriptionStatus = document.querySelector("#billing-subscription-status");
+const billingPeriodRow = document.querySelector("#billing-period-row");
+const billingPeriodLabel = document.querySelector("#billing-period-label");
+const billingPeriodEnd = document.querySelector("#billing-period-end");
+const billingResultBanner = document.querySelector("#billing-result-banner");
+const billingResultText = document.querySelector("#billing-result-text");
+const billingResultDismiss = document.querySelector("#billing-result-dismiss");
+const accountDialogAvatar = document.querySelector("#account-dialog-avatar");
+const stripeCancelDialog = document.querySelector("#stripe-cancel-dialog");
+const stripeCancelForm = document.querySelector("#stripe-cancel-form");
+const stripeCancelCopy = document.querySelector("#stripe-cancel-copy");
+const stripeCancelStatus = document.querySelector("#stripe-cancel-status");
+const confirmStripeCancel = document.querySelector("#confirm-stripe-cancel");
 const lensToggle = document.querySelector("#lens-toggle");
 const lensPanel = document.querySelector("#lens-panel");
 
@@ -142,6 +188,7 @@ const TOPIC_POLL_DELAYS = [700, 1800, 4000, 8000];
 let lastAuthSubmitAt = 0;
 let turnstileScriptPromise = null;
 let googleScriptPromise = null;
+let billingResultTimer = null;
 
 class ApiError extends Error {
   constructor(message, status, retryAfter = null) {
@@ -422,6 +469,8 @@ async function showChat() {
   switchWorkspace(requestedView === "map" ? "map" : "chat");
   await Promise.all([loadUser(), loadMap(), loadChats()]);
   startPolling();
+  await handleCheckoutReturn();
+  await handleAccountReturn(requestedView);
 }
 
 async function registerAndLogin() {
@@ -460,6 +509,7 @@ function logout() {
   state.token = null;
   state.user = null;
   state.account = null;
+  state.subscription = null;
   state.activeChatId = null;
   state.activeMapNodeId = null;
   state.mapDetailOpen = true;
@@ -497,6 +547,11 @@ function renderUser() {
 
 function renderAccountDialog() {
   const account = state.account || state.user || {};
+  const avatarText = (account.display_name || account.username || account.email || "Y")
+    .trim()
+    .charAt(0)
+    .toUpperCase();
+  accountDialogAvatar.textContent = avatarText || "Y";
   accountDisplayName.value = account.display_name || "";
   accountUsername.value = account.username || "";
   accountEmail.value = account.email || "";
@@ -512,13 +567,274 @@ function renderAccountDialog() {
   accountCurrentPassword.value = "";
 }
 
+function renderSubscription() {
+  const subscription = state.subscription || {
+    plan: "free",
+    premium: false,
+    cancel_at_period_end: false,
+    current_period_end: null,
+    billing_available: false,
+    available_plans: [],
+    management_available: false,
+    can_resume: false,
+  };
+  const planLabels = {
+    free: "Free",
+    monthly: "Premium monthly",
+    yearly: "Premium yearly",
+    premium: "Premium",
+  };
+  billingPlan.textContent = planLabels[subscription.plan] || "Free";
+
+  const statusLabels = {
+    none: "No subscription",
+    trialing: "Trial",
+    active: "Active",
+    past_due: "Payment past due",
+    unpaid: "Unpaid",
+    canceled: "Canceled",
+    incomplete: "Incomplete",
+    incomplete_expired: "Expired",
+    paused: "Paused",
+  };
+  billingSubscriptionStatus.textContent = subscription.cancel_at_period_end
+    ? "Cancellation scheduled"
+    : statusLabels[subscription.status] || "Unknown";
+
+  const periodEnd = formatBillingDate(subscription.current_period_end);
+  billingPeriodRow.hidden = !periodEnd;
+  if (periodEnd) {
+    if (subscription.cancel_at_period_end) {
+      billingPeriodLabel.textContent = "Premium access ends";
+    } else if (subscription.status === "canceled") {
+      billingPeriodLabel.textContent = "Subscription ended";
+    } else {
+      billingPeriodLabel.textContent = "Current period ends";
+    }
+    billingPeriodEnd.textContent = periodEnd;
+  }
+
+  if (subscription.premium && subscription.cancel_at_period_end) {
+    billingStatus.textContent = periodEnd
+      ? `Your subscription is scheduled to cancel. Premium remains active until ${periodEnd}.`
+      : "Your subscription is scheduled to cancel after the paid period ends.";
+  } else if (subscription.status === "canceled") {
+    billingStatus.textContent = "Your subscription has ended and will not renew.";
+  } else if (["past_due", "unpaid"].includes(subscription.status)) {
+    billingStatus.textContent = "Your latest payment needs attention. Open billing to update it.";
+  } else if (subscription.premium) {
+    billingStatus.textContent = "Your Premium subscription is active.";
+  } else if (!subscription.billing_available) {
+    billingStatus.textContent = "Premium subscriptions are not available yet.";
+  } else {
+    billingStatus.textContent = "You are currently using the Free plan.";
+  }
+
+  const availablePlans = Array.isArray(subscription.available_plans)
+    ? subscription.available_plans
+    : [];
+  subscribeMonthlyButton.hidden = !availablePlans.includes("monthly");
+  subscribeYearlyButton.hidden = !availablePlans.includes("yearly");
+  billingSubscribeActions.hidden =
+    !subscription.billing_available || subscription.premium || availablePlans.length === 0;
+  resumeSubscriptionButton.hidden = !subscription.can_resume;
+  manageSubscriptionButton.hidden = !subscription.management_available;
+  billingManagementNote.hidden = !subscription.management_available;
+  const cancelableStatuses = ["active", "trialing", "past_due", "unpaid"];
+  cancelSubscriptionButton.hidden = !(
+    subscription.management_available &&
+    cancelableStatuses.includes(subscription.status) &&
+    !subscription.cancel_at_period_end
+  );
+}
+
+function formatBillingDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "long",
+    timeStyle: "short",
+  }).format(date);
+}
+
+function showBillingResult(message, kind = "info", autoDismiss = true) {
+  if (billingResultTimer) window.clearTimeout(billingResultTimer);
+  billingResultText.textContent = message;
+  billingResultBanner.dataset.kind = kind;
+  billingResultBanner.classList.remove("hidden");
+  if (autoDismiss) {
+    billingResultTimer = window.setTimeout(() => {
+      billingResultBanner.classList.add("hidden");
+    }, 9000);
+  }
+}
+
+async function handleCheckoutReturn() {
+  const url = new URL(window.location.href);
+  const checkoutResult = url.searchParams.get("checkout");
+  if (!checkoutResult) return;
+
+  url.searchParams.delete("checkout");
+  url.searchParams.delete("session_id");
+  window.history.replaceState({}, document.title, url.toString());
+
+  if (["cancel", "cancelled", "canceled"].includes(checkoutResult)) {
+    showBillingResult("Checkout was canceled. You were not charged.", "neutral");
+    return;
+  }
+  if (checkoutResult !== "success") return;
+
+  showBillingResult(
+    "Payment completed. We are confirming your Premium subscription...",
+    "success",
+    false,
+  );
+  const confirmationDelays = [0, 800, 1600, 3000];
+  for (const delay of confirmationDelays) {
+    if (delay) await new Promise((resolve) => window.setTimeout(resolve, delay));
+    try {
+      const subscription = await api("/billing/subscription", { headers: authHeaders() });
+      state.subscription = subscription;
+      if (subscription.premium) {
+        renderSubscription();
+        showBillingResult("Payment successful. Your Premium subscription is active.", "success");
+        return;
+      }
+    } catch {
+      break;
+    }
+  }
+  showBillingResult(
+    "Payment was completed. Stripe is still confirming the subscription; refresh Account shortly.",
+    "success",
+    false,
+  );
+}
+
+async function handleAccountReturn(requestedView) {
+  if (requestedView !== "account") return;
+
+  const url = new URL(window.location.href);
+  const returnedFromPortal = url.searchParams.get("billing_return") === "portal";
+  url.searchParams.delete("view");
+  url.searchParams.delete("billing_return");
+  window.history.replaceState({}, document.title, url.toString());
+
+  await openAccountDialog();
+  if (returnedFromPortal) {
+    showBillingResult("Welcome back. Your latest Stripe subscription status is shown below.");
+    refreshSubscriptionAfterPortalReturn().catch((error) => {
+      billingStatus.textContent = error instanceof Error ? error.message : String(error);
+    });
+  }
+}
+
+async function refreshSubscriptionAfterPortalReturn() {
+  // Stripe can redirect before its subscription.updated webhook reaches FeelY.
+  for (const delay of [800, 1600, 3000]) {
+    await new Promise((resolve) => window.setTimeout(resolve, delay));
+    state.subscription = await api("/billing/subscription", { headers: authHeaders() });
+    renderSubscription();
+  }
+}
+
 async function openAccountDialog() {
-  state.account = await api("/users/me/account", { headers: authHeaders() });
+  const [account, subscription] = await Promise.all([
+    api("/users/me/account", { headers: authHeaders() }),
+    api("/billing/subscription", { headers: authHeaders() }),
+  ]);
+  state.account = account;
+  state.subscription = subscription;
   state.user = state.account;
   renderUser();
   accountStatus.textContent = "";
   renderAccountDialog();
+  renderSubscription();
   accountDialog.showModal();
+}
+
+async function startSubscriptionCheckout(plan) {
+  billingStatus.textContent = "Opening secure Stripe Checkout...";
+  const response = await api("/billing/checkout", {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ plan }),
+  });
+  window.location.assign(response.url);
+}
+
+function buildPortalReturnUrl() {
+  if (!["http:", "https:"].includes(window.location.protocol)) return null;
+
+  // Using the exact origin preserves that origin's login token in browser storage.
+  const returnUrl = new URL(window.location.href);
+  ["checkout", "session_id", "mode", "verify_email_token"].forEach((name) => {
+    returnUrl.searchParams.delete(name);
+  });
+  returnUrl.searchParams.set("view", "account");
+  returnUrl.searchParams.set("billing_return", "portal");
+  returnUrl.hash = "";
+  return returnUrl.toString();
+}
+
+async function createCustomerPortalSession() {
+  const returnUrl = buildPortalReturnUrl();
+  return api("/billing/portal", {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(returnUrl ? { return_url: returnUrl } : {}),
+  });
+}
+
+async function openSubscriptionManagement() {
+  billingStatus.textContent = "Opening subscription management...";
+  const response = await createCustomerPortalSession();
+  window.location.assign(response.url);
+}
+
+async function keepSubscriptionActive() {
+  resumeSubscriptionButton.disabled = true;
+  billingStatus.textContent = "Keeping your subscription active...";
+  try {
+    state.subscription = await api("/billing/subscription/resume", {
+      method: "POST",
+      headers: authHeaders(),
+    });
+    renderSubscription();
+    showBillingResult(
+      "Your cancellation was reversed. The subscription will renew as usual.",
+      "success",
+    );
+  } finally {
+    resumeSubscriptionButton.disabled = false;
+  }
+}
+
+function openStripeCancellationConfirmation() {
+  const periodEnd = formatBillingDate(state.subscription?.current_period_end);
+  stripeCancelCopy.textContent = periodEnd
+    ? `Nothing changes yet. Stripe will show the final cancellation details. Your current paid period ends ${periodEnd}.`
+    : "Nothing changes yet. You will review and confirm the cancellation securely in Stripe.";
+  stripeCancelStatus.textContent = "";
+  confirmStripeCancel.disabled = false;
+  confirmStripeCancel.textContent = "Continue to Stripe";
+  stripeCancelDialog.showModal();
+}
+
+async function continueCancellationInStripe(event) {
+  event.preventDefault();
+  confirmStripeCancel.disabled = true;
+  confirmStripeCancel.textContent = "Opening Stripe...";
+  stripeCancelStatus.textContent = "";
+  try {
+    const response = await createCustomerPortalSession();
+    window.location.assign(response.url);
+  } catch (error) {
+    stripeCancelStatus.textContent = error instanceof Error ? error.message : String(error);
+    confirmStripeCancel.disabled = false;
+    confirmStripeCancel.textContent = "Continue to Stripe";
+  }
 }
 
 async function saveAccount(event) {
@@ -1957,6 +2273,32 @@ deleteAccountButton.addEventListener("click", () =>
     accountStatus.textContent = error instanceof Error ? error.message : String(error);
   }),
 );
+subscribeMonthlyButton.addEventListener("click", () =>
+  startSubscriptionCheckout("monthly").catch((error) => {
+    billingStatus.textContent = error instanceof Error ? error.message : String(error);
+  }),
+);
+subscribeYearlyButton.addEventListener("click", () =>
+  startSubscriptionCheckout("yearly").catch((error) => {
+    billingStatus.textContent = error instanceof Error ? error.message : String(error);
+  }),
+);
+manageSubscriptionButton.addEventListener("click", () =>
+  openSubscriptionManagement().catch((error) => {
+    billingStatus.textContent = error instanceof Error ? error.message : String(error);
+  }),
+);
+resumeSubscriptionButton.addEventListener("click", () =>
+  keepSubscriptionActive().catch((error) => {
+    billingStatus.textContent = error instanceof Error ? error.message : String(error);
+  }),
+);
+cancelSubscriptionButton.addEventListener("click", openStripeCancellationConfirmation);
+stripeCancelForm.addEventListener("submit", continueCancellationInStripe);
+billingResultDismiss.addEventListener("click", () => {
+  billingResultBanner.classList.add("hidden");
+  if (billingResultTimer) window.clearTimeout(billingResultTimer);
+});
 document.addEventListener("click", (event) => {
   if (
     !event.target.closest(".chat-actions-menu") &&
@@ -2038,7 +2380,16 @@ async function init() {
   renderUser();
   await confirmEmailVerificationFromUrl();
   if (state.token) {
-    showChat().catch(() => logout());
+    try {
+      await showChat();
+    } catch (error) {
+      // A temporary backend failure should not erase a valid saved session.
+      if (error instanceof ApiError && [401, 403].includes(error.status)) {
+        logout();
+      } else {
+        renderInlineError(error);
+      }
+    }
   } else {
     showAuth();
   }

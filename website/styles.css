@@ -2112,18 +2112,41 @@ textarea {
   font-size: 24px;
 }
 
-.account-dialog {
-  max-height: calc(100vh - 32px);
-  overflow-y: auto;
+.billing-result-banner {
+  position: fixed;
+  z-index: 80;
+  top: 18px;
+  left: 50%;
+  display: flex;
+  width: min(620px, calc(100% - 32px));
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(130, 183, 168, 0.5);
+  border-radius: 8px;
+  background: #eef7f2;
+  color: #31584d;
+  box-shadow: var(--shadow);
+  padding: 14px 16px;
 }
 
-.account-dialog form + form,
-.account-danger {
-  border-top: 1px solid var(--line-light);
+.billing-result-banner[data-kind="neutral"] {
+  border-color: var(--line-light);
+  background: var(--paper);
+  color: var(--ink);
 }
 
-.account-dialog form {
-  padding-bottom: 24px;
+.billing-result-banner p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.billing-result-banner button {
+  border: 0;
+  background: transparent;
+  color: currentColor;
+  font-size: 24px;
 }
 
 .account-row {
@@ -2135,15 +2158,285 @@ textarea {
   font-size: 13px;
 }
 
-.account-danger {
+.account-billing h3,
+.account-billing p {
+  margin: 0;
+}
+
+.billing-status {
+  color: #6f625d;
+  line-height: 1.5;
+}
+
+.billing-management-note {
+  color: #6f625d;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.billing-management-note[hidden] {
+  display: none;
+}
+
+.billing-details {
   display: grid;
-  gap: 12px;
-  padding: 24px 30px 30px;
+  gap: 8px;
+  margin: 0;
+}
+
+.billing-detail {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--line-light);
+  padding-top: 8px;
+}
+
+.billing-detail[hidden] {
+  display: none;
+}
+
+.billing-detail dt {
+  color: #6f625d;
+  font-size: 13px;
+}
+
+.billing-detail dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 700;
+}
+
+.billing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.billing-actions[hidden] {
+  display: none;
+}
+
+.account-dialog {
+  width: min(760px, calc(100% - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
+  border: 1px solid rgba(255, 253, 249, 0.12);
+  border-radius: 18px;
+  background: #eee8df;
+}
+
+.account-dialog-close {
+  z-index: 2;
+  top: 16px;
+  right: 16px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--white);
+}
+
+.account-dialog-close:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.account-dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  background:
+    radial-gradient(circle at 85% 10%, rgba(197, 181, 255, 0.28), transparent 32%),
+    linear-gradient(135deg, #17131c, #2b2334);
+  color: var(--white);
+  padding: 30px 68px 28px 30px;
+}
+
+.account-dialog-header h2,
+.account-dialog-header p {
+  margin: 0;
+}
+
+.account-dialog-header h2 {
+  margin-bottom: 5px;
+  font-size: 27px;
+}
+
+.account-dialog-header > div > p:last-child {
+  color: rgba(255, 253, 249, 0.64);
+  font-size: 13px;
+}
+
+.account-dialog-avatar {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgba(197, 181, 255, 0.58);
+  border-radius: 18px;
+  background: rgba(197, 181, 255, 0.14);
+  color: var(--lavender);
+  font-family: Manrope, "DM Sans", sans-serif;
+  font-size: 23px;
+  font-weight: 800;
+}
+
+.account-dialog-body {
+  display: grid;
+  max-height: calc(100vh - 175px);
+  overflow-y: auto;
+  gap: 16px;
+  padding: 18px;
+}
+
+.account-dialog .account-section {
+  display: grid;
+  gap: 18px;
+  margin: 0;
+  border: 1px solid rgba(94, 78, 105, 0.14);
+  border-radius: 14px;
+  background: #faf7f2;
+  box-shadow: 0 10px 28px rgba(37, 33, 41, 0.06);
+  padding: 24px;
+}
+
+.account-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 28px;
+}
+
+.account-section-heading h3,
+.account-section-heading p {
+  margin: 0;
+}
+
+.account-section-heading h3 {
+  font-size: 19px;
+}
+
+.account-section-heading > p {
+  max-width: 300px;
+  color: #786e74;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: right;
+}
+
+.account-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.account-form-grid label {
+  display: grid;
+  gap: 7px;
+  color: #675b65;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.account-field-wide {
+  grid-column: 1 / -1;
+}
+
+.account-dialog .account-section input,
+.account-dialog .account-section textarea {
+  width: 100%;
+  border-color: rgba(94, 78, 105, 0.22);
+  border-radius: 9px;
+  background: #fffdfa;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.account-dialog .account-section input:focus,
+.account-dialog .account-section textarea:focus {
+  border-color: #8f75c7;
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(169, 136, 232, 0.14);
+}
+
+.account-dialog .account-section textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.account-section-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid rgba(94, 78, 105, 0.13);
+  padding-top: 16px;
+}
+
+.account-section-footer-end {
+  justify-content: flex-end;
+}
+
+.account-dialog .billing-details {
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid rgba(94, 78, 105, 0.14);
+  border-radius: 10px;
+  background: #fffdfa;
+}
+
+.account-dialog .billing-detail {
+  border: 0;
+  padding: 11px 13px;
+}
+
+.account-dialog .billing-detail + .billing-detail {
+  border-top: 1px solid rgba(94, 78, 105, 0.12);
+}
+
+.account-dialog .account-danger {
+  border-color: rgba(162, 63, 43, 0.22);
+  background: #fff8f5;
+}
+
+.confirm-dialog {
+  width: min(500px, calc(100% - 32px));
+  border-radius: 16px;
+}
+
+.confirm-dialog form > p:not(.eyebrow):not(.form-error) {
+  color: #6f625d;
+  line-height: 1.6;
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.danger-button {
+  background: #a23f2b;
+}
+
+.danger-button:hover {
+  background: #873321;
 }
 
 .secondary-button.danger {
   border-color: rgba(162, 63, 43, 0.34);
   color: #a23f2b;
+}
+
+.secondary-button.success {
+  border-color: rgba(55, 126, 103, 0.38);
+  background: #eef7f2;
+  color: #315f50;
+}
+
+.secondary-button.success:hover {
+  background: #dfeee7;
 }
 
 .sidebar-backdrop {
@@ -2402,6 +2695,72 @@ textarea {
 
   .composer-meta {
     justify-content: flex-start;
+  }
+}
+
+@media (max-width: 680px) {
+  .account-dialog {
+    width: calc(100% - 18px);
+    max-height: calc(100vh - 18px);
+  }
+
+  .account-dialog-header {
+    gap: 12px;
+    padding: 24px 54px 22px 20px;
+  }
+
+  .account-dialog-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    font-size: 19px;
+  }
+
+  .account-dialog-header h2 {
+    font-size: 22px;
+  }
+
+  .account-dialog-body {
+    max-height: calc(100vh - 145px);
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .account-dialog .account-section {
+    gap: 16px;
+    padding: 18px;
+  }
+
+  .account-section-heading,
+  .account-section-footer {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .account-section-heading > p {
+    max-width: none;
+    text-align: left;
+  }
+
+  .account-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .account-field-wide {
+    grid-column: auto;
+  }
+
+  .account-section-footer .primary-button,
+  .account-section-footer .secondary-button,
+  .billing-actions button,
+  .confirm-dialog-actions button {
+    width: 100%;
+  }
+
+  .account-row {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 

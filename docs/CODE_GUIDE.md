@@ -30,6 +30,7 @@ app/
     dependencies.py        Shared FastAPI dependencies like DB and current user
     routes/
       auth.py              Register and login endpoints
+      billing.py           Stripe Checkout, Portal, subscription, and webhook endpoints
       users.py             Current user and profile endpoints
       llm.py               Authenticated LLM message endpoint
       health.py            Health check endpoint
@@ -41,13 +42,16 @@ app/
     session.py             Database engine and session factory
     init_db.py             Creates database tables
   models/
+    billing.py             Local Stripe subscription and processed-event models
     user.py                SQLAlchemy User and UserProfile database models
   schemas/
     auth.py                Request/response schemas for auth
     user.py                Request/response schemas for users
     profile.py             Request/response schemas for profiles
     llm.py                 Request/response schemas for LLM messages
+    billing.py             Billing request/response schemas
   services/
+    billing.py             Stripe calls and normalized subscription policy
     llm.py                 LLM provider abstraction and implementations
 tests/
   conftest.py              Test app and temporary test database setup
@@ -127,6 +131,9 @@ Current models:
 
 - `User`: login identity, password hash, status, timestamps.
 - `UserProfile`: one JSON profile per user.
+- `ChatSession`: persisted conversations and their analysis state.
+- `BillingSubscription`: the local Stripe subscription snapshot used for access decisions.
+- `ProcessedStripeEvent`: webhook IDs already applied, used to make delivery idempotent.
 
 The `UserProfile.data` column is JSON so the LLM can evolve the profile shape
 over time without requiring a database migration for every new profile field.
@@ -161,6 +168,20 @@ The app or website must send authenticated requests with this header:
 ```http
 Authorization: Bearer <access_token>
 ```
+
+## Billing Flow
+
+Billing routes live in `app/api/routes/billing.py`; Stripe-specific behavior lives
+in `app/services/billing.py`. The frontend never receives a Stripe secret key.
+
+- Checkout and Customer Portal sessions are created by authenticated POST requests.
+- Portal return URLs are restricted to configured/trusted frontend origins.
+- Signed Stripe webhooks update the local subscription snapshot.
+- Premium access is decided by `has_premium_access()` using that local snapshot.
+- A scheduled end-of-period cancellation can be reversed with
+  `POST /api/v1/billing/subscription/resume`.
+
+See `docs/stripe-setup.md` for configuration and testing details.
 
 ## LLM Flow
 

@@ -22,6 +22,8 @@ per-user LLM requests, and persistent user profiles.
 
 ## Documentation
 
+- [Stripe subscription setup](docs/stripe-setup.md)
+
 See [docs/CODE_GUIDE.md](docs/CODE_GUIDE.md) for a walkthrough of how the code
 works and how to expand the backend with new endpoints, database models, LLM
 providers, profile fields, and tests.
@@ -407,9 +409,10 @@ provided, the backend creates a new chat.
 The frontend lives in `website/` and calls the API at
 `http://127.0.0.1:8000/api/v1` by default.
 
-The public pages include Home, Courses, Dream Builder, Videos, Toolkit,
-Community, and About. Login, registration, and conversations live at
-`website/chat.html`.
+Login, registration, account management, billing, conversations, and My Map live
+in `website/chat.html`. The standalone marketing pages were moved out of this
+backend repository; embed or copy this app page from the repository that owns the
+public website.
 
 ## Adding New API Functions
 
