@@ -18,7 +18,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=20260818-1" />
+    <link rel="stylesheet" href="styles.css?v=20260818-3" />
   </head>
   <body>
     <main class="shell">
@@ -155,7 +155,10 @@
 
           <div class="workspace-switch" role="tablist" aria-label="Workspace view">
             <button id="chat-workspace-button" class="active" type="button" role="tab">Chat</button>
-            <button id="map-workspace-button" type="button" role="tab">My Map</button>
+            <button id="map-workspace-button" type="button" role="tab">
+              <span>My Map</span>
+              <span id="map-plan-badge" class="workspace-premium-badge">Unlock</span>
+            </button>
           </div>
 
           <button id="new-chat-button" class="new-chat-button" type="button">
@@ -289,6 +292,7 @@
             </form>
             <div class="composer-meta">
               <button id="lens-toggle" class="lens-toggle" type="button" aria-expanded="false">Three lenses</button>
+              <span id="chat-plan-note" class="chat-plan-note">Free plan &middot; 10 messages per day</span>
               <p class="composer-note">FeelY can help you reflect, but it is not emergency or medical care.</p>
             </div>
           </footer>
@@ -311,7 +315,7 @@
                 <h2>What you are learning and choosing - your map grows from topics and observations you choose to save.</h2>
               </div>
             </div>
-            <button id="add-topic-button" class="map-command" type="button">+ Add topic</button>
+            <button id="add-topic-button" class="map-command" type="button" hidden>+ Add topic</button>
           </header>
           <div id="map-content" class="map-content"></div>
         </section>
@@ -443,6 +447,11 @@
           <p id="billing-status" class="billing-status" role="status">
             Premium subscriptions are not available yet.
           </p>
+          <ul class="premium-benefits">
+            <li>Extended daily chat access</li>
+            <li>Reflection informed by your saved insights</li>
+            <li>Full access to My Map, topics, and practices</li>
+          </ul>
           <dl class="billing-details">
             <div class="billing-detail">
               <dt>Status</dt>
@@ -519,6 +528,6 @@
       </form>
     </dialog>
 
-    <script src="app.js?v=20260818-1"></script>
+    <script src="app.js?v=20260818-3"></script>
   </body>
 </html>

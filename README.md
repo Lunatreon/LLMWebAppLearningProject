@@ -261,9 +261,15 @@ RATE_LIMIT_REGISTER_IP_PER_HOUR=20
 RATE_LIMIT_LOGIN_IDENTIFIER_ATTEMPTS=8
 RATE_LIMIT_LOGIN_IDENTIFIER_WINDOW_SECONDS=900
 RATE_LIMIT_LLM_USER_PER_MINUTE=30
+RATE_LIMIT_LLM_FREE_USER_PER_DAY=10
 RATE_LIMIT_LLM_USER_PER_DAY=400
 MAX_REQUEST_BODY_BYTES=128000
 ```
+
+Free accounts use the smaller daily chat allowance. Active or trialing Premium
+accounts use the higher fair-use limit, can use saved map insights as chat
+context, receive topic analysis, and can read or edit My Map. These checks are
+enforced by the API; the frontend's locked preview is not the security boundary.
 
 The frontend registration form also sends an invisible honeypot field. Real
 users leave it empty; simple form-fill bots often populate it and are rejected.

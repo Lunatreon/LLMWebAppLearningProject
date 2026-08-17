@@ -12,8 +12,8 @@ from app.models.user import User
 from app.schemas.billing import SubscriptionStatus
 from app.services import billing as billing_service
 from app.services.billing import (
-    InvalidBillingReturnUrlError,
     InvalidBillingPlanError,
+    InvalidBillingReturnUrlError,
     has_premium_access,
     normalize_subscription,
     price_id_for_plan,
@@ -49,6 +49,8 @@ def test_subscription_status_normalizes_to_safe_free_state():
     assert normalized == {
         "status": SubscriptionStatus.NONE,
         "premium": False,
+        "my_map_access": False,
+        "chat_daily_limit": 10,
         "plan": "free",
         "cancel_at_period_end": False,
         "current_period_end": None,
@@ -61,6 +63,16 @@ def test_subscription_status_normalizes_to_safe_free_state():
     unknown = BillingSubscription(user_id=1, status="unexpected-provider-status")
     assert normalize_subscription(unknown)["status"] == SubscriptionStatus.NONE
     assert normalize_subscription(unknown)["premium"] is False
+
+
+def test_local_development_can_explicitly_bypass_premium_features(monkeypatch):
+    monkeypatch.setattr(settings, "premium_features_enabled", False)
+
+    normalized = normalize_subscription(None)
+
+    assert normalized["premium"] is False
+    assert normalized["my_map_access"] is True
+    assert normalized["chat_daily_limit"] == settings.rate_limit_llm_user_per_day
 
 
 def test_premium_access_uses_only_local_subscription_state(tmp_path):
@@ -160,6 +172,8 @@ def test_disabled_billing_returns_free_state_and_safe_error(client):
     assert subscription_response.json() == {
         "status": "none",
         "premium": False,
+        "my_map_access": False,
+        "chat_daily_limit": 10,
         "plan": "free",
         "cancel_at_period_end": False,
         "current_period_end": None,

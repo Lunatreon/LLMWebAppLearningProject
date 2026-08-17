@@ -10,6 +10,7 @@ from app.core.rate_limit import client_fingerprint, enforce_rate_limit
 from app.core.security import decode_access_token
 from app.db.session import SessionLocal
 from app.models.user import User
+from app.services.billing import has_premium_feature_access
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_v1_prefix}/auth/login")
 
@@ -63,3 +64,17 @@ def get_current_user(
         raise credentials_error
 
     return user
+
+
+def get_current_premium_user(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> User:
+    """Require the locally verified subscription entitlement for premium features."""
+
+    if not has_premium_feature_access(db, current_user):
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="Premium is required to access My Map.",
+        )
+    return current_user

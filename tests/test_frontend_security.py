@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 ROOT_DIR = Path(__file__).resolve().parents[1]
 CHAT_HTML = ROOT_DIR / "website" / "chat.html"
 APP_JS = ROOT_DIR / "website" / "app.js"
@@ -40,3 +39,16 @@ def test_temporary_api_failures_do_not_clear_the_saved_session():
 
     assert "[401, 403].includes(error.status)" in javascript
     assert "showChat().catch(() => logout())" not in javascript
+
+
+def test_my_map_is_visible_but_guarded_by_the_premium_entitlement():
+    html = CHAT_HTML.read_text(encoding="utf-8")
+    javascript = APP_JS.read_text(encoding="utf-8")
+
+    assert 'id="map-workspace-button"' in html
+    assert 'id="map-plan-badge"' in html
+    assert 'id="chat-plan-note"' in html
+    assert "function hasMyMapAccess()" in javascript
+    assert "function renderMapPaywall()" in javascript
+    assert 'if (!hasMyMapAccess()) {' in javascript
+    assert 'startSubscriptionCheckout("monthly")' in javascript

@@ -27,6 +27,7 @@ from app.schemas.llm import (
     TopicConfirmationResponse,
     TopicSuggestionResponse,
 )
+from app.services.billing import has_premium_feature_access
 from app.services.llm import (
     TextChunkCallback,
     get_chat_llm_client,
@@ -38,6 +39,7 @@ from app.services.self_authorship import (
     create_or_link_topic_space,
     find_topic_space_for_chat,
     merge_llm_profile,
+    profile_data_for_access,
     read_map,
     record_conversation_memory,
 )
@@ -211,8 +213,21 @@ def chat_title_from_text(text: str) -> str:
     return title[:80]
 
 
-def chat_read(chat_session: ChatSession) -> ChatRead:
-    info = chat_session.info or {}
+def chat_info_for_access(
+    chat_info: dict[str, Any] | None,
+    *,
+    premium_access: bool,
+) -> dict[str, Any]:
+    visible_info = dict(chat_info or {})
+    if not premium_access:
+        visible_info.pop("pending_map_suggestion", None)
+        visible_info.pop("pending_topic", None)
+        visible_info.pop("topic_space_id", None)
+    return visible_info
+
+
+def chat_read(chat_session: ChatSession, *, premium_access: bool) -> ChatRead:
+    info = chat_info_for_access(chat_session.info, premium_access=premium_access)
     pending_topic = info.get("pending_topic")
     accepted_topic = (
         pending_topic.get("topic")
@@ -418,12 +433,16 @@ def list_chats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[ChatRead]:
+    premium_access = has_premium_feature_access(db, current_user)
     chat_sessions = db.execute(
         select(ChatSession)
         .where(ChatSession.user_id == current_user.id)
         .order_by(ChatSession.updated_at.desc())
     ).scalars()
-    return [chat_read(chat_session) for chat_session in chat_sessions]
+    return [
+        chat_read(chat_session, premium_access=premium_access)
+        for chat_session in chat_sessions
+    ]
 
 
 @router.post("/chats", response_model=ChatRead, status_code=status.HTTP_201_CREATED)
@@ -435,7 +454,10 @@ def create_chat(
     chat_session = get_or_create_chat_session(db, current_user, None, payload.title)
     db.commit()
     db.refresh(chat_session)
-    return chat_read(chat_session)
+    return chat_read(
+        chat_session,
+        premium_access=has_premium_feature_access(db, current_user),
+    )
 
 
 @router.get("/chats/{chat_id}", response_model=ChatRead)
@@ -447,7 +469,10 @@ def read_chat(
     chat_session = get_chat_session(db, current_user, chat_id)
     if chat_session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")
-    return chat_read(chat_session)
+    return chat_read(
+        chat_session,
+        premium_access=has_premium_feature_access(db, current_user),
+    )
 
 
 @router.delete("/chats/{chat_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -473,6 +498,8 @@ def read_topic_suggestion(
     chat_session = get_chat_session(db, current_user, chat_id)
     if chat_session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")
+    if not has_premium_feature_access(db, current_user):
+        return TopicSuggestionResponse(suggestion=None)
     pending_topic = (chat_session.info or {}).get("pending_topic")
     if not isinstance(pending_topic, dict) or pending_topic.get("status") != "pending":
         return TopicSuggestionResponse(suggestion=None)
@@ -498,6 +525,12 @@ async def process_llm_message(
     current_user: User,
     on_text_chunk: TextChunkCallback | None = None,
 ) -> LLMResponse:
+    premium_access = has_premium_feature_access(db, current_user)
+    daily_limit = (
+        settings.rate_limit_llm_user_per_day
+        if premium_access
+        else settings.rate_limit_llm_free_user_per_day
+    )
     enforce_rate_limit(
         f"llm-minute:user:{current_user.id}",
         max_attempts=settings.rate_limit_llm_user_per_minute,
@@ -506,9 +539,16 @@ async def process_llm_message(
     )
     enforce_rate_limit(
         f"llm-day:user:{current_user.id}",
-        max_attempts=settings.rate_limit_llm_user_per_day,
+        max_attempts=daily_limit,
         window_seconds=86_400,
-        detail="Daily message limit reached. Please try again later.",
+        detail=(
+            "Daily message limit reached. Please try again later."
+            if premium_access
+            else (
+                f"You have used today's {daily_limit} free messages. "
+                "Premium unlocks extended chat access and My Map."
+            )
+        ),
     )
 
     profile = get_or_create_profile(db, current_user)
@@ -517,8 +557,14 @@ async def process_llm_message(
     chat_client = get_chat_llm_client()
     chat_request = {
         "user_input": payload.input_text,
-        "profile": profile.data or {},
-        "chat_info": chat_session.info or {},
+        "profile": profile_data_for_access(
+            profile.data,
+            premium_access=premium_access,
+        ),
+        "chat_info": chat_info_for_access(
+            chat_session.info,
+            premium_access=premium_access,
+        ),
         "chat_id": chat_session.chat_id,
     }
     if on_text_chunk is None:
@@ -536,7 +582,7 @@ async def process_llm_message(
     )
 
     raw_map_suggestion = None
-    if chat_result.map_suggestion:
+    if premium_access and chat_result.map_suggestion:
         topic_space = find_topic_space_for_chat(profile.data, chat_session.chat_id)
         raw_map_suggestion = {
             **chat_result.map_suggestion,
@@ -570,25 +616,32 @@ async def process_llm_message(
     db.refresh(profile)
     db.refresh(chat_session)
 
-    background_session_factory = sessionmaker(
-        autocommit=False,
-        autoflush=False,
-        bind=db.get_bind(),
-    )
-    background_tasks.add_task(
-        analyse_chat_for_topic,
-        current_user.id,
-        chat_session.chat_id,
-        background_session_factory,
-    )
+    if premium_access:
+        background_session_factory = sessionmaker(
+            autocommit=False,
+            autoflush=False,
+            bind=db.get_bind(),
+        )
+        background_tasks.add_task(
+            analyse_chat_for_topic,
+            current_user.id,
+            chat_session.chat_id,
+            background_session_factory,
+        )
 
     return LLMResponse(
         assistant_message=chat_result.assistant_message,
-        profile=profile.data,
+        profile=profile_data_for_access(
+            profile.data,
+            premium_access=premium_access,
+        ),
         chat_id=chat_session.chat_id,
-        chat_info=chat_session.info,
+        chat_info=chat_info_for_access(
+            chat_session.info,
+            premium_access=premium_access,
+        ),
         map_suggestion=map_suggestion,
-        topic_analysis_status="queued",
+        topic_analysis_status="queued" if premium_access else "premium_required",
     )
 
 
@@ -691,6 +744,12 @@ def confirm_topic(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> TopicConfirmationResponse:
+    premium_access = has_premium_feature_access(db, current_user)
+    if payload.accepted and not premium_access:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="Premium is required to save topics to My Map.",
+        )
     profile = get_or_create_profile(db, current_user)
     chat_session = get_chat_session(db, current_user, payload.chat_id)
     if chat_session is None:
@@ -747,7 +806,13 @@ def confirm_topic(
     db.commit()
     db.refresh(profile)
 
-    return TopicConfirmationResponse(accepted=payload.accepted, profile=profile.data)
+    return TopicConfirmationResponse(
+        accepted=payload.accepted,
+        profile=profile_data_for_access(
+            profile.data,
+            premium_access=premium_access,
+        ),
+    )
 
 
 @router.post(
@@ -759,6 +824,12 @@ def confirm_map_suggestion(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> MapSuggestionConfirmationResponse:
+    premium_access = has_premium_feature_access(db, current_user)
+    if payload.accepted and not premium_access:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="Premium is required to save insights to My Map.",
+        )
     profile = get_or_create_profile(db, current_user)
     chat_session = get_chat_session(db, current_user, payload.chat_id)
     if chat_session is None:
@@ -801,5 +872,5 @@ def confirm_map_suggestion(
     return MapSuggestionConfirmationResponse(
         accepted=payload.accepted,
         entry=entry,
-        map=read_map(profile.data),
+        map=read_map(profile.data if premium_access else {}),
     )

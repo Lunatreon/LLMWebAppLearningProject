@@ -3,7 +3,6 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-
 MAP_KEY = "self_authorship_map"
 ENTRY_CATEGORIES = {
     "inherited_script",
@@ -22,6 +21,11 @@ LLM_PROTECTED_PROFILE_FIELDS = {
     "last_user_message",
     "message_count",
     "recent_messages",
+}
+PREMIUM_PROFILE_FIELDS = {
+    MAP_KEY,
+    "last_confirmed_topic",
+    "topics",
 }
 
 
@@ -47,6 +51,36 @@ def read_map(profile_data: dict[str, Any] | None) -> dict[str, Any]:
     result["unassigned_entries"] = list(raw_map.get("unassigned_entries", []))
     result["updated_at"] = raw_map.get("updated_at") or result["updated_at"]
     return result
+
+
+def profile_data_for_access(
+    profile_data: dict[str, Any] | None,
+    *,
+    premium_access: bool,
+) -> dict[str, Any]:
+    """Hide premium insights while leaving ordinary conversation memory available."""
+
+    visible_data = deepcopy(profile_data or {})
+    if not premium_access:
+        for field in PREMIUM_PROFILE_FIELDS:
+            visible_data.pop(field, None)
+    return visible_data
+
+
+def preserve_premium_profile_fields(
+    current_profile: dict[str, Any] | None,
+    replacement_profile: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Prevent the generic profile endpoint from changing paywalled data."""
+
+    current = deepcopy(current_profile or {})
+    replacement = deepcopy(replacement_profile or {})
+    for field in PREMIUM_PROFILE_FIELDS:
+        if field in current:
+            replacement[field] = current[field]
+        else:
+            replacement.pop(field, None)
+    return replacement
 
 
 def write_map(profile_data: dict[str, Any] | None, map_data: dict[str, Any]) -> dict[str, Any]:

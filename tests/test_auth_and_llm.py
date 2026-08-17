@@ -1,11 +1,14 @@
 import asyncio
 import json
 from base64 import b64encode
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
+from app.api.dependencies import get_db
 from app.api.routes import auth as auth_routes
 from app.api.routes.llm import (
     remember_map_suggestion_event,
@@ -14,6 +17,8 @@ from app.api.routes.llm import (
 from app.core import captcha as captcha_module
 from app.core.config import settings
 from app.main import create_app
+from app.models.billing import BillingSubscription
+from app.models.user import User
 from app.services.llm import (
     CHAT_SYSTEM_PROMPT,
     AnthropicChatLLMClient,
@@ -35,6 +40,27 @@ from app.services.llm import (
 )
 from app.services.pattern_recognition import ChatAnalyser
 from app.services.self_authorship import merge_llm_profile
+
+
+def grant_premium_access(client: TestClient, email: str) -> None:
+    """Seed locally verified billing state for routes under the premium boundary."""
+
+    session_dependency = client.app.dependency_overrides[get_db]
+    session_generator = session_dependency()
+    db = next(session_generator)
+    try:
+        user = db.scalar(select(User).where(User.email == email))
+        assert user is not None
+        db.add(
+            BillingSubscription(
+                user_id=user.id,
+                status="active",
+                current_period_end=datetime.now(timezone.utc) + timedelta(days=30),
+            )
+        )
+        db.commit()
+    finally:
+        session_generator.close()
 
 
 def test_local_website_cors_preflight(client):
@@ -136,6 +162,11 @@ def test_user_can_register_login_and_send_llm_message(client):
     assert login_response.status_code == 200
     token = login_response.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
+    grant_premium_access(client, "luna@example.com")
+    subscription = client.get("/api/v1/billing/subscription", headers=headers).json()
+    assert subscription["premium"] is True
+    assert subscription["my_map_access"] is True
+    assert subscription["chat_daily_limit"] == settings.rate_limit_llm_user_per_day
 
     create_chat_response = client.post(
         "/api/v1/llm/chats",
@@ -265,6 +296,86 @@ def test_llm_stream_acknowledges_work_and_returns_result(client):
     )
     assert events[-1]["type"] == "result"
     assert streamed_text == events[-1]["data"]["assistant_message"]
+
+
+def test_free_tier_hides_map_data_and_blocks_map_routes(client):
+    client.post(
+        "/api/v1/auth/register",
+        json={"email": "free@example.com", "username": "free", "password": "secret-pass"},
+    )
+    token = client.post(
+        "/api/v1/auth/login",
+        json={"email_or_username": "free@example.com", "password": "secret-pass"},
+    ).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    subscription = client.get("/api/v1/billing/subscription", headers=headers).json()
+    assert subscription["my_map_access"] is False
+    assert subscription["chat_daily_limit"] == 10
+
+    map_response = client.get("/api/v1/users/me/map", headers=headers)
+    assert map_response.status_code == 402
+    assert map_response.json()["detail"] == "Premium is required to access My Map."
+
+    profile_response = client.put(
+        "/api/v1/users/me/profile",
+        headers=headers,
+        json={
+            "data": {
+                "preferred_tone": "gentle",
+                "self_authorship_map": {
+                    "topic_spaces": [{"id": "should-not-be-written"}],
+                },
+            }
+        },
+    )
+    assert profile_response.status_code == 200
+    assert profile_response.json()["data"] == {"preferred_tone": "gentle"}
+
+    llm_response = client.post(
+        "/api/v1/llm/message",
+        headers=headers,
+        json={
+            "context": (
+                "My family expects obedience and I notice my body tense when I try "
+                "to make an independent decision for myself."
+            )
+        },
+    )
+    assert llm_response.status_code == 200
+    assert llm_response.json()["map_suggestion"] is None
+    assert llm_response.json()["topic_analysis_status"] == "premium_required"
+    assert "self_authorship_map" not in llm_response.json()["profile"]
+
+
+def test_free_chat_daily_allowance_prompts_for_premium(monkeypatch, client):
+    monkeypatch.setattr(settings, "rate_limit_llm_free_user_per_day", 2)
+    client.post(
+        "/api/v1/auth/register",
+        json={"email": "quota@example.com", "username": "quota", "password": "secret-pass"},
+    )
+    token = client.post(
+        "/api/v1/auth/login",
+        json={"email_or_username": "quota@example.com", "password": "secret-pass"},
+    ).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    for message_number in range(2):
+        response = client.post(
+            "/api/v1/llm/message",
+            headers=headers,
+            json={"context": f"Free reflection {message_number}"},
+        )
+        assert response.status_code == 200
+
+    limited_response = client.post(
+        "/api/v1/llm/message",
+        headers=headers,
+        json={"context": "One more reflection"},
+    )
+    assert limited_response.status_code == 429
+    assert "today's 2 free messages" in limited_response.json()["detail"]
+    assert "Premium unlocks" in limited_response.json()["detail"]
 
 
 def test_registration_rejects_filled_honeypot(client):
@@ -561,6 +672,7 @@ def test_user_can_confirm_map_suggestion_and_complete_practice(client):
         json={"email_or_username": "map@example.com", "password": "super-secret"},
     )
     headers = {"Authorization": f"Bearer {login_response.json()['access_token']}"}
+    grant_premium_access(client, "map@example.com")
 
     message_response = client.post(
         "/api/v1/llm/message",
@@ -640,6 +752,7 @@ def test_user_can_edit_and_delete_map_entry(client):
         json={"email_or_username": "entry_user", "password": "super-secret"},
     )
     headers = {"Authorization": f"Bearer {login_response.json()['access_token']}"}
+    grant_premium_access(client, "entry@example.com")
 
     create_response = client.post(
         "/api/v1/users/me/map/entries",
@@ -682,6 +795,7 @@ def test_user_can_create_and_rename_map_topic(client):
         json={"email_or_username": "topic_edit_user", "password": "super-secret"},
     )
     headers = {"Authorization": f"Bearer {login_response.json()['access_token']}"}
+    grant_premium_access(client, "topic-edit@example.com")
 
     create_response = client.post(
         "/api/v1/users/me/map/topics",

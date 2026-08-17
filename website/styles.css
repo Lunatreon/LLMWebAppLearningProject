@@ -439,6 +439,10 @@ textarea:focus {
 }
 
 .workspace-switch button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   min-height: 34px;
   border: 0;
   border-radius: 6px;
@@ -451,6 +455,25 @@ textarea:focus {
 .workspace-switch button.active {
   background: rgba(197, 181, 255, 0.15);
   color: var(--white);
+}
+
+.workspace-premium-badge {
+  border: 1px solid rgba(197, 181, 255, 0.32);
+  border-radius: 999px;
+  color: var(--lavender);
+  padding: 2px 5px;
+  font-size: 8px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.workspace-premium-badge.active {
+  border-color: rgba(130, 183, 168, 0.42);
+  color: var(--mint);
+}
+
+.workspace-switch button.premium-locked:not(.active) {
+  color: rgba(255, 253, 249, 0.68);
 }
 
 .new-chat-button {
@@ -788,6 +811,18 @@ textarea:focus {
   width: 2px;
   background: var(--lavender);
   content: "";
+}
+
+.message-upgrade-button {
+  display: block;
+  min-height: 34px;
+  margin-top: 12px;
+  border: 1px solid rgba(197, 181, 255, 0.44);
+  border-radius: 7px;
+  background: rgba(197, 181, 255, 0.12);
+  color: var(--lavender);
+  padding: 0 12px;
+  font-weight: 700;
 }
 
 .waiting-message {
@@ -1162,6 +1197,12 @@ textarea {
   text-align: right;
 }
 
+.chat-plan-note {
+  color: rgba(197, 181, 255, 0.72);
+  font-size: 10px;
+  font-weight: 700;
+}
+
 .composer-meta {
   margin-top: 6px;
 }
@@ -1261,6 +1302,72 @@ textarea {
   border-top: 0;
   padding-top: 0;
   font-size: 13px;
+}
+
+.map-paywall {
+  width: min(560px, calc(100% - 40px));
+  margin: auto;
+  border: 1px solid rgba(197, 181, 255, 0.32);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(197, 181, 255, 0.18), transparent 38%),
+    rgba(27, 23, 32, 0.92);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.34);
+  padding: clamp(28px, 5vw, 48px);
+}
+
+.map-paywall-badge {
+  display: inline-flex;
+  border: 1px solid rgba(197, 181, 255, 0.42);
+  border-radius: 999px;
+  color: var(--lavender);
+  padding: 5px 9px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.map-paywall h3 {
+  max-width: 440px;
+  margin: 18px 0 10px;
+  color: var(--white);
+  font-size: clamp(25px, 4vw, 38px);
+  line-height: 1.08;
+}
+
+.map-paywall p,
+.map-paywall li {
+  color: rgba(255, 253, 249, 0.68);
+  line-height: 1.6;
+}
+
+.map-paywall ul {
+  display: grid;
+  gap: 8px;
+  margin: 22px 0 28px;
+  padding-left: 20px;
+}
+
+.map-paywall-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.map-paywall-actions button {
+  min-width: 160px;
+  padding: 0 16px;
+}
+
+.map-paywall-actions .primary-button {
+  background: var(--lavender);
+  color: #211b29;
+}
+
+.map-paywall-actions .secondary-button {
+  border-color: rgba(255, 253, 249, 0.24);
+  color: rgba(255, 253, 249, 0.78);
 }
 
 .map-concept-layout {
@@ -2191,6 +2298,16 @@ textarea {
 .billing-status {
   color: #6f625d;
   line-height: 1.5;
+}
+
+.premium-benefits {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  color: #6f625d;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .billing-management-note {

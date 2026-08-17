@@ -3,7 +3,6 @@ from functools import lru_cache
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 TURNSTILE_TEST_SITE_KEYS = {
     "1x00000000000000000000AA",
     "2x00000000000000000000AB",
@@ -52,6 +51,7 @@ class Settings(BaseSettings):
     rate_limit_login_identifier_attempts: int = 8
     rate_limit_login_identifier_window_seconds: int = 900
     rate_limit_llm_user_per_minute: int = 30
+    rate_limit_llm_free_user_per_day: int = 10
     rate_limit_llm_user_per_day: int = 400
     captcha_enabled: bool = False
     captcha_provider: str = "turnstile"
@@ -82,6 +82,7 @@ class Settings(BaseSettings):
     stripe_checkout_success_url: str | None = None
     stripe_checkout_cancel_url: str | None = None
     stripe_portal_return_url: str | None = None
+    premium_features_enabled: bool = True
 
     llm_provider: str = "mock"
     chat_llm_provider: str | None = None

@@ -1,7 +1,9 @@
 # Stripe subscription setup
 
-Stripe billing is prepared but disabled. FeelY continues to behave exactly as a free application
-until the server has real Stripe configuration and `STRIPE_ENABLED=true`.
+Stripe billing powers FeelY's Premium entitlement. With premium features enabled, free accounts
+receive the configured free chat allowance and see a locked My Map preview. Active and trialing
+subscriptions unlock the larger chat allowance, topic analysis, map-informed reflection, and all
+My Map API operations.
 
 ## Architecture
 
@@ -40,6 +42,9 @@ data.
   Subscription changes and cancellation redirect to Stripe's Customer Portal, where Stripe owns
   the confirmation flow. A scheduled cancellation can be reversed directly in FeelY. Checkout
   and Portal controls stay hidden while unavailable.
+- My Map is protected in the backend as well as the browser. Free responses redact map/topic data,
+  all `/users/me/map` operations require Premium, and a scheduled cancellation retains access only
+  until the paid period ends.
 - The official Stripe Python SDK is installed as a backend dependency. Its client is created only
   after billing has been enabled with a server-side secret key.
 - Tests cover free-state normalization, local Premium decisions, authentication, disabled behavior,
@@ -61,7 +66,13 @@ STRIPE_PRICE_YEARLY=""
 STRIPE_CHECKOUT_SUCCESS_URL=""
 STRIPE_CHECKOUT_CANCEL_URL=""
 STRIPE_PORTAL_RETURN_URL=""
+PREMIUM_FEATURES_ENABLED=true
+RATE_LIMIT_LLM_FREE_USER_PER_DAY=10
+RATE_LIMIT_LLM_USER_PER_DAY=400
 ```
+
+Set `PREMIUM_FEATURES_ENABLED=false` only for a local environment where the paywall should be
+bypassed. Do not use that bypass on a public deployment.
 
 Checkout return URLs should identify the result so the frontend can show immediate feedback while
 the webhook confirms access. For local development, use:

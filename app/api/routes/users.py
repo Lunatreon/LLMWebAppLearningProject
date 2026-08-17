@@ -3,7 +3,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_current_user, get_db
+from app.api.dependencies import get_current_premium_user, get_current_user, get_db
 from app.core.config import settings
 from app.core.security import hash_password, verify_password
 from app.models.user import User, UserProfile
@@ -30,15 +30,18 @@ from app.schemas.user import (
     UserAccountUpdate,
     UserRead,
 )
+from app.services.billing import has_premium_feature_access
 from app.services.self_authorship import (
     add_map_entry,
     create_topic_space,
     delete_map_entry,
     delete_topic_space,
+    preserve_premium_profile_fields,
+    profile_data_for_access,
     read_map,
-    update_topic_space,
     update_map_entry,
     update_practice,
+    update_topic_space,
 )
 
 router = APIRouter()
@@ -173,9 +176,17 @@ def delete_current_user_account(
 
 
 @router.get("/me/profile", response_model=ProfileRead)
-def read_current_user_profile(current_user: User = Depends(get_current_user)) -> ProfileRead:
+def read_current_user_profile(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProfileRead:
     profile = current_user.profile
-    return ProfileRead(data=profile.data if profile else {})
+    return ProfileRead(
+        data=profile_data_for_access(
+            profile.data if profile else {},
+            premium_access=has_premium_feature_access(db, current_user),
+        )
+    )
 
 
 @router.put("/me/profile", response_model=ProfileRead)
@@ -189,10 +200,19 @@ def update_current_user_profile(
         profile = UserProfile(user_id=current_user.id, data={})
         db.add(profile)
 
-    profile.data = payload.data
+    profile.data = (
+        payload.data
+        if has_premium_feature_access(db, current_user)
+        else preserve_premium_profile_fields(profile.data, payload.data)
+    )
     db.commit()
     db.refresh(profile)
-    return ProfileRead(data=profile.data)
+    return ProfileRead(
+        data=profile_data_for_access(
+            profile.data,
+            premium_access=has_premium_feature_access(db, current_user),
+        )
+    )
 
 
 def get_or_create_profile(db: Session, current_user: User) -> UserProfile:
@@ -206,7 +226,7 @@ def get_or_create_profile(db: Session, current_user: User) -> UserProfile:
 
 @router.get("/me/map", response_model=SelfAuthorshipMapRead)
 def read_self_authorship_map(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_premium_user),
 ) -> SelfAuthorshipMapRead:
     profile_data = current_user.profile.data if current_user.profile else {}
     return SelfAuthorshipMapRead(**read_map(profile_data))
@@ -216,7 +236,7 @@ def read_self_authorship_map(
 def create_map_topic(
     payload: TopicSpaceCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_premium_user),
 ) -> TopicSpaceResponse:
     profile = get_or_create_profile(db, current_user)
     try:
@@ -240,7 +260,7 @@ def change_map_topic(
     topic_space_id: str,
     payload: TopicSpaceUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_premium_user),
 ) -> TopicSpaceResponse:
     profile = get_or_create_profile(db, current_user)
     try:
@@ -265,7 +285,7 @@ def change_map_topic(
 def remove_map_topic(
     topic_space_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_premium_user),
 ) -> TopicSpaceDeleteResponse:
     profile = get_or_create_profile(db, current_user)
     try:
@@ -283,7 +303,7 @@ def remove_map_topic(
 def create_map_entry(
     payload: MapEntryCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_premium_user),
 ) -> MapEntryCreateResponse:
     profile = get_or_create_profile(db, current_user)
     try:
@@ -309,7 +329,7 @@ def change_map_entry(
     entry_id: str,
     payload: MapEntryUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_premium_user),
 ) -> MapEntryUpdateResponse:
     profile = get_or_create_profile(db, current_user)
     try:
@@ -333,7 +353,7 @@ def change_map_entry(
 def remove_map_entry(
     entry_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_premium_user),
 ) -> MapEntryDeleteResponse:
     profile = get_or_create_profile(db, current_user)
     try:
@@ -352,7 +372,7 @@ def change_practice_status(
     entry_id: str,
     payload: PracticeUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_premium_user),
 ) -> PracticeUpdateResponse:
     profile = get_or_create_profile(db, current_user)
     try:

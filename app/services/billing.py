@@ -13,7 +13,6 @@ from app.models.billing import BillingSubscription, ProcessedStripeEvent
 from app.models.user import User
 from app.schemas.billing import SubscriptionStatus
 
-
 PREMIUM_STATUSES = {
     SubscriptionStatus.ACTIVE,
     SubscriptionStatus.TRIALING,
@@ -182,6 +181,12 @@ def has_premium_access(
     return subscription_has_premium_access(get_subscription(db, user), now=now)
 
 
+def has_premium_feature_access(db: Session, user: User) -> bool:
+    """Allow a development bypass while requiring a paid state in production."""
+
+    return not settings.premium_features_enabled or has_premium_access(db, user)
+
+
 def normalize_subscription(
     subscription: BillingSubscription | None,
     *,
@@ -189,6 +194,7 @@ def normalize_subscription(
 ) -> dict[str, Any]:
     status = normalized_status(subscription.status if subscription else None)
     premium = subscription_has_premium_access(subscription, now=now)
+    premium_feature_access = not settings.premium_features_enabled or premium
     plan = "free"
     if premium:
         monthly_price_id = _configured(settings.stripe_price_monthly)
@@ -212,6 +218,12 @@ def normalize_subscription(
     return {
         "status": status,
         "premium": premium,
+        "my_map_access": premium_feature_access,
+        "chat_daily_limit": (
+            settings.rate_limit_llm_user_per_day
+            if premium_feature_access
+            else settings.rate_limit_llm_free_user_per_day
+        ),
         "plan": plan,
         "cancel_at_period_end": bool(subscription and subscription.cancel_at_period_end),
         "current_period_end": subscription.current_period_end if subscription else None,

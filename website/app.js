@@ -124,6 +124,7 @@ const conversationView = document.querySelector("#conversation-view");
 const mapView = document.querySelector("#map-view");
 const chatWorkspaceButton = document.querySelector("#chat-workspace-button");
 const mapWorkspaceButton = document.querySelector("#map-workspace-button");
+const mapPlanBadge = document.querySelector("#map-plan-badge");
 const mapSidebarToggle = document.querySelector("#map-sidebar-toggle");
 const mapContent = document.querySelector("#map-content");
 const addTopicButton = document.querySelector("#add-topic-button");
@@ -173,6 +174,7 @@ const stripeCancelStatus = document.querySelector("#stripe-cancel-status");
 const confirmStripeCancel = document.querySelector("#confirm-stripe-cancel");
 const lensToggle = document.querySelector("#lens-toggle");
 const lensPanel = document.querySelector("#lens-panel");
+const chatPlanNote = document.querySelector("#chat-plan-note");
 
 const MAP_CATEGORY_LABELS = {
   inherited_script: "Inherited script",
@@ -466,8 +468,14 @@ async function showChat() {
   chatView.classList.remove("hidden");
   document.title = "FeelY | Conversations";
   const requestedView = new URLSearchParams(window.location.search).get("view");
+  await loadSubscription();
+  await Promise.all([loadUser(), loadChats()]);
+  if (hasMyMapAccess()) {
+    await loadMap();
+  } else {
+    renderMap();
+  }
   switchWorkspace(requestedView === "map" ? "map" : "chat");
-  await Promise.all([loadUser(), loadMap(), loadChats()]);
   startPolling();
   await handleCheckoutReturn();
   await handleAccountReturn(requestedView);
@@ -533,7 +541,42 @@ async function loadUser() {
   renderUser();
 }
 
+function freeSubscriptionState() {
+  return {
+    status: "none",
+    plan: "free",
+    premium: false,
+    my_map_access: false,
+    chat_daily_limit: 10,
+    cancel_at_period_end: false,
+    current_period_end: null,
+    billing_available: false,
+    available_plans: [],
+    management_available: false,
+    can_resume: false,
+  };
+}
+
+function hasMyMapAccess() {
+  return Boolean(state.subscription?.my_map_access);
+}
+
+async function loadSubscription() {
+  try {
+    state.subscription = await api("/billing/subscription", { headers: authHeaders() });
+  } catch (error) {
+    if (error instanceof ApiError && [401, 403].includes(error.status)) throw error;
+    state.subscription = freeSubscriptionState();
+  }
+  renderSubscription();
+}
+
 async function loadMap() {
+  if (!hasMyMapAccess()) {
+    state.map = null;
+    renderMap();
+    return;
+  }
   state.map = await api("/users/me/map", { headers: authHeaders() });
   renderMap();
 }
@@ -568,16 +611,7 @@ function renderAccountDialog() {
 }
 
 function renderSubscription() {
-  const subscription = state.subscription || {
-    plan: "free",
-    premium: false,
-    cancel_at_period_end: false,
-    current_period_end: null,
-    billing_available: false,
-    available_plans: [],
-    management_available: false,
-    can_resume: false,
-  };
+  const subscription = state.subscription || freeSubscriptionState();
   const planLabels = {
     free: "Free",
     monthly: "Premium monthly",
@@ -646,6 +680,28 @@ function renderSubscription() {
     cancelableStatuses.includes(subscription.status) &&
     !subscription.cancel_at_period_end
   );
+  renderPremiumAccess();
+}
+
+function renderPremiumAccess() {
+  const mapAccess = hasMyMapAccess();
+  const dailyLimit = state.subscription?.chat_daily_limit || 10;
+  mapPlanBadge.hidden = false;
+  mapPlanBadge.textContent = mapAccess ? "Premium" : "Unlock";
+  mapPlanBadge.classList.toggle("active", mapAccess);
+  mapWorkspaceButton.classList.toggle("premium-locked", !mapAccess);
+  mapWorkspaceButton.title = mapAccess ? "Open My Map" : "My Map is included with Premium";
+  addTopicButton.hidden = !mapAccess;
+  chatPlanNote.textContent = mapAccess
+    ? `Premium · up to ${dailyLimit} messages per day`
+    : `Free plan · ${dailyLimit} messages per day`;
+
+  if (!mapAccess) {
+    state.map = null;
+    renderTopic(null);
+    renderMapSuggestion(null);
+    if (!mapView.classList.contains("hidden")) renderMap();
+  }
 }
 
 function formatBillingDate(value) {
@@ -698,6 +754,7 @@ async function handleCheckoutReturn() {
       state.subscription = subscription;
       if (subscription.premium) {
         renderSubscription();
+        await loadMap();
         showBillingResult("Payment successful. Your Premium subscription is active.", "success");
         return;
       }
@@ -736,6 +793,7 @@ async function refreshSubscriptionAfterPortalReturn() {
     await new Promise((resolve) => window.setTimeout(resolve, delay));
     state.subscription = await api("/billing/subscription", { headers: authHeaders() });
     renderSubscription();
+    if (hasMyMapAccess()) await loadMap();
   }
 }
 
@@ -1208,6 +1266,7 @@ function appendStreamingText(bubble, text) {
 }
 
 function renderTopic(topic) {
+  if (!hasMyMapAccess()) topic = null;
   state.pendingTopic = topic;
   topicCard.classList.toggle("hidden", !topic);
   if (!topic) {
@@ -1218,6 +1277,7 @@ function renderTopic(topic) {
 }
 
 function renderMapSuggestion(suggestion) {
+  if (!hasMyMapAccess()) suggestion = null;
   state.pendingMapSuggestion = suggestion;
   mapSuggestionCard.classList.toggle("hidden", !suggestion);
   if (!suggestion) {
@@ -1318,7 +1378,23 @@ function upsertChat(chat) {
 function renderInlineError(error) {
   const bubble = document.createElement("article");
   bubble.className = "message assistant";
-  bubble.textContent = error instanceof Error ? error.message : String(error);
+  const message = error instanceof Error ? error.message : String(error);
+  bubble.textContent = message;
+  const isFreeLimit =
+    !hasMyMapAccess() &&
+    error instanceof ApiError &&
+    error.status === 429 &&
+    message.toLowerCase().includes("free messages");
+  if (isFreeLimit) {
+    const upgradeButton = document.createElement("button");
+    upgradeButton.type = "button";
+    upgradeButton.className = "message-upgrade-button";
+    upgradeButton.textContent = "See Premium";
+    upgradeButton.addEventListener("click", () =>
+      openAccountDialog().catch(renderInlineError),
+    );
+    bubble.append(upgradeButton);
+  }
   messages.append(bubble);
   messages.scrollTop = messages.scrollHeight;
 }
@@ -1429,7 +1505,13 @@ function switchWorkspace(view) {
   mapWorkspaceButton.setAttribute("aria-selected", String(showMap));
   document.title = showMap ? "My Map | FeelY" : `${chatTitle.textContent} | FeelY`;
   closeSidebar();
-  if (showMap) loadMap().catch(renderInlineError);
+  if (showMap) {
+    if (hasMyMapAccess()) {
+      loadMap().catch(renderInlineError);
+    } else {
+      renderMap();
+    }
+  }
 }
 
 function createMapEntryElement(entry) {
@@ -2106,9 +2188,63 @@ function createConceptDetails(node) {
   return panel;
 }
 
+function renderMapPaywall() {
+  const card = document.createElement("section");
+  card.className = "map-paywall";
+
+  const badge = document.createElement("span");
+  badge.className = "map-paywall-badge";
+  badge.textContent = "Premium";
+
+  const title = document.createElement("h3");
+  title.textContent = "Turn conversations into your personal map";
+
+  const copy = document.createElement("p");
+  copy.textContent =
+    "My Map connects the topics, observations, values, and practices you choose to keep.";
+
+  const benefits = document.createElement("ul");
+  [
+    "See recurring themes across conversations",
+    "Keep useful insights organized in one visual space",
+    "Turn reflection into practices you can revisit",
+  ].forEach((benefit) => {
+    const item = document.createElement("li");
+    item.textContent = benefit;
+    benefits.append(item);
+  });
+
+  const actions = document.createElement("div");
+  actions.className = "map-paywall-actions";
+  const primary = document.createElement("button");
+  primary.type = "button";
+  primary.className = "primary-button";
+  const monthlyAvailable = state.subscription?.available_plans?.includes("monthly");
+  primary.textContent = monthlyAvailable ? "Unlock My Map" : "View Premium";
+  primary.addEventListener("click", () => {
+    const request = monthlyAvailable
+      ? startSubscriptionCheckout("monthly")
+      : openAccountDialog();
+    request.catch(renderInlineError);
+  });
+
+  const back = document.createElement("button");
+  back.type = "button";
+  back.className = "secondary-button";
+  back.textContent = "Continue with chat";
+  back.addEventListener("click", () => switchWorkspace("chat"));
+  actions.append(primary, back);
+  card.append(badge, title, copy, benefits, actions);
+  mapContent.append(card);
+}
+
 function renderMap() {
   mapContent.replaceChildren();
 
+  if (!hasMyMapAccess()) {
+    renderMapPaywall();
+    return;
+  }
 
   const map = state.map || { topic_spaces: [], unassigned_entries: [] };
   const spaces = map.topic_spaces || [];
