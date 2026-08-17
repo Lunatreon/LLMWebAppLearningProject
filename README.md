@@ -212,8 +212,9 @@ forces the 4B chat model onto CPU, while `OLLAMA_TOPIC_NUM_GPU=999` lets Ollama
 offload every possible layer of the 2B topic model to GPU. `OLLAMA_KEEP_ALIVE=-1`
 keeps both models resident until Ollama stops, and startup prewarm loads both.
 `OLLAMA_CHAT_MODEL` and `OLLAMA_TOPIC_MODEL` fall back to `OLLAMA_MODEL` when empty.
-The website uses the streaming message endpoint to show a live connection and
-elapsed generation status while it waits for Ollama's structured response.
+The website uses the streaming message endpoint to show connection and elapsed
+status first, then renders the assistant message as Ollama generates it. The
+profile and map fields in Ollama's structured response remain server-side.
 `OLLAMA_KEEP_ALIVE` keeps the models in memory between messages to avoid repeated
 cold starts. `OLLAMA_PREWARM` loads them in the background when FastAPI starts, so
 the first user is less likely to pay the model-load delay. Smaller context and

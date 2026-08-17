@@ -1185,6 +1185,28 @@ function showWaitingMessage() {
   return bubble;
 }
 
+function appendStreamingText(bubble, text) {
+  if (!text) return;
+
+  let content = bubble.querySelector(".streaming-content");
+  if (!content) {
+    bubble.classList.remove("waiting-message");
+    bubble.classList.add("streaming-message");
+    bubble.removeAttribute("role");
+    bubble.removeAttribute("aria-label");
+
+    content = document.createElement("span");
+    content.className = "streaming-content";
+    const cursor = document.createElement("span");
+    cursor.className = "streaming-cursor";
+    cursor.setAttribute("aria-hidden", "true");
+    bubble.replaceChildren(content, cursor);
+  }
+
+  content.append(document.createTextNode(text));
+  messages.scrollTop = messages.scrollHeight;
+}
+
 function renderTopic(topic) {
   state.pendingTopic = topic;
   topicCard.classList.toggle("hidden", !topic);
@@ -1248,6 +1270,8 @@ async function sendMessage(event) {
         const elapsed = event.elapsed_seconds ? ` - ${event.elapsed_seconds}s` : "";
         waitingLabel.textContent = `${event.message}${elapsed}`;
         messages.scrollTop = messages.scrollHeight;
+      } else if (event.type === "text_delta" && typeof event.text === "string") {
+        appendStreamingText(waitingMessage, event.text);
       } else if (event.type === "result") {
         response = event.data;
       } else if (event.type === "error") {

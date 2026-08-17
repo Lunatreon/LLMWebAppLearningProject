@@ -27,15 +27,19 @@ from app.schemas.llm import (
     TopicConfirmationResponse,
     TopicSuggestionResponse,
 )
-from app.services.llm import get_chat_llm_client, get_topic_llm_client
+from app.services.llm import (
+    TextChunkCallback,
+    get_chat_llm_client,
+    get_topic_llm_client,
+)
 from app.services.pattern_recognition import ChatAnalyser
 from app.services.self_authorship import (
     add_map_entry,
     create_or_link_topic_space,
     find_topic_space_for_chat,
     merge_llm_profile,
-    record_conversation_memory,
     read_map,
+    record_conversation_memory,
 )
 
 router = APIRouter()
@@ -492,6 +496,7 @@ async def process_llm_message(
     background_tasks: BackgroundTasks,
     db: Session,
     current_user: User,
+    on_text_chunk: TextChunkCallback | None = None,
 ) -> LLMResponse:
     enforce_rate_limit(
         f"llm-minute:user:{current_user.id}",
@@ -509,12 +514,20 @@ async def process_llm_message(
     profile = get_or_create_profile(db, current_user)
     chat_session = get_or_create_chat_session(db, current_user, payload.chat_id)
 
-    chat_result = await get_chat_llm_client().respond(
-        user_input=payload.input_text,
-        profile=profile.data or {},
-        chat_info=chat_session.info or {},
-        chat_id=chat_session.chat_id,
-    )
+    chat_client = get_chat_llm_client()
+    chat_request = {
+        "user_input": payload.input_text,
+        "profile": profile.data or {},
+        "chat_info": chat_session.info or {},
+        "chat_id": chat_session.chat_id,
+    }
+    if on_text_chunk is None:
+        chat_result = await chat_client.respond(**chat_request)
+    else:
+        chat_result = await chat_client.respond(
+            **chat_request,
+            on_text_chunk=on_text_chunk,
+        )
 
     profile.data = record_conversation_memory(
         merge_llm_profile(profile.data, chat_result.profile),
@@ -586,7 +599,7 @@ async def stream_message_to_llm(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> StreamingResponse:
-    """Acknowledge generation immediately and stream progress until the result is ready."""
+    """Stream generation status, assistant text deltas, and the saved result."""
 
     user_id = current_user.id
     stream_session_factory = sessionmaker(
@@ -609,16 +622,32 @@ async def stream_message_to_llm(
             ) + "\n"
             return
 
+        text_chunks: asyncio.Queue[str] = asyncio.Queue(maxsize=100)
+
+        async def collect_text_chunk(chunk: str) -> None:
+            if chunk:
+                await text_chunks.put(chunk)
+
         task = asyncio.create_task(
-            process_llm_message(payload, background_tasks, stream_db, stream_user)
+            process_llm_message(
+                payload,
+                background_tasks,
+                stream_db,
+                stream_user,
+                on_text_chunk=collect_text_chunk,
+            )
         )
         elapsed = 0
+        has_streamed_text = False
         try:
-            while not task.done():
+            while not task.done() or not text_chunks.empty():
                 try:
-                    result = await asyncio.wait_for(asyncio.shield(task), timeout=1.0)
-                    break
+                    chunk = await asyncio.wait_for(text_chunks.get(), timeout=1.0)
+                    has_streamed_text = True
+                    yield json.dumps({"type": "text_delta", "text": chunk}) + "\n"
                 except asyncio.TimeoutError:
+                    if task.done() or has_streamed_text:
+                        continue
                     elapsed += 1
                     yield json.dumps(
                         {
@@ -627,8 +656,7 @@ async def stream_message_to_llm(
                             "elapsed_seconds": elapsed,
                         }
                     ) + "\n"
-            else:
-                result = await task
+            result = await task
             yield json.dumps({"type": "result", "data": result.model_dump(mode="json")}) + "\n"
         except HTTPException as exc:
             stream_db.rollback()

@@ -4,7 +4,7 @@ from typing import Any
 import httpx
 from fastapi import HTTPException, Request, status
 
-from app.core.config import settings
+from app.core.config import TURNSTILE_TEST_SECRET_KEYS, settings
 from app.core.rate_limit import client_ip
 
 
@@ -68,16 +68,29 @@ def verify_registration_captcha(token: str | None, request: Request) -> None:
             detail="Verification service is unavailable. Please try again.",
         ) from exc
 
-    if not turnstile_succeeded(payload, expected_action=settings.turnstile_action):
+    uses_test_secret = settings.turnstile_secret_key.strip() in TURNSTILE_TEST_SECRET_KEYS
+    if not turnstile_succeeded(
+        payload,
+        expected_action=settings.turnstile_action,
+        allow_missing_action=uses_test_secret,
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Verification failed. Please try again.",
         )
 
 
-def turnstile_succeeded(payload: Any, *, expected_action: str) -> bool:
+def turnstile_succeeded(
+    payload: Any,
+    *,
+    expected_action: str,
+    allow_missing_action: bool = False,
+) -> bool:
+    if not isinstance(payload, dict) or payload.get("success") is not True:
+        return False
+
+    action = payload.get("action")
     return (
-        isinstance(payload, dict)
-        and payload.get("success") is True
-        and payload.get("action") == expected_action
+        action == expected_action
+        or (allow_missing_action and not action)
     )

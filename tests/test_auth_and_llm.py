@@ -6,22 +6,23 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
+from app.api.routes import auth as auth_routes
 from app.api.routes.llm import (
     remember_map_suggestion_event,
     should_surface_map_suggestion,
 )
-from app.api.routes import auth as auth_routes
 from app.core import captcha as captcha_module
 from app.core.config import settings
 from app.main import create_app
 from app.services.llm import (
+    CHAT_SYSTEM_PROMPT,
     AnthropicChatLLMClient,
     AnthropicTopicLLMClient,
-    CHAT_SYSTEM_PROMPT,
     LocalChatLLMClient,
     LocalTopicLLMClient,
     OllamaChatLLMClient,
     OllamaTopicLLMClient,
+    assistant_message_prefix_from_json,
     chat_result_from_payload,
     focused_chat_context,
     focused_profile_context,
@@ -259,8 +260,11 @@ def test_llm_stream_acknowledges_work_and_returns_result(client):
     assert response.headers["content-type"].startswith("application/x-ndjson")
     events = [json.loads(line) for line in response.text.splitlines()]
     assert events[0] == {"type": "status", "message": "Connected to FeelY"}
+    streamed_text = "".join(
+        event["text"] for event in events if event["type"] == "text_delta"
+    )
     assert events[-1]["type"] == "result"
-    assert events[-1]["data"]["assistant_message"]
+    assert streamed_text == events[-1]["data"]["assistant_message"]
 
 
 def test_registration_rejects_filled_honeypot(client):
@@ -310,16 +314,21 @@ def test_registration_accepts_verified_captcha_token(client, monkeypatch):
             return None
 
         def post(self, url, data):
-            assert data["secret"] == "test-secret-key"
+            assert data["secret"] == "1x0000000000000000000000000000000AA"
             assert data["response"] == "verified-token"
             return SimpleNamespace(
                 raise_for_status=lambda: None,
-                json=lambda: {"success": True, "action": "register"},
+                # Cloudflare dummy tokens currently omit the action field.
+                json=lambda: {"success": True},
             )
 
     monkeypatch.setattr(settings, "captcha_enabled", True)
     monkeypatch.setattr(settings, "turnstile_site_key", "test-site-key")
-    monkeypatch.setattr(settings, "turnstile_secret_key", "test-secret-key")
+    monkeypatch.setattr(
+        settings,
+        "turnstile_secret_key",
+        "1x0000000000000000000000000000000AA",
+    )
     monkeypatch.setattr(captcha_module.httpx, "Client", SuccessfulTurnstileClient)
 
     config_response = client.get("/api/v1/auth/captcha/config")
@@ -353,6 +362,15 @@ def test_captcha_rejects_a_token_for_another_action():
     assert not captcha_module.turnstile_succeeded(
         {"success": True, "action": "login"},
         expected_action="register",
+    )
+    assert not captcha_module.turnstile_succeeded(
+        {"success": True},
+        expected_action="register",
+    )
+    assert captcha_module.turnstile_succeeded(
+        {"success": True},
+        expected_action="register",
+        allow_missing_action=True,
     )
 
 
@@ -1217,6 +1235,50 @@ class RecordingOllamaHttpClient:
         return OllamaResponse(self.response_payload)
 
 
+class OllamaStreamResponse:
+    is_error = False
+
+    def __init__(self, generated_chunks):
+        self.generated_chunks = generated_chunks
+
+    async def aread(self):
+        return b""
+
+    def raise_for_status(self):
+        return None
+
+    async def aiter_lines(self):
+        for index, chunk in enumerate(self.generated_chunks):
+            yield json.dumps(
+                {
+                    "message": {"role": "assistant", "content": chunk},
+                    "done": index == len(self.generated_chunks) - 1,
+                }
+            )
+
+
+class OllamaStreamContext:
+    def __init__(self, response):
+        self.response = response
+
+    async def __aenter__(self):
+        return self.response
+
+    async def __aexit__(self, _exc_type, _exc, _traceback):
+        return None
+
+
+class RecordingOllamaStreamHttpClient:
+    def __init__(self, generated_chunks):
+        self.generated_chunks = generated_chunks
+        self.requests = []
+        self.base_url = "http://127.0.0.1:11434"
+
+    def stream(self, path, **kwargs):
+        self.requests.append((path, kwargs))
+        return OllamaStreamContext(OllamaStreamResponse(self.generated_chunks))
+
+
 def make_ollama_client(client_class, response_payload):
     client = object.__new__(client_class)
     client.client = RecordingOllamaHttpClient(response_payload)
@@ -1284,6 +1346,57 @@ def test_ollama_clients_use_local_chat_api_and_structured_json_contract():
     assert topic_body["format"]["required"] == ["topic", "description"]
     assert topic_body["options"]["temperature"] == 0.2
     assert topic_body["options"]["num_gpu"] == 999
+
+
+def test_partial_json_extractor_only_returns_decoded_assistant_text():
+    partial = '{"profile":{},"assistant_message":"Line one\\nEmoji: \\ud83d'
+    complete = partial + '\\ude42","map_suggestion":null}'
+    nested_decoy = (
+        '{"profile":{"note":"\\\"assistant_message\\\":\\\"private\\\""},'
+        '"assistant_message":"Visible reply'
+    )
+
+    assert assistant_message_prefix_from_json(partial) == "Line one\nEmoji: "
+    assert assistant_message_prefix_from_json(complete) == "Line one\nEmoji: 🙂"
+    assert assistant_message_prefix_from_json(nested_decoy) == "Visible reply"
+
+
+def test_ollama_chat_streams_only_assistant_text_from_structured_response():
+    assistant_message = "The walk helped.\nWhat changed afterward? 🙂"
+    generated_json = json.dumps(
+        {
+            "assistant_message": assistant_message,
+            "profile": {"message_count": 2},
+            "map_suggestion": None,
+        }
+    )
+    generated_chunks = [
+        generated_json[index : index + 7]
+        for index in range(0, len(generated_json), 7)
+    ]
+    chat_client = make_ollama_client(OllamaChatLLMClient, {})
+    chat_client.client = RecordingOllamaStreamHttpClient(generated_chunks)
+    visible_chunks = []
+
+    async def collect_text(chunk):
+        visible_chunks.append(chunk)
+
+    result = asyncio.run(
+        chat_client.respond(
+            "Walking helped me reset.",
+            {"message_count": 1},
+            {"message_count": 1, "messages": []},
+            "chat-stream",
+            on_text_chunk=collect_text,
+        )
+    )
+
+    assert "".join(visible_chunks) == assistant_message
+    assert result.assistant_message == assistant_message
+    assert all("profile" not in chunk for chunk in visible_chunks)
+    stream_path, stream_request = chat_client.client.requests[0]
+    assert stream_path == "/api/chat"
+    assert stream_request["json"]["stream"] is True
 
 
 def test_provider_factories_can_select_ollama_per_role(monkeypatch):

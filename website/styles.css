@@ -825,6 +825,16 @@ textarea:focus {
   animation-delay: 320ms;
 }
 
+.streaming-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 4px;
+  background: var(--lavender);
+  vertical-align: -0.12em;
+  animation: streaming-cursor-pulse 0.9s ease-in-out infinite;
+}
+
 @keyframes waiting-pulse {
   0%,
   60%,
@@ -839,10 +849,25 @@ textarea:focus {
   }
 }
 
+@keyframes streaming-cursor-pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .waiting-dots span {
     animation: none;
     opacity: 0.72;
+  }
+
+  .streaming-cursor {
+    animation: none;
   }
 
   .map-concept-layout,

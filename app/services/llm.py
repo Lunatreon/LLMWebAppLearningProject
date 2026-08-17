@@ -3,6 +3,8 @@ import json
 import logging
 import re
 from collections import Counter
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from time import monotonic
 from typing import Any, NoReturn, Protocol
@@ -13,9 +15,9 @@ from fastapi import HTTPException, status
 from app.core.config import settings
 from app.services.self_authorship import LLM_PROTECTED_PROFILE_FIELDS
 
-
 logger = logging.getLogger(__name__)
 ollama_generation_lock = asyncio.Lock()
+TextChunkCallback = Callable[[str], Awaitable[None]]
 
 
 RECENT_CHAT_MESSAGE_LIMIT = 6
@@ -332,6 +334,8 @@ class ChatLLMClient(Protocol):
         profile: dict[str, Any],
         chat_info: dict[str, Any],
         chat_id: str,
+        *,
+        on_text_chunk: TextChunkCallback | None = None,
     ) -> ChatLLMResult:
         """Return the direct chat response and complete updated user profile."""
 
@@ -355,6 +359,8 @@ class LocalChatLLMClient:
         profile: dict[str, Any],
         chat_info: dict[str, Any],
         chat_id: str,
+        *,
+        on_text_chunk: TextChunkCallback | None = None,
     ) -> ChatLLMResult:
         updated_profile = dict(profile or {})
         updated_profile["last_user_message"] = user_input
@@ -366,6 +372,8 @@ class LocalChatLLMClient:
         updated_profile["recent_messages"] = recent_messages[-10:]
 
         assistant_message = self.local_response(user_input, chat_info)
+        if on_text_chunk is not None:
+            await on_text_chunk(assistant_message)
         return ChatLLMResult(
             assistant_message=assistant_message,
             profile=updated_profile,
@@ -825,6 +833,8 @@ class OpenAIChatLLMClient(OpenAIBaseClient):
         profile: dict[str, Any],
         chat_info: dict[str, Any],
         chat_id: str,
+        *,
+        on_text_chunk: TextChunkCallback | None = None,
     ) -> ChatLLMResult:
         response = await self.client.chat.completions.create(
             model=self.model,
@@ -840,7 +850,12 @@ class OpenAIChatLLMClient(OpenAIBaseClient):
                 },
             ],
         )
-        return chat_result_from_payload(parse_json_response(response.choices[0].message.content))
+        result = chat_result_from_payload(
+            parse_json_response(response.choices[0].message.content)
+        )
+        if on_text_chunk is not None:
+            await on_text_chunk(result.assistant_message)
+        return result
 
 
 class OpenAITopicLLMClient(OpenAIBaseClient):
@@ -893,6 +908,8 @@ class AnthropicChatLLMClient(AnthropicBaseClient):
         profile: dict[str, Any],
         chat_info: dict[str, Any],
         chat_id: str,
+        *,
+        on_text_chunk: TextChunkCallback | None = None,
     ) -> ChatLLMResult:
         response = await self.client.messages.create(
             model=self.model,
@@ -905,9 +922,12 @@ class AnthropicChatLLMClient(AnthropicBaseClient):
                 }
             ],
         )
-        return chat_result_from_payload(
+        result = chat_result_from_payload(
             parse_json_response(self.response_text(response))
         )
+        if on_text_chunk is not None:
+            await on_text_chunk(result.assistant_message)
+        return result
 
 
 class AnthropicTopicLLMClient(AnthropicBaseClient):
@@ -964,6 +984,49 @@ class OllamaBaseClient:
         ) as client:
             return await client.post(path, json=payload)
 
+    @asynccontextmanager
+    async def stream(
+        self,
+        path: str,
+        payload: dict[str, Any],
+    ) -> AsyncIterator[httpx.Response]:
+        if self.client is not None:
+            async with self.client.stream(path, json=payload) as response:
+                yield response
+            return
+        async with httpx.AsyncClient(
+            base_url=self.base_url,
+            timeout=self.timeout_seconds,
+        ) as client, client.stream("POST", path, json=payload) as response:
+            yield response
+
+    def chat_request_body(
+        self,
+        system_prompt: str,
+        user_payload: str,
+        response_schema: dict[str, Any],
+        temperature: float,
+        *,
+        stream: bool,
+    ) -> dict[str, Any]:
+        return {
+            "model": self.model,
+            "stream": stream,
+            "think": False,
+            "keep_alive": settings.ollama_keep_alive,
+            "format": response_schema,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_payload},
+            ],
+            "options": {
+                "num_ctx": self.context_window,
+                "num_predict": self.max_tokens,
+                "num_gpu": self.num_gpu,
+                "temperature": temperature,
+            },
+        }
+
     async def request_json(
         self,
         system_prompt: str,
@@ -977,23 +1040,13 @@ class OllamaBaseClient:
             async with ollama_generation_lock:
                 response = await self.post(
                     "/api/chat",
-                    {
-                    "model": self.model,
-                    "stream": False,
-                    "think": False,
-                    "keep_alive": settings.ollama_keep_alive,
-                    "format": response_schema,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_payload},
-                    ],
-                    "options": {
-                        "num_ctx": self.context_window,
-                        "num_predict": self.max_tokens,
-                        "num_gpu": self.num_gpu,
-                        "temperature": temperature,
-                    },
-                    },
+                    self.chat_request_body(
+                        system_prompt,
+                        user_payload,
+                        response_schema,
+                        temperature,
+                        stream=False,
+                    ),
                 )
             response.raise_for_status()
         except httpx.ConnectError as exc:
@@ -1041,6 +1094,93 @@ class OllamaBaseClient:
         content = message.get("content") if isinstance(message, dict) else None
         return parse_json_response(content)
 
+    async def request_json_stream(
+        self,
+        system_prompt: str,
+        user_payload: str,
+        response_schema: dict[str, Any],
+        temperature: float,
+        on_text_chunk: TextChunkCallback,
+    ) -> tuple[dict[str, Any], str]:
+        """Stream Ollama NDJSON while exposing only the assistant text field."""
+
+        started_at = monotonic()
+        generated_json = ""
+        emitted_text = ""
+        stream_finished = False
+        try:
+            # Ollama can stream its structured JSON a fragment at a time. Keep
+            # the full JSON private and emit only the decoded assistant message.
+            async with ollama_generation_lock, self.stream(
+                "/api/chat",
+                self.chat_request_body(
+                    system_prompt,
+                    user_payload,
+                    response_schema,
+                    temperature,
+                    stream=True,
+                ),
+            ) as response:
+                if response.is_error:
+                    await response.aread()
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line.strip():
+                        continue
+                    try:
+                        event = json.loads(line)
+                    except json.JSONDecodeError:
+                        raise_bad_gateway("Ollama returned an invalid stream event")
+                    if not isinstance(event, dict):
+                        raise_bad_gateway("Ollama returned an unexpected stream event")
+                    if isinstance(event.get("error"), str):
+                        raise_bad_gateway(f"Ollama request failed: {event['error']}")
+
+                    message = event.get("message")
+                    content = message.get("content") if isinstance(message, dict) else None
+                    if isinstance(content, str):
+                        generated_json += content
+                        visible_text = assistant_message_prefix_from_json(generated_json)
+                        if len(visible_text) > len(emitted_text):
+                            delta = visible_text[len(emitted_text) :]
+                            emitted_text = visible_text
+                            await on_text_chunk(delta)
+                    if event.get("done") is True:
+                        stream_finished = True
+        except httpx.ConnectError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "Could not connect to Ollama. Start Ollama and make sure "
+                    f"it is available at {self.base_url}."
+                ),
+            ) from exc
+        except httpx.TimeoutException as exc:
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail="Ollama took too long to generate a response",
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            detail = ollama_error_detail(exc.response)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Ollama request failed: {detail}",
+            ) from exc
+        except httpx.RequestError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Ollama request failed: {exc}",
+            ) from exc
+
+        if not stream_finished:
+            raise_bad_gateway("Ollama ended the response stream unexpectedly")
+        logger.info(
+            "Ollama model %s completed in %.2fs",
+            self.model,
+            monotonic() - started_at,
+        )
+        return parse_json_response(generated_json), emitted_text
+
 
 class OllamaChatLLMClient(OllamaBaseClient):
     async def respond(
@@ -1049,14 +1189,32 @@ class OllamaChatLLMClient(OllamaBaseClient):
         profile: dict[str, Any],
         chat_info: dict[str, Any],
         chat_id: str,
+        *,
+        on_text_chunk: TextChunkCallback | None = None,
     ) -> ChatLLMResult:
-        payload = await self.request_json(
-            system_prompt=CHAT_SYSTEM_PROMPT,
-            user_payload=chat_request_payload(user_input, profile, chat_info, chat_id),
-            response_schema=CHAT_RESPONSE_SCHEMA,
-            temperature=0.7,
-        )
-        return chat_result_from_payload(payload)
+        request_payload = chat_request_payload(user_input, profile, chat_info, chat_id)
+        emitted_text = ""
+        if on_text_chunk is None:
+            payload = await self.request_json(
+                system_prompt=CHAT_SYSTEM_PROMPT,
+                user_payload=request_payload,
+                response_schema=CHAT_RESPONSE_SCHEMA,
+                temperature=0.7,
+            )
+        else:
+            payload, emitted_text = await self.request_json_stream(
+                system_prompt=CHAT_SYSTEM_PROMPT,
+                user_payload=request_payload,
+                response_schema=CHAT_RESPONSE_SCHEMA,
+                temperature=0.7,
+                on_text_chunk=on_text_chunk,
+            )
+        result = chat_result_from_payload(payload)
+        if on_text_chunk is not None and result.assistant_message.startswith(emitted_text):
+            remaining_text = result.assistant_message[len(emitted_text) :]
+            if remaining_text:
+                await on_text_chunk(remaining_text)
+        return result
 
 
 class OllamaTopicLLMClient(OllamaBaseClient):
@@ -1083,6 +1241,131 @@ def ollama_error_detail(response: httpx.Response) -> str:
     if isinstance(payload, dict) and isinstance(payload.get("error"), str):
         return payload["error"]
     return f"HTTP {response.status_code}"
+
+
+JSON_ESCAPE_CHARACTERS = {
+    '"': '"',
+    "\\": "\\",
+    "/": "/",
+    "b": "\b",
+    "f": "\f",
+    "n": "\n",
+    "r": "\r",
+    "t": "\t",
+}
+
+
+def top_level_json_string_value_start(content: str, field_name: str) -> int | None:
+    """Find a top-level string field without matching text inside nested values."""
+
+    depth = 0
+    index = 0
+    while index < len(content):
+        character = content[index]
+        if character == "{":
+            depth += 1
+            index += 1
+            continue
+        if character == "}":
+            depth = max(0, depth - 1)
+            index += 1
+            continue
+        if character != '"':
+            index += 1
+            continue
+
+        string_start = index
+        index += 1
+        escaped = False
+        while index < len(content):
+            character = content[index]
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                break
+            index += 1
+        if index >= len(content):
+            return None
+
+        string_end = index + 1
+        if depth == 1:
+            after_string = string_end
+            while after_string < len(content) and content[after_string].isspace():
+                after_string += 1
+            if after_string < len(content) and content[after_string] == ":":
+                try:
+                    key = json.loads(content[string_start:string_end])
+                except json.JSONDecodeError:
+                    return None
+                if key == field_name:
+                    value_start = after_string + 1
+                    while value_start < len(content) and content[value_start].isspace():
+                        value_start += 1
+                    if value_start < len(content) and content[value_start] == '"':
+                        return value_start + 1
+                    return None
+        index = string_end
+    return None
+
+
+def assistant_message_prefix_from_json(content: str) -> str:
+    """Decode the complete prefix of assistant_message from partial JSON."""
+
+    value_start = top_level_json_string_value_start(content, "assistant_message")
+    if value_start is None:
+        return ""
+
+    decoded: list[str] = []
+    index = value_start
+    while index < len(content):
+        character = content[index]
+        if character == '"':
+            break
+        if character != "\\":
+            decoded.append(character)
+            index += 1
+            continue
+
+        if index + 1 >= len(content):
+            break
+        escape = content[index + 1]
+        if escape in JSON_ESCAPE_CHARACTERS:
+            decoded.append(JSON_ESCAPE_CHARACTERS[escape])
+            index += 2
+            continue
+        if escape != "u" or index + 6 > len(content):
+            break
+
+        hexadecimal = content[index + 2 : index + 6]
+        try:
+            code_point = int(hexadecimal, 16)
+        except ValueError:
+            break
+        index += 6
+
+        # Wait for the low surrogate before exposing a split Unicode character.
+        if 0xD800 <= code_point <= 0xDBFF:
+            if index + 6 > len(content) or content[index : index + 2] != "\\u":
+                break
+            try:
+                low_surrogate = int(content[index + 2 : index + 6], 16)
+            except ValueError:
+                break
+            if not 0xDC00 <= low_surrogate <= 0xDFFF:
+                break
+            code_point = (
+                0x10000
+                + ((code_point - 0xD800) << 10)
+                + (low_surrogate - 0xDC00)
+            )
+            index += 6
+        elif 0xDC00 <= code_point <= 0xDFFF:
+            break
+        decoded.append(chr(code_point))
+
+    return "".join(decoded)
 
 
 def parse_json_response(content: str | None) -> dict[str, Any]:
