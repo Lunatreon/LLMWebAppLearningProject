@@ -23,6 +23,7 @@ per-user LLM requests, and persistent user profiles.
 ## Documentation
 
 - [Stripe subscription setup](docs/stripe-setup.md)
+- [Administration and editable prompts](docs/admin.md)
 
 See [docs/CODE_GUIDE.md](docs/CODE_GUIDE.md) for a walkthrough of how the code
 works and how to expand the backend with new endpoints, database models, LLM
@@ -59,11 +60,32 @@ Daily start, terminal 2:
 .\.venv\Scripts\python.exe -m http.server 5500 --directory website
 ```
 
-Then open `http://127.0.0.1:5500` for the public FeelY site, or
-`http://127.0.0.1:5500/chat.html` to open the private chat directly.
+Then open `http://127.0.0.1:5500`; the root page redirects directly to
+`http://127.0.0.1:5500/chat.html`.
 
 The API runs at `http://127.0.0.1:8000`.
 Interactive API docs are at `http://127.0.0.1:8000/docs`.
+
+### Administrator login
+
+The administration page uses its own credentials and is not connected to a
+FeelY user account. After creating `.env`, configure or change the administrator
+password from the repository root:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\set_admin_password.py --username admin
+```
+
+Enter the new password twice when prompted. PowerShell does not display the
+characters while you type; this is expected. The password must contain at least
+12 characters. The script updates `ADMIN_USERNAME` and writes only a PBKDF2
+password hash to `ADMIN_PASSWORD_HASH` in `.env`—do not paste the original
+password or invent a hash manually.
+
+Restart Uvicorn after running the command. Then open
+`http://127.0.0.1:5500/admin.html` locally, or
+`https://app.feel-y.com/admin.html` in production, and sign in using the chosen
+username and the original password (not the hash).
 
 ### Important
 
@@ -198,8 +220,8 @@ OLLAMA_CHAT_MODEL="qwen3.5:4b"
 OLLAMA_TOPIC_MODEL="qwen3.5:2b"
 OLLAMA_TIMEOUT_SECONDS=180
 OLLAMA_CONTEXT_WINDOW=2048
-OLLAMA_CHAT_MAX_TOKENS=192
-OLLAMA_TOPIC_MAX_TOKENS=96
+OLLAMA_CHAT_MAX_TOKENS=160
+OLLAMA_TOPIC_MAX_TOKENS=128
 OLLAMA_CHAT_NUM_GPU=0
 OLLAMA_TOPIC_NUM_GPU=999
 OLLAMA_KEEP_ALIVE=-1
@@ -250,8 +272,9 @@ register normally. When enabled, API clients must use conventional
 ### Bot And Abuse Protection
 
 The backend includes lightweight in-memory throttles for public account routes,
-general API traffic, and per-user LLM messages. These are useful for local or
-single-process deployments and can be tuned in `.env`:
+general API traffic, and per-user LLM burst traffic. Daily LLM usage is persisted
+in the database, so restarting the API or deleting a chat does not reset the
+allowance. The limits can be tuned in `.env`:
 
 ```env
 RATE_LIMIT_ENABLED=true
@@ -268,7 +291,8 @@ MAX_REQUEST_BODY_BYTES=128000
 
 Free accounts use the smaller daily chat allowance. Active or trialing Premium
 accounts use the higher fair-use limit, can use saved map insights as chat
-context, receive topic analysis, and can read or edit My Map. These checks are
+context, and can read or edit My Map. Topic suggestions and chat-title confirmation
+are available to every account. These checks are
 enforced by the API; the frontend's locked preview is not the security boundary.
 
 The frontend registration form also sends an invisible honeypot field. Real
@@ -383,20 +407,23 @@ configuration.
 When an authenticated user calls `POST /api/v1/llm/message`, the backend:
 
 1. Loads the user's saved profile and chat info for `chat_id`.
-2. Sends profile data, chat info, and the new `context` to the Chat-LLM.
+2. Sends compact profile data, extractive notes from older turns, the latest exchange,
+   and the new `context` to the Chat-LLM.
 3. Saves the Chat-LLM response, updated profile, and updated chat info.
 4. Returns the chat response to the app or website immediately.
-5. Starts a backend background task that sends the full chat info to the hard-coded analyser.
-6. If enough patterns from `docs/pattern_recognition.txt` match, sends the full chat to the Topic-LLM.
+5. Starts a backend background task that checks the full stored chat with the hard-coded analyser.
+6. If enough patterns from `docs/pattern_recognition.txt` match, sends compact notes and recent
+   user messages to the Topic-LLM.
 7. Saves the Topic-LLM topic and description as a pending topic suggestion.
-8. Lets the frontend poll `GET /api/v1/llm/chats/{chat_id}/topic-suggestion`.
-9. Writes an accepted topic into the user profile through `POST /api/v1/llm/topics/confirm`.
-10. Creates a Topic Space for the accepted topic and connects the current chat.
+8. Returns an existing pending topic immediately and lets the frontend poll
+   `GET /api/v1/llm/chats/{chat_id}/topic-suggestion` for newly generated topics.
+9. Uses an accepted topic as the chat title through `POST /api/v1/llm/topics/confirm`.
+10. For users with My Map access, also creates a Topic Space and connects the current chat.
 11. Optionally proposes one editable My Map entry from the newest user message.
 12. Writes that entry only after explicit user confirmation.
 
 Patterns are an analysis trigger, not a fixed topic taxonomy. The Topic-LLM can
-create its own free-form topic from the user's full conversation. Longer chats
+create its own free-form topic from the compact conversation memory. Longer chats
 that do not match a predefined category can also enter open-topic analysis.
 
 The current request shape is:

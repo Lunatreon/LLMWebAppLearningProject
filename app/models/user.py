@@ -96,3 +96,27 @@ class ChatSession(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="chat_sessions")
+
+
+class DailyLLMUsage(Base):
+    """Persistent per-user message usage so quotas survive process restarts."""
+
+    __tablename__ = "daily_llm_usage"
+    __table_args__ = (
+        UniqueConstraint("user_id", "usage_date", name="uq_daily_llm_usage_user_date"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    usage_date: Mapped[str] = mapped_column(String(10), index=True, nullable=False)
+    message_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+    )

@@ -56,7 +56,19 @@ def create_access_token(subject: str, expires_delta: timedelta | None = None) ->
     expires_at = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
     )
-    payload = {"sub": subject, "exp": expires_at}
+    payload = {"sub": subject, "token_type": "user", "exp": expires_at}
+    return jwt.encode(payload, settings.secret_key, algorithm=TOKEN_ALGORITHM)
+
+
+def create_admin_access_token(username: str) -> str:
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        minutes=settings.admin_access_token_expire_minutes
+    )
+    payload = {
+        "sub": username,
+        "token_type": "admin",
+        "exp": expires_at,
+    }
     return jwt.encode(payload, settings.secret_key, algorithm=TOKEN_ALGORITHM)
 
 

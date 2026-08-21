@@ -8,6 +8,7 @@ from app.api.router import api_router
 from app.core.config import settings
 from app.core.middleware import (
     BasicAuthMiddleware,
+    RejectedCorsPreflightLoggingMiddleware,
     RequestSizeLimitMiddleware,
     SecurityHeadersMiddleware,
 )
@@ -51,7 +52,9 @@ def create_app(init_database: bool = True) -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_origin_regex=(
-            r"^https?://(localhost|127\.0\.0\.1|0\.0\.0\.0|.*\.trycloudflare\.com)(:\d+)?$"
+            r"^(https?://([a-z0-9-]+\.)*(feel-y\.com|selinabernard\.com)"
+            r"|https?://(localhost|127\.0\.0\.1|0\.0\.0\.0|.*\.trycloudflare\.com)"
+            r"(:\d+)?)$"
             if settings.environment.lower() == "local"
             else None
         ),
@@ -59,6 +62,7 @@ def create_app(init_database: bool = True) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(RejectedCorsPreflightLoggingMiddleware)
 
     app.include_router(api_router, prefix=settings.api_v1_prefix)
     return app

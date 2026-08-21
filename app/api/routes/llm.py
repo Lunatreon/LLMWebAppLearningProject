@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
 
@@ -15,7 +15,7 @@ from app.api.dependencies import get_current_user, get_db
 from app.core.config import settings
 from app.core.rate_limit import enforce_rate_limit
 from app.db.session import SessionLocal
-from app.models.user import ChatSession, User, UserProfile
+from app.models.user import ChatSession, DailyLLMUsage, User, UserProfile
 from app.schemas.llm import (
     ChatCreateRequest,
     ChatRead,
@@ -32,6 +32,7 @@ from app.services.llm import (
     TextChunkCallback,
     get_chat_llm_client,
     get_topic_llm_client,
+    update_conversation_summary,
 )
 from app.services.pattern_recognition import ChatAnalyser
 from app.services.self_authorship import (
@@ -69,6 +70,106 @@ MAP_SUGGESTION_TOKEN_PATTERN = re.compile(r"\w+", re.UNICODE)
 
 def current_timestamp() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _message_date(value: Any) -> str | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).date().isoformat()
+
+
+def saved_user_messages_for_date(db: Session, user_id: int, usage_date: str) -> int:
+    """Count saved messages when initializing quotas for existing installations."""
+
+    chat_infos = db.execute(
+        select(ChatSession.info).where(ChatSession.user_id == user_id)
+    ).scalars()
+    return sum(
+        1
+        for info in chat_infos
+        for message in (info or {}).get("messages", [])
+        if message.get("role") == "user"
+        and _message_date(message.get("created_at")) == usage_date
+    )
+
+
+def reserve_daily_message(
+    db: Session,
+    *,
+    user_id: int,
+    daily_limit: int,
+    premium_access: bool,
+) -> str | None:
+    """Reserve one persistent daily message slot and return its UTC date."""
+
+    if not settings.rate_limit_enabled or daily_limit <= 0:
+        return None
+
+    now = datetime.now(timezone.utc)
+    usage_date = now.date().isoformat()
+    usage = db.execute(
+        select(DailyLLMUsage).where(
+            DailyLLMUsage.user_id == user_id,
+            DailyLLMUsage.usage_date == usage_date,
+        )
+    ).scalar_one_or_none()
+    saved_count = saved_user_messages_for_date(db, user_id, usage_date)
+    used_messages = max(usage.message_count if usage else 0, saved_count)
+    if used_messages >= daily_limit:
+        tomorrow = datetime.combine(
+            now.date() + timedelta(days=1),
+            datetime.min.time(),
+            tzinfo=timezone.utc,
+        )
+        retry_after = max(1, int((tomorrow - now).total_seconds()))
+        detail = (
+            "Daily message limit reached. Please try again tomorrow."
+            if premium_access
+            else (
+                f"You have reached today's {daily_limit} free messages. "
+                "Subscribe to Premium for more messages, or continue tomorrow."
+            )
+        )
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=detail,
+            headers={"Retry-After": str(retry_after)},
+        )
+
+    if usage is None:
+        usage = DailyLLMUsage(
+            user_id=user_id,
+            usage_date=usage_date,
+            message_count=used_messages + 1,
+        )
+        db.add(usage)
+    else:
+        usage.message_count = used_messages + 1
+    db.commit()
+    return usage_date
+
+
+def release_daily_message(db: Session, *, user_id: int, usage_date: str | None) -> None:
+    """Return a reserved slot when no assistant response was saved."""
+
+    if usage_date is None:
+        return
+    db.rollback()
+    usage = db.execute(
+        select(DailyLLMUsage).where(
+            DailyLLMUsage.user_id == user_id,
+            DailyLLMUsage.usage_date == usage_date,
+        )
+    ).scalar_one_or_none()
+    if usage is not None and usage.message_count > 0:
+        usage.message_count -= 1
+        db.commit()
 
 
 def is_generic_topic(topic: Any) -> bool:
@@ -221,7 +322,6 @@ def chat_info_for_access(
     visible_info = dict(chat_info or {})
     if not premium_access:
         visible_info.pop("pending_map_suggestion", None)
-        visible_info.pop("pending_topic", None)
         visible_info.pop("topic_space_id", None)
     return visible_info
 
@@ -312,7 +412,12 @@ def append_chat_exchange(
     next_info["last_user_message"] = user_input
     next_info["last_assistant_message"] = assistant_message
     next_info["updated_at"] = now
-    next_info["analysis_status"] = "queued"
+    pending_topic = next_info.get("pending_topic")
+    next_info["analysis_status"] = (
+        "topic_ready"
+        if isinstance(pending_topic, dict) and pending_topic.get("status") == "pending"
+        else "queued"
+    )
     if map_suggestion:
         next_info["pending_map_suggestion"] = map_suggestion
     else:
@@ -372,6 +477,10 @@ async def analyse_chat_for_topic(
             matched_patterns=analysis.matched_patterns,
             topic_hint=analysis.topic_hint,
         )
+        topic_result.description = (
+            f"A recurring theme in this conversation concerning {topic_result.topic.strip()}, "
+            "identified from the user's own messages and offered for the user to confirm or edit."
+        )
 
         accepted_topic_names = {
             normalized_topic(topic)
@@ -426,6 +535,14 @@ async def analyse_chat_for_topic(
             db.commit()
     finally:
         db.close()
+
+
+async def maintain_chat_insights(
+    user_id: int,
+    chat_id: str,
+    session_factory: sessionmaker[Session] = SessionLocal,
+) -> None:
+    await analyse_chat_for_topic(user_id, chat_id, session_factory)
 
 
 @router.get("/chats", response_model=list[ChatRead])
@@ -498,8 +615,6 @@ def read_topic_suggestion(
     chat_session = get_chat_session(db, current_user, chat_id)
     if chat_session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")
-    if not has_premium_feature_access(db, current_user):
-        return TopicSuggestionResponse(suggestion=None)
     pending_topic = (chat_session.info or {}).get("pending_topic")
     if not isinstance(pending_topic, dict) or pending_topic.get("status") != "pending":
         return TopicSuggestionResponse(suggestion=None)
@@ -537,18 +652,11 @@ async def process_llm_message(
         window_seconds=60,
         detail="Too many messages sent too quickly. Please pause for a moment.",
     )
-    enforce_rate_limit(
-        f"llm-day:user:{current_user.id}",
-        max_attempts=daily_limit,
-        window_seconds=86_400,
-        detail=(
-            "Daily message limit reached. Please try again later."
-            if premium_access
-            else (
-                f"You have used today's {daily_limit} free messages. "
-                "Premium unlocks extended chat access and My Map."
-            )
-        ),
+    reserved_usage_date = reserve_daily_message(
+        db,
+        user_id=current_user.id,
+        daily_limit=daily_limit,
+        premium_access=premium_access,
     )
 
     profile = get_or_create_profile(db, current_user)
@@ -567,13 +675,21 @@ async def process_llm_message(
         ),
         "chat_id": chat_session.chat_id,
     }
-    if on_text_chunk is None:
-        chat_result = await chat_client.respond(**chat_request)
-    else:
-        chat_result = await chat_client.respond(
-            **chat_request,
-            on_text_chunk=on_text_chunk,
+    try:
+        if on_text_chunk is None:
+            chat_result = await chat_client.respond(**chat_request)
+        else:
+            chat_result = await chat_client.respond(
+                **chat_request,
+                on_text_chunk=on_text_chunk,
+            )
+    except Exception:
+        release_daily_message(
+            db,
+            user_id=current_user.id,
+            usage_date=reserved_usage_date,
         )
+        raise
 
     profile.data = record_conversation_memory(
         merge_llm_profile(profile.data, chat_result.profile),
@@ -605,6 +721,7 @@ async def process_llm_message(
         assistant_message=chat_result.assistant_message,
         map_suggestion=map_suggestion,
     )
+    next_chat_info = update_conversation_summary(next_chat_info)
     if map_suggestion:
         next_chat_info = remember_map_suggestion_event(
             next_chat_info,
@@ -616,18 +733,17 @@ async def process_llm_message(
     db.refresh(profile)
     db.refresh(chat_session)
 
-    if premium_access:
-        background_session_factory = sessionmaker(
-            autocommit=False,
-            autoflush=False,
-            bind=db.get_bind(),
-        )
-        background_tasks.add_task(
-            analyse_chat_for_topic,
-            current_user.id,
-            chat_session.chat_id,
-            background_session_factory,
-        )
+    background_session_factory = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        bind=db.get_bind(),
+    )
+    background_tasks.add_task(
+        maintain_chat_insights,
+        current_user.id,
+        chat_session.chat_id,
+        background_session_factory,
+    )
 
     return LLMResponse(
         assistant_message=chat_result.assistant_message,
@@ -641,7 +757,7 @@ async def process_llm_message(
             premium_access=premium_access,
         ),
         map_suggestion=map_suggestion,
-        topic_analysis_status="queued" if premium_access else "premium_required",
+        topic_analysis_status="queued",
     )
 
 
@@ -745,11 +861,6 @@ def confirm_topic(
     current_user: User = Depends(get_current_user),
 ) -> TopicConfirmationResponse:
     premium_access = has_premium_feature_access(db, current_user)
-    if payload.accepted and not premium_access:
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail="Premium is required to save topics to My Map.",
-        )
     profile = get_or_create_profile(db, current_user)
     chat_session = get_chat_session(db, current_user, payload.chat_id)
     if chat_session is None:
@@ -760,33 +871,34 @@ def confirm_topic(
     pending_topic = dict(chat_info.get("pending_topic") or {})
 
     if payload.accepted:
-        topics = list(profile_data.get("topics", []))
-        topic_entry = {
-            "topic": payload.topic,
-            "description": payload.description,
-            "chat_id": payload.chat_id,
-            "confirmed_at": current_timestamp(),
-        }
-        if topic_entry not in topics:
-            topics.append(topic_entry)
-        profile_data["topics"] = topics
-        profile_data["last_confirmed_topic"] = topic_entry
-        profile_data, topic_space = create_or_link_topic_space(
-            profile_data,
-            title=payload.topic,
-            description=payload.description,
-            chat_id=payload.chat_id,
-        )
-        profile.data = profile_data
         pending_topic["status"] = "accepted"
-        pending_topic["topic_space_id"] = topic_space["id"]
         chat_info["title"] = payload.topic.strip()[:80]
-        chat_info["topic_space_id"] = topic_space["id"]
-        pending_map_suggestion = chat_info.get("pending_map_suggestion")
-        if isinstance(pending_map_suggestion, dict):
-            pending_map_suggestion["topic_space_id"] = topic_space["id"]
-            pending_map_suggestion["topic_title"] = topic_space["title"]
-            chat_info["pending_map_suggestion"] = pending_map_suggestion
+        if premium_access:
+            topics = list(profile_data.get("topics", []))
+            topic_entry = {
+                "topic": payload.topic,
+                "description": payload.description,
+                "chat_id": payload.chat_id,
+                "confirmed_at": current_timestamp(),
+            }
+            if topic_entry not in topics:
+                topics.append(topic_entry)
+            profile_data["topics"] = topics
+            profile_data["last_confirmed_topic"] = topic_entry
+            profile_data, topic_space = create_or_link_topic_space(
+                profile_data,
+                title=payload.topic,
+                description=payload.description,
+                chat_id=payload.chat_id,
+            )
+            profile.data = profile_data
+            pending_topic["topic_space_id"] = topic_space["id"]
+            chat_info["topic_space_id"] = topic_space["id"]
+            pending_map_suggestion = chat_info.get("pending_map_suggestion")
+            if isinstance(pending_map_suggestion, dict):
+                pending_map_suggestion["topic_space_id"] = topic_space["id"]
+                pending_map_suggestion["topic_title"] = topic_space["title"]
+                chat_info["pending_map_suggestion"] = pending_map_suggestion
         accepted_topic_names = list(chat_info.get("accepted_topic_names", []))
         if payload.topic not in accepted_topic_names:
             accepted_topic_names.append(payload.topic)

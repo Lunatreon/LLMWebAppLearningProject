@@ -21,11 +21,16 @@ class Settings(BaseSettings):
     app_name: str = "FeelY Backend"
     api_v1_prefix: str = "/api/v1"
     environment: str = "local"
+    admin_username: str | None = None
+    admin_password_hash: str | None = None
+    admin_access_token_expire_minutes: int = 120
     secret_key: str = "change-this-secret-before-deploying"
     access_token_expire_minutes: int = 60 * 24
     database_url: str = "sqlite:///./feely.db"
     cors_origins: list[str] = Field(
         default_factory=lambda: [
+            "https://feel-y.com",
+            "https://www.feel-y.com",
             "https://app.feel-y.com",
             "https://dev.feel-y.com",
             "https://selinabernard.com",
@@ -102,12 +107,13 @@ class Settings(BaseSettings):
     ollama_topic_model: str | None = None
     ollama_timeout_seconds: float = 180.0
     ollama_context_window: int = 2048
-    ollama_chat_max_tokens: int = 192
-    ollama_topic_max_tokens: int = 96
+    ollama_chat_max_tokens: int = 160
+    ollama_topic_max_tokens: int = 128
     ollama_chat_num_gpu: int = 0
     ollama_topic_num_gpu: int = 999
     ollama_keep_alive: int = -1
     ollama_prewarm: bool = True
+    prompt_directory: str = "prompts"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

@@ -174,7 +174,8 @@ const stripeCancelStatus = document.querySelector("#stripe-cancel-status");
 const confirmStripeCancel = document.querySelector("#confirm-stripe-cancel");
 const lensToggle = document.querySelector("#lens-toggle");
 const lensPanel = document.querySelector("#lens-panel");
-const chatPlanNote = document.querySelector("#chat-plan-note");
+const chatPlanCopy = document.querySelector("#chat-plan-copy");
+const chatPlanUpgrade = document.querySelector("#chat-plan-upgrade");
 
 const MAP_CATEGORY_LABELS = {
   inherited_script: "Inherited script",
@@ -692,13 +693,13 @@ function renderPremiumAccess() {
   mapWorkspaceButton.classList.toggle("premium-locked", !mapAccess);
   mapWorkspaceButton.title = mapAccess ? "Open My Map" : "My Map is included with Premium";
   addTopicButton.hidden = !mapAccess;
-  chatPlanNote.textContent = mapAccess
-    ? `Premium · up to ${dailyLimit} messages per day`
-    : `Free plan · ${dailyLimit} messages per day`;
+  chatPlanCopy.textContent = mapAccess
+    ? `Premium - up to ${dailyLimit} messages per day.`
+    : `Free plan - ${dailyLimit} messages per day.`;
+  chatPlanUpgrade.hidden = mapAccess;
 
   if (!mapAccess) {
     state.map = null;
-    renderTopic(null);
     renderMapSuggestion(null);
     if (!mapView.classList.contains("hidden")) renderMap();
   }
@@ -729,6 +730,7 @@ function showBillingResult(message, kind = "info", autoDismiss = true) {
 async function handleCheckoutReturn() {
   const url = new URL(window.location.href);
   const checkoutResult = url.searchParams.get("checkout");
+  const checkoutSessionId = url.searchParams.get("session_id");
   if (!checkoutResult) return;
 
   url.searchParams.delete("checkout");
@@ -746,6 +748,23 @@ async function handleCheckoutReturn() {
     "success",
     false,
   );
+  if (checkoutSessionId) {
+    try {
+      state.subscription = await api("/billing/checkout/sync", {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ session_id: checkoutSessionId }),
+      });
+      if (state.subscription.premium) {
+        renderSubscription();
+        await loadMap();
+        showBillingResult("Payment successful. Your Premium subscription is active.", "success");
+        return;
+      }
+    } catch {
+      // Webhook delivery can still complete the synchronization below.
+    }
+  }
   const confirmationDelays = [0, 800, 1600, 3000];
   for (const delay of confirmationDelays) {
     if (delay) await new Promise((resolve) => window.setTimeout(resolve, delay));
@@ -820,6 +839,32 @@ async function startSubscriptionCheckout(plan) {
     body: JSON.stringify({ plan }),
   });
   window.location.assign(response.url);
+}
+
+async function startLimitSubscriptionCheckout(button) {
+  const subscription = state.subscription || freeSubscriptionState();
+  const availablePlans = Array.isArray(subscription.available_plans)
+    ? subscription.available_plans
+    : [];
+  const plan = availablePlans.includes("monthly")
+    ? "monthly"
+    : availablePlans.includes("yearly")
+      ? "yearly"
+      : null;
+
+  if (!subscription.billing_available || !plan) {
+    throw new ApiError("Premium subscriptions are not available right now.", 503);
+  }
+
+  const originalLabel = button.textContent;
+  button.disabled = true;
+  button.textContent = "Opening Stripe...";
+  try {
+    await startSubscriptionCheckout(plan);
+  } finally {
+    button.disabled = false;
+    button.textContent = originalLabel;
+  }
 }
 
 function buildPortalReturnUrl() {
@@ -1033,6 +1078,7 @@ async function loadChat(chatId) {
   chatTitle.textContent = chat.title || "New conversation";
   document.title = `${chat.title || "Conversation"} | FeelY`;
   renderMessages(chat.messages || []);
+  renderTopic(chat.pending_topic || null);
   renderMapSuggestion(chat.pending_map_suggestion || null);
   renderChats();
   closeSidebar();
@@ -1266,7 +1312,6 @@ function appendStreamingText(bubble, text) {
 }
 
 function renderTopic(topic) {
-  if (!hasMyMapAccess()) topic = null;
   state.pendingTopic = topic;
   topicCard.classList.toggle("hidden", !topic);
   if (!topic) {
@@ -1355,7 +1400,7 @@ async function sendMessage(event) {
     renderChats();
     renderMessages(updatedChat.messages);
     renderMapSuggestion(response.map_suggestion || null);
-    renderTopic(null);
+    renderTopic(updatedChat.pending_topic);
     pollTopicSoon();
   } catch (error) {
     waitingMessage.remove();
@@ -1389,9 +1434,9 @@ function renderInlineError(error) {
     const upgradeButton = document.createElement("button");
     upgradeButton.type = "button";
     upgradeButton.className = "message-upgrade-button";
-    upgradeButton.textContent = "See Premium";
+    upgradeButton.textContent = "Subscribe with Stripe";
     upgradeButton.addEventListener("click", () =>
-      openAccountDialog().catch(renderInlineError),
+      startLimitSubscriptionCheckout(upgradeButton).catch(renderInlineError),
     );
     bubble.append(upgradeButton);
   }
@@ -1449,7 +1494,7 @@ async function confirmTopic(accepted) {
       accepted,
     }),
   });
-  await loadMap();
+  if (hasMyMapAccess()) await loadMap();
   await loadChats();
 }
 
@@ -2402,6 +2447,9 @@ sidebarBackdrop.addEventListener("click", closeSidebar);
 chatWorkspaceButton.addEventListener("click", () => switchWorkspace("chat"));
 mapWorkspaceButton.addEventListener("click", () => switchWorkspace("map"));
 messageForm.addEventListener("submit", sendMessage);
+chatPlanUpgrade.addEventListener("click", () =>
+  startLimitSubscriptionCheckout(chatPlanUpgrade).catch(renderInlineError),
+);
 topicAccept.addEventListener("click", () => confirmTopic(true).catch(renderInlineError));
 topicDismiss.addEventListener("click", () => confirmTopic(false).catch(renderInlineError));
 mapSuggestionAccept.addEventListener("click", () =>

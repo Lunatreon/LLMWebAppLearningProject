@@ -1,4 +1,5 @@
 from collections.abc import Generator
+import hmac
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
@@ -13,6 +14,10 @@ from app.models.user import User
 from app.services.billing import has_premium_feature_access
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_v1_prefix}/auth/login")
+admin_oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl=f"{settings.api_v1_prefix}/admin/login",
+    scheme_name="AdminBearer",
+)
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -53,7 +58,9 @@ def get_current_user(
     try:
         payload = decode_access_token(token)
         subject = payload.get("sub")
-        if subject is None:
+        # Tokens created before token types were introduced remain valid, but an
+        # administrator token must never be accepted by the user API.
+        if subject is None or payload.get("token_type") not in (None, "user"):
             raise credentials_error
         user_id = int(subject)
     except (InvalidTokenError, ValueError):
@@ -78,3 +85,30 @@ def get_current_premium_user(
             detail="Premium is required to access My Map.",
         )
     return current_user
+
+
+def get_current_admin(
+    token: str = Depends(admin_oauth2_scheme),
+) -> str:
+    credentials_error = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate administrator credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    configured_username = (settings.admin_username or "").strip()
+    if not configured_username or not settings.admin_password_hash:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Administrator login is not configured.",
+        )
+    try:
+        payload = decode_access_token(token)
+        subject = str(payload.get("sub") or "")
+        if payload.get("token_type") != "admin" or not hmac.compare_digest(
+            subject,
+            configured_username,
+        ):
+            raise credentials_error
+    except InvalidTokenError:
+        raise credentials_error from None
+    return configured_username

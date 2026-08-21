@@ -6,6 +6,7 @@ from collections import Counter
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from pathlib import Path
 from time import monotonic
 from typing import Any, NoReturn, Protocol
 
@@ -20,7 +21,9 @@ ollama_generation_lock = asyncio.Lock()
 TextChunkCallback = Callable[[str], Awaitable[None]]
 
 
-RECENT_CHAT_MESSAGE_LIMIT = 6
+RECENT_CHAT_MESSAGE_LIMIT = 2
+RECENT_TOPIC_USER_MESSAGE_LIMIT = 4
+CONVERSATION_NOTE_EXCERPT_WORD_LIMIT = 36
 LOCAL_FOCUS_WORD_LIMIT = 14
 LOCAL_TOPIC_STOPWORDS = {
     "about",
@@ -279,6 +282,7 @@ def focused_chat_context(chat_info: dict[str, Any]) -> dict[str, Any]:
         "title": chat_info.get("title"),
         "message_count": chat_info.get("message_count", 0),
         "accepted_topic_names": list(chat_info.get("accepted_topic_names", []))[-5:],
+        "conversation_summary": chat_info.get("conversation_summary"),
         "recent_messages": messages[-RECENT_CHAT_MESSAGE_LIMIT:],
     }
 
@@ -299,8 +303,37 @@ def topic_chat_context(chat_info: dict[str, Any]) -> dict[str, Any]:
     return {
         "current_title": chat_info.get("title"),
         "accepted_topic_names": list(chat_info.get("accepted_topic_names", [])),
-        "user_messages": user_messages,
+        "conversation_summary": chat_info.get("conversation_summary"),
+        "user_messages": user_messages[-RECENT_TOPIC_USER_MESSAGE_LIMIT:],
     }
+
+
+def update_conversation_summary(chat_info: dict[str, Any]) -> dict[str, Any]:
+    """Store compact, extractive notes without asking a model to reinterpret the user."""
+
+    updated = dict(chat_info or {})
+    user_messages = [
+        " ".join(str(message.get("content") or "").split())
+        for message in updated.get("messages", [])
+        if isinstance(message, dict) and message.get("role") == "user"
+    ]
+    older_messages = user_messages[:-2]
+    if not older_messages:
+        updated.pop("conversation_summary", None)
+        updated["summary_message_count"] = 0
+        return updated
+
+    candidates = [older_messages[0], *older_messages[-2:]]
+    excerpts: list[str] = []
+    for candidate in candidates:
+        excerpt = " ".join(candidate.split()[:CONVERSATION_NOTE_EXCERPT_WORD_LIMIT])
+        if excerpt and excerpt not in excerpts:
+            excerpts.append(excerpt)
+    updated["conversation_summary"] = "Earlier user statements (verbatim excerpts): " + " | ".join(
+        f'“{excerpt}”' for excerpt in excerpts
+    )
+    updated["summary_message_count"] = max(0, int(updated.get("message_count", 0)) - 2)
+    return updated
 
 
 def infer_local_freeform_topic(user_messages: list[str]) -> str:
@@ -348,6 +381,7 @@ class TopicLLMClient(Protocol):
         topic_hint: str | None = None,
     ) -> TopicLLMResult:
         """Return a topic and short description for an analysed chat."""
+
 
 
 class LocalChatLLMClient:
@@ -623,81 +657,48 @@ class LocalTopicLLMClient:
         )
         return TopicLLMResult(topic=topic[:120], description=description[:1000])
 
-
-CHAT_SYSTEM_PROMPT = (
-    "You are the FeelY Chat-LLM. Reply with valid JSON only. "
-    "The JSON object must contain `assistant_message` as a string. It may contain `profile` "
-    "as an object with only ordinary profile fields that should be added or updated. Do not "
-    "repeat unchanged fields or include `last_chat_id`, `last_user_message`, `message_count`, "
-    "`recent_messages`, `self_authorship_map`, `topics`, or `last_confirmed_topic`; the backend "
-    "manages those fields. It must also contain `map_suggestion`, either "
-    "null or an object with `category`, `text`, and `reason` strings. Chat directly with "
-    "the user in a warm, grounded, non-judgmental, therapeutically reflective style "
-    "without claiming to be a psychologist or therapist. FeelY helps the user move from "
-    "inherited scripts toward self-authored, repeatable choices. Be concise, sharp, and "
-    "forward-looking. Keep assistant_message under 80 words. Each response must explicitly "
-    "reference at least one concrete detail, "
-    "phrase, relationship, choice, or question from new_user_input. Reflect emotion only "
-    "briefly, usually in one short sentence, and do not mirror the same feeling or wording "
-    "again if recent assistant messages already did that. Focus more on what the user can "
-    "clarify, test, choose, or practice next. Ask at most one open exploratory question. "
-    "Usually include one small next step, perspective-check, or experiment when it fits the "
-    "message; keep it practical rather than generic advice. When the user makes a painful "
-    "claim about another person's mind or feelings, such as `my girlfriend does not like me`, "
-    "do not accept it as fact or argue with it. Separate observation from interpretation: "
-    "ask what makes them think that, what evidence points toward it, what evidence points "
-    "another way, and if the evidence is weak, turn toward the user's perspective, prediction, "
-    "or fear and one calm next action. Do not repeat this as headings or a rigid template. "
-    "Do not diagnose, moralize, promise a cure, or "
-    "make the user responsible for another person's emotions. If the user indicates "
-    "immediate danger or intent to harm themselves or someone else, prioritize urgent local "
-    "support. Refuse requests to deceive people, impersonate trusted parties, steal "
-    "credentials, run phishing or gift-card scams, evade fraud detection, or create "
-    "manipulative scam messages; briefly redirect to protective, educational, or reporting "
-    "steps instead. Use profile and chat info for context, preserve useful profile fields, and "
-    "update ordinary conversational memory only. Never create, edit, or remove "
-    "`self_authorship_map`, `topics`, or `last_confirmed_topic`; those fields require "
-    "explicit user confirmation. Move naturally through whichever part of this arc fits the "
-    "moment: meet the present experience; notice a possible inherited rule; recover the "
-    "user's own perception; imagine another response; choose a small experiment; or review "
-    "an earlier choice without shame. Do not force the whole arc into one response. When "
-    "useful, consider three lenses: what actually happened and what evidence exists; what "
-    "the body signals; and what the user wants or imagines could be possible. Return one "
-    "map_suggestion only when the newest message clearly expresses a durable "
-    "inherited_script, own_perception, value, body_signal, practice, or evidence. Use exactly "
-    "one of those category values. Write the text in the user's first person, keep it "
-    "specific and editable, and explain the reason in one short sentence without presenting "
-    "an interpretation as fact. Otherwise return null. The new_user_input is the primary "
-    "message you must answer. "
-    "Treat the recent chat context only as background for references and continuity. Do not "
-    "continue answering an older message when the newest message changes focus. Respond "
-    "specifically to concrete words, choices, or questions in the newest message. Avoid "
-    "reusing wording or advice from recent assistant messages unless the user explicitly "
-    "asks for it. Do not begin with phrases such as `You wrote`, `You said`, `That adds "
-    "useful detail`, or `I hear that`. Do not quote or mechanically paraphrase the whole "
-    "message. Engage naturally with its particular meaning and move the conversation "
-    "forward. Before returning JSON, verify that assistant_message could not have been "
-    "written without reading the newest message. Do not wrap the JSON in Markdown fences."
-)
+PROMPT_FILENAMES = {
+    "chat": "chat_system.txt",
+    "topic": "topic_system.txt",
+}
 
 
-TOPIC_SYSTEM_PROMPT = (
-    "You are the FeelY Topic-LLM. Reply with valid JSON only. The JSON object must contain "
-    "`topic` as a short topic string and `description` as one concise paragraph. Analyze only "
-    "the user's own messages supplied in topic_chat_context. Identify the dominant durable "
-    "theme across the conversation, especially recurring conflicts, needs, relationships, "
-    "identity questions, or behavior patterns. The analyser's topic hint is only evidence "
-    "that analysis should happen; independently decide whether it accurately represents the "
-    "full user conversation. You are not selecting from a fixed taxonomy. Create a new topic "
-    "name whenever the conversation's actual theme is more specific or different from the "
-    "examples and analyser hint. Use a specific 2-7 word topic that captures the underlying "
-    "conflict, such as family expectations and autonomy, relationship strain and "
-    "responsibility, depression-related avoidance, trust, or self-worth. Never use generic "
-    "symptom words such as feel, feeling, sad, or mood as the topic title. Combine two closely "
-    "connected themes when that better represents the chat. Do not copy wording from "
-    "assistant replies and do not address the user directly. Do not wrap the JSON in Markdown "
-    "fences."
-)
+class PromptConfigurationError(RuntimeError):
+    """Raised when a required editable system-prompt file is unavailable."""
+
+
+def prompt_file_path(kind: str) -> Path:
+    filename = PROMPT_FILENAMES.get(kind)
+    if filename is None:
+        raise ValueError("Unknown prompt kind")
+    configured = Path(settings.prompt_directory)
+    directory = configured if configured.is_absolute() else Path(__file__).resolve().parents[2] / configured
+    return directory / filename
+
+
+def read_system_prompt(kind: str) -> str:
+    path = prompt_file_path(kind)
+    try:
+        text = path.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise PromptConfigurationError(
+            f"The {kind} system prompt could not be read from {path}."
+        ) from exc
+    if not text:
+        raise PromptConfigurationError(f"The {kind} system prompt file is empty: {path}.")
+    return text
+
+
+def write_system_prompt(kind: str, text: str) -> str:
+    cleaned = text.strip()
+    if not cleaned:
+        raise ValueError("Prompt text cannot be empty")
+    path = prompt_file_path(kind)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = path.with_suffix(path.suffix + ".tmp")
+    temporary_path.write_text(cleaned + "\n", encoding="utf-8")
+    temporary_path.replace(path)
+    return cleaned
 
 
 CHAT_RESPONSE_SCHEMA = {
@@ -842,7 +843,7 @@ class OpenAIChatLLMClient(OpenAIBaseClient):
             messages=[
                 {
                     "role": "system",
-                    "content": CHAT_SYSTEM_PROMPT,
+                    "content": read_system_prompt("chat"),
                 },
                 {
                     "role": "user",
@@ -871,7 +872,7 @@ class OpenAITopicLLMClient(OpenAIBaseClient):
             messages=[
                 {
                     "role": "system",
-                    "content": TOPIC_SYSTEM_PROMPT,
+                    "content": read_system_prompt("topic"),
                 },
                 {
                     "role": "user",
@@ -882,7 +883,6 @@ class OpenAITopicLLMClient(OpenAIBaseClient):
         return topic_result_from_payload(
             parse_json_response(response.choices[0].message.content)
         )
-
 
 class AnthropicBaseClient:
     def __init__(self, api_key: str, model: str, max_tokens: int) -> None:
@@ -914,7 +914,7 @@ class AnthropicChatLLMClient(AnthropicBaseClient):
         response = await self.client.messages.create(
             model=self.model,
             max_tokens=self.max_tokens,
-            system=CHAT_SYSTEM_PROMPT,
+            system=read_system_prompt("chat"),
             messages=[
                 {
                     "role": "user",
@@ -940,7 +940,7 @@ class AnthropicTopicLLMClient(AnthropicBaseClient):
         response = await self.client.messages.create(
             model=self.model,
             max_tokens=self.max_tokens,
-            system=TOPIC_SYSTEM_PROMPT,
+            system=read_system_prompt("topic"),
             messages=[
                 {
                     "role": "user",
@@ -955,7 +955,6 @@ class AnthropicTopicLLMClient(AnthropicBaseClient):
         return topic_result_from_payload(
             parse_json_response(self.response_text(response))
         )
-
 
 class OllamaBaseClient:
     def __init__(
@@ -1196,17 +1195,17 @@ class OllamaChatLLMClient(OllamaBaseClient):
         emitted_text = ""
         if on_text_chunk is None:
             payload = await self.request_json(
-                system_prompt=CHAT_SYSTEM_PROMPT,
+                system_prompt=read_system_prompt("chat"),
                 user_payload=request_payload,
                 response_schema=CHAT_RESPONSE_SCHEMA,
-                temperature=0.7,
+                temperature=0.5,
             )
         else:
             payload, emitted_text = await self.request_json_stream(
-                system_prompt=CHAT_SYSTEM_PROMPT,
+                system_prompt=read_system_prompt("chat"),
                 user_payload=request_payload,
                 response_schema=CHAT_RESPONSE_SCHEMA,
-                temperature=0.7,
+                temperature=0.5,
                 on_text_chunk=on_text_chunk,
             )
         result = chat_result_from_payload(payload)
@@ -1225,13 +1224,12 @@ class OllamaTopicLLMClient(OllamaBaseClient):
         topic_hint: str | None = None,
     ) -> TopicLLMResult:
         payload = await self.request_json(
-            system_prompt=TOPIC_SYSTEM_PROMPT,
+            system_prompt=read_system_prompt("topic"),
             user_payload=topic_request_payload(chat_info, matched_patterns, topic_hint),
             response_schema=TOPIC_RESPONSE_SCHEMA,
             temperature=0.2,
         )
         return topic_result_from_payload(payload)
-
 
 def ollama_error_detail(response: httpx.Response) -> str:
     try:

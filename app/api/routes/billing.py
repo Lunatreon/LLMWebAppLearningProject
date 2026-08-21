@@ -6,6 +6,7 @@ from app.models.user import User
 from app.schemas.billing import (
     BillingSessionResponse,
     CheckoutRequest,
+    CheckoutSyncRequest,
     PortalSessionRequest,
     SubscriptionResponse,
     WebhookResponse,
@@ -26,6 +27,7 @@ from app.services.billing import (
     normalize_subscription,
     process_stripe_webhook,
     resume_subscription,
+    sync_checkout_session,
 )
 
 router = APIRouter()
@@ -67,6 +69,34 @@ def start_checkout(
             detail="Stripe could not create a Checkout session.",
         ) from None
     return BillingSessionResponse(url=checkout_url)
+
+
+@router.post("/checkout/sync", response_model=SubscriptionResponse)
+def sync_checkout_return(
+    payload: CheckoutSyncRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SubscriptionResponse:
+    try:
+        subscription = sync_checkout_session(db, current_user, payload.session_id)
+    except BillingNotConfiguredError:
+        raise _configuration_error() from None
+    except BillingAccountUnavailableError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Checkout session is not available for this account.",
+        ) from None
+    except StripeWebhookProcessingError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from None
+    except BillingProviderError:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Stripe could not confirm this Checkout session.",
+        ) from None
+    return SubscriptionResponse(**normalize_subscription(subscription))
 
 
 @router.post("/portal", response_model=BillingSessionResponse)

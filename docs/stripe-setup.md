@@ -2,21 +2,25 @@
 
 Stripe billing powers FeelY's Premium entitlement. With premium features enabled, free accounts
 receive the configured free chat allowance and see a locked My Map preview. Active and trialing
-subscriptions unlock the larger chat allowance, topic analysis, map-informed reflection, and all
+subscriptions unlock the larger chat allowance, map-informed reflection, and all
 My Map API operations.
+Topic suggestions and chat-title confirmation remain available without a subscription.
 
 ## Architecture
 
 ```text
 browser -> authenticated FeelY billing API -> Stripe-hosted Checkout / Customer Portal
-Stripe  -> signed webhook               -> FeelY subscription tables
-FeelY features -> has_premium_access()  -> local subscription state
+Stripe  -> signed webhook                  -> FeelY subscription tables
+success redirect -> authenticated sync     -> verified Stripe Checkout Session
+FeelY features -> has_premium_access()     -> local subscription state
 ```
 
-The database is the application access authority. Checkout redirects never grant Premium access;
-verified Stripe webhooks synchronize the local subscription row. Authenticated subscription
-actions also save the fresh object returned by Stripe. FeelY does not collect or store payment-card
-data.
+The database is the application access authority. Verified Stripe webhooks synchronize the local
+subscription row. For immediate access when a webhook is delayed, the success redirect supplies a
+Checkout Session ID to an authenticated endpoint; the backend retrieves that session from Stripe,
+verifies it belongs to the signed-in FeelY user, and saves the current Subscription. Authenticated
+subscription actions also save the fresh object returned by Stripe. FeelY does not collect or
+store payment-card data.
 
 ## Already prepared
 
@@ -31,6 +35,7 @@ data.
 - Authenticated API endpoints are available at:
   - `GET /api/v1/billing/subscription`
   - `POST /api/v1/billing/checkout`
+  - `POST /api/v1/billing/checkout/sync`
   - `POST /api/v1/billing/portal`
   - `POST /api/v1/billing/subscription/resume`
 - `POST /api/v1/billing/webhook` is not protected by FeelY bearer/basic authentication. It reads the
@@ -78,10 +83,14 @@ Checkout return URLs should identify the result so the frontend can show immedia
 the webhook confirms access. For local development, use:
 
 ```env
-STRIPE_CHECKOUT_SUCCESS_URL="http://127.0.0.1:5500/chat.html?checkout=success"
+STRIPE_CHECKOUT_SUCCESS_URL="http://127.0.0.1:5500/chat.html?checkout=success&session_id={CHECKOUT_SESSION_ID}"
 STRIPE_CHECKOUT_CANCEL_URL="http://127.0.0.1:5500/chat.html?checkout=cancelled"
 STRIPE_PORTAL_RETURN_URL="http://127.0.0.1:5500/chat.html"
 ```
+
+`{CHECKOUT_SESSION_ID}` must remain literal; Stripe replaces it after Checkout. FeelY appends the
+placeholder automatically when it is omitted, but including it explicitly makes the configuration
+clear.
 
 `STRIPE_PORTAL_RETURN_URL` is the safe fallback. When the browser opens the Customer Portal, it
 sends its exact current page as the requested return URL. The backend accepts that URL only when

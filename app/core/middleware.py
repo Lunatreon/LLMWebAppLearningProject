@@ -1,9 +1,42 @@
 import base64
 import json
+import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
 from app.core.config import settings
+
+
+logger = logging.getLogger(__name__)
+
+
+class RejectedCorsPreflightLoggingMiddleware:
+    """Log the headers Starlette needs to diagnose rejected CORS preflights."""
+
+    def __init__(self, app: Callable[..., Awaitable[None]]) -> None:
+        self.app = app
+
+    async def __call__(self, scope: dict[str, Any], receive: Callable, send: Callable) -> None:
+        if scope.get("type") != "http" or scope.get("method") != "OPTIONS":
+            await self.app(scope, receive, send)
+            return
+
+        headers = dict(scope.get("headers") or [])
+
+        async def send_with_diagnostic(message: dict[str, Any]) -> None:
+            if message.get("type") == "http.response.start" and int(
+                message.get("status", 0)
+            ) >= 400:
+                logger.warning(
+                    "Rejected CORS preflight: origin=%r method=%r headers=%r path=%s",
+                    headers.get(b"origin", b"").decode("latin-1"),
+                    headers.get(b"access-control-request-method", b"").decode("latin-1"),
+                    headers.get(b"access-control-request-headers", b"").decode("latin-1"),
+                    scope.get("path", ""),
+                )
+            await send(message)
+
+        await self.app(scope, receive, send_with_diagnostic)
 
 
 class RequestSizeLimitMiddleware:

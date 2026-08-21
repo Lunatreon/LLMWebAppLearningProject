@@ -17,6 +17,7 @@ from app.services.billing import (
     has_premium_access,
     normalize_subscription,
     price_id_for_plan,
+    remove_subscription_for_admin,
     resume_subscription,
     validated_portal_return_url,
 )
@@ -152,6 +153,90 @@ def test_monthly_only_subscription_api_hides_yearly_plan(monkeypatch, client):
     )
     assert unavailable_checkout.status_code == 422
     assert unavailable_checkout.json() == {"detail": "Subscription plan is not available."}
+
+
+def test_checkout_return_securely_synchronizes_subscription(monkeypatch, client):
+    monkeypatch.setattr(settings, "stripe_enabled", True)
+    monkeypatch.setattr(settings, "stripe_secret_key", "sk_test_example")
+    monkeypatch.setattr(settings, "stripe_price_monthly", "price_monthly")
+    monkeypatch.setattr(settings, "stripe_price_yearly", None)
+    monkeypatch.setattr(
+        settings,
+        "stripe_checkout_success_url",
+        "https://app.feel-y.com/chat.html?checkout=success",
+    )
+    monkeypatch.setattr(
+        settings,
+        "stripe_checkout_cancel_url",
+        "https://app.feel-y.com/chat.html?checkout=cancelled",
+    )
+    headers = _register_and_authenticate(client)
+    period_end = datetime.now(timezone.utc) + timedelta(days=30)
+    checkout_params = []
+
+    checkout_session = {
+        "id": "cs_test_feely",
+        "mode": "subscription",
+        "status": "complete",
+        "client_reference_id": "1",
+        "customer": "cus_feely",
+        "subscription": "sub_feely",
+    }
+    subscription = {
+        "id": "sub_feely",
+        "customer": "cus_feely",
+        "status": "active",
+        "cancel_at_period_end": False,
+        "items": {
+            "data": [
+                {
+                    "price": {"id": "price_monthly"},
+                    "current_period_end": int(period_end.timestamp()),
+                }
+            ]
+        },
+    }
+    sessions = SimpleNamespace(
+        create=lambda params: (
+            checkout_params.append(params)
+            or SimpleNamespace(url="https://checkout.stripe.com/c/pay/test")
+        ),
+        retrieve=lambda session_id: checkout_session,
+    )
+    stripe_client = SimpleNamespace(
+        v1=SimpleNamespace(
+            checkout=SimpleNamespace(sessions=sessions),
+            subscriptions=SimpleNamespace(retrieve=lambda subscription_id: subscription),
+        )
+    )
+    monkeypatch.setattr(billing_service, "get_stripe_client", lambda: stripe_client)
+
+    checkout_response = client.post(
+        "/api/v1/billing/checkout",
+        headers=headers,
+        json={"plan": "monthly"},
+    )
+    assert checkout_response.status_code == 200
+    assert checkout_params[0]["success_url"].endswith(
+        "&session_id={CHECKOUT_SESSION_ID}"
+    )
+
+    sync_response = client.post(
+        "/api/v1/billing/checkout/sync",
+        headers=headers,
+        json={"session_id": "cs_test_feely"},
+    )
+    assert sync_response.status_code == 200
+    assert sync_response.json()["premium"] is True
+    assert sync_response.json()["plan"] == "monthly"
+
+    checkout_session["client_reference_id"] = "999"
+    forbidden_response = client.post(
+        "/api/v1/billing/checkout/sync",
+        headers=headers,
+        json={"session_id": "cs_test_other"},
+    )
+    assert forbidden_response.status_code == 403
 
 
 def test_billing_routes_require_authentication(client):
@@ -312,3 +397,54 @@ def test_resume_subscription_clears_scheduled_cancellation(monkeypatch, tmp_path
         assert resumed.cancel_at_period_end is False
         assert normalize_subscription(resumed)["can_resume"] is False
         assert update_calls == [("sub_resume", {"cancel_at_period_end": False})]
+
+
+def test_admin_subscription_removal_cancels_stripe_and_local_access(monkeypatch, tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'admin-cancel.db'}")
+    Base.metadata.create_all(engine)
+    TestingSession = sessionmaker(bind=engine)
+    cancel_calls = []
+    canceled_snapshot = {
+        "id": "sub_admin_cancel",
+        "customer": "cus_admin_cancel",
+        "status": "canceled",
+        "cancel_at_period_end": False,
+        "items": {"data": [{"price": {"id": "price_monthly"}}]},
+    }
+    stripe_client = SimpleNamespace(
+        v1=SimpleNamespace(
+            subscriptions=SimpleNamespace(
+                cancel=lambda subscription_id, params: (
+                    cancel_calls.append((subscription_id, params)) or canceled_snapshot
+                )
+            )
+        )
+    )
+    monkeypatch.setattr(billing_service, "get_stripe_client", lambda: stripe_client)
+
+    with TestingSession() as db:
+        user = User(
+            email="admin-cancel@example.com",
+            username="admin-cancel",
+            hashed_password="not-used-in-this-test",
+        )
+        db.add(user)
+        db.flush()
+        db.add(
+            BillingSubscription(
+                user_id=user.id,
+                stripe_customer_id="cus_admin_cancel",
+                stripe_subscription_id="sub_admin_cancel",
+                stripe_price_id="price_monthly",
+                status="active",
+            )
+        )
+        db.commit()
+
+        removed = remove_subscription_for_admin(db, user)
+
+        assert removed.status == "canceled"
+        assert has_premium_access(db, user) is False
+        assert cancel_calls == [
+            ("sub_admin_cancel", {"invoice_now": False, "prorate": False})
+        ]

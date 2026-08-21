@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#100f13" />
     <meta name="referrer" content="no-referrer" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <!-- Local previews automatically use port 8000; public pages use this API. -->
     <meta name="feely-api-base" content="https://api.feel-y.com/api/v1" />
     <meta
@@ -18,7 +19,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=20260818-3" />
+    <link rel="stylesheet" href="styles.css?v=20260821-1" />
   </head>
   <body>
     <main class="shell">
@@ -292,7 +293,12 @@
             </form>
             <div class="composer-meta">
               <button id="lens-toggle" class="lens-toggle" type="button" aria-expanded="false">Three lenses</button>
-              <span id="chat-plan-note" class="chat-plan-note">Free plan &middot; 10 messages per day</span>
+              <span id="chat-plan-note" class="chat-plan-note">
+                <span id="chat-plan-copy">Free plan - 10 messages per day.</span>
+                <button id="chat-plan-upgrade" class="chat-plan-upgrade" type="button">
+                  Want more? Click here.
+                </button>
+              </span>
               <p class="composer-note">FeelY can help you reflect, but it is not emergency or medical care.</p>
             </div>
           </footer>
@@ -528,6 +534,6 @@
       </form>
     </dialog>
 
-    <script src="app.js?v=20260818-3"></script>
+    <script src="app.js?v=20260821-5"></script>
   </body>
 </html>

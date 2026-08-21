@@ -23,6 +23,12 @@ class CheckoutRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class CheckoutSyncRequest(BaseModel):
+    session_id: str = Field(min_length=8, max_length=255, pattern=r"^cs_[A-Za-z0-9_]+$")
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class PortalSessionRequest(BaseModel):
     return_url: str | None = Field(default=None, max_length=2048)
 

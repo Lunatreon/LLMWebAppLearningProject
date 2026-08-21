@@ -12,6 +12,8 @@
 # after 4 user messages and 50 words, or 3 user messages and 140 words. In that
 # case, the Topic-LLM creates its own free-form topic from the user messages.
 
+healthcare access, body, and relationships|3|health,care,doctor,treatment,medication,hormone,hrt,surgery,recovery,body,pain,intimacy,wait,waiting,delay
+
 productivity and progress|2|productivity,project,deadline,focus,task,workflow,finished,planning,goal
 stress and pressure|2|stress,stressful,overwhelmed,anxious,burnout,pressure,worried,tired
 creative work|2|creative,design,writing,idea,prototype,sketch,build,make,art

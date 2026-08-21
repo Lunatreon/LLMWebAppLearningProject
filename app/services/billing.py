@@ -252,6 +252,10 @@ def create_checkout_session(db: Session, user: User, plan: str) -> str:
         raise BillingNotConfiguredError("Stripe billing is not configured.")
 
     subscription = get_subscription(db, user)
+    if "{CHECKOUT_SESSION_ID}" not in success_url:
+        separator = "&" if "?" in success_url else "?"
+        success_url = f"{success_url}{separator}session_id={{CHECKOUT_SESSION_ID}}"
+
     params: dict[str, Any] = {
         "mode": "subscription",
         "client_reference_id": str(user.id),
@@ -275,6 +279,56 @@ def create_checkout_session(db: Session, user: User, plan: str) -> str:
     if not checkout_url:
         raise BillingProviderError("Stripe did not return a Checkout URL.")
     return checkout_url
+
+
+def sync_checkout_session(
+    db: Session,
+    user: User,
+    checkout_session_id: str,
+) -> BillingSubscription:
+    """Synchronize a completed Checkout session owned by the signed-in user."""
+
+    stripe_client = get_stripe_client()
+    try:
+        checkout_session = stripe_client.v1.checkout.sessions.retrieve(checkout_session_id)
+    except stripe.StripeError as exc:
+        raise BillingProviderError("Stripe Checkout session synchronization failed.") from exc
+
+    if (
+        _value(checkout_session, "mode") != "subscription"
+        or _value(checkout_session, "status") != "complete"
+    ):
+        raise StripeWebhookProcessingError("Stripe Checkout is not complete.")
+
+    raw_user_id = _value(checkout_session, "client_reference_id")
+    try:
+        checkout_user_id = int(raw_user_id) if raw_user_id is not None else None
+    except (TypeError, ValueError):
+        checkout_user_id = None
+    checkout_user_id = checkout_user_id or _metadata_user_id(checkout_session)
+    if checkout_user_id != user.id:
+        raise BillingAccountUnavailableError(
+            "Stripe Checkout session does not belong to this account."
+        )
+
+    stripe_subscription_id = _stripe_id(_value(checkout_session, "subscription"))
+    if not stripe_subscription_id:
+        raise StripeWebhookProcessingError(
+            "Stripe Checkout has not created a subscription yet."
+        )
+
+    subscription = _sync_subscription_from_stripe(
+        db,
+        stripe_subscription_id,
+        stripe_client,
+        user_id=user.id,
+    )
+    customer_id = _stripe_id(_value(checkout_session, "customer"))
+    if customer_id:
+        subscription.stripe_customer_id = customer_id
+    db.commit()
+    db.refresh(subscription)
+    return subscription
 
 
 def create_customer_portal_session(
@@ -337,6 +391,39 @@ def resume_subscription(db: Session, user: User) -> BillingSubscription:
     )
     db.commit()
     return updated_subscription
+
+
+def remove_subscription_for_admin(
+    db: Session,
+    user: User,
+) -> BillingSubscription | None:
+    """Cancel the associated Stripe subscription and revoke local Premium access."""
+
+    subscription = get_subscription(db, user)
+    if subscription is None:
+        return None
+
+    if subscription.stripe_subscription_id:
+        try:
+            stripe_subscription = get_stripe_client().v1.subscriptions.cancel(
+                subscription.stripe_subscription_id,
+                {"invoice_now": False, "prorate": False},
+            )
+        except stripe.StripeError as exc:
+            raise BillingProviderError("Stripe subscription cancellation failed.") from exc
+        subscription = _apply_subscription_object(
+            db,
+            stripe_subscription,
+            user_id=user.id,
+        )
+    else:
+        subscription.status = SubscriptionStatus.CANCELED.value
+        subscription.cancel_at_period_end = False
+        subscription.current_period_end = None
+
+    db.commit()
+    db.refresh(subscription)
+    return subscription
 
 
 def construct_stripe_event(payload: bytes, signature: str | None) -> Any:

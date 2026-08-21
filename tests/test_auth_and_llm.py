@@ -16,11 +16,11 @@ from app.api.routes.llm import (
 )
 from app.core import captcha as captcha_module
 from app.core.config import settings
+from app.core.rate_limit import rate_limiter
 from app.main import create_app
 from app.models.billing import BillingSubscription
 from app.models.user import User
 from app.services.llm import (
-    CHAT_SYSTEM_PROMPT,
     AnthropicChatLLMClient,
     AnthropicTopicLLMClient,
     LocalChatLLMClient,
@@ -36,7 +36,9 @@ from app.services.llm import (
     infer_local_freeform_topic,
     is_scam_abuse_request,
     parse_json_response,
+    read_system_prompt,
     topic_chat_context,
+    update_conversation_summary,
 )
 from app.services.pattern_recognition import ChatAnalyser
 from app.services.self_authorship import merge_llm_profile
@@ -101,10 +103,15 @@ def test_local_website_cors_preflight(client):
     assert local_file_response.headers["access-control-allow-origin"] == "null"
 
     for public_origin in (
+        "https://feel-y.com",
+        "https://www.feel-y.com",
         "https://app.feel-y.com",
+        "http://app.feel-y.com",
         "https://dev.feel-y.com",
+        "https://preview.app.feel-y.com",
         "https://selinabernard.com",
         "https://www.selinabernard.com",
+        "https://chat.selinabernard.com",
     ):
         public_response = client.options(
             "/api/v1/auth/login",
@@ -344,7 +351,7 @@ def test_free_tier_hides_map_data_and_blocks_map_routes(client):
     )
     assert llm_response.status_code == 200
     assert llm_response.json()["map_suggestion"] is None
-    assert llm_response.json()["topic_analysis_status"] == "premium_required"
+    assert llm_response.json()["topic_analysis_status"] == "queued"
     assert "self_authorship_map" not in llm_response.json()["profile"]
 
 
@@ -368,6 +375,9 @@ def test_free_chat_daily_allowance_prompts_for_premium(monkeypatch, client):
         )
         assert response.status_code == 200
 
+    # Restarting the process resets only burst protection, not the daily quota.
+    rate_limiter.reset()
+
     limited_response = client.post(
         "/api/v1/llm/message",
         headers=headers,
@@ -375,7 +385,54 @@ def test_free_chat_daily_allowance_prompts_for_premium(monkeypatch, client):
     )
     assert limited_response.status_code == 429
     assert "today's 2 free messages" in limited_response.json()["detail"]
-    assert "Premium unlocks" in limited_response.json()["detail"]
+    assert "Subscribe to Premium" in limited_response.json()["detail"]
+
+
+def test_free_user_can_receive_and_accept_topic_without_map_access(client):
+    client.post(
+        "/api/v1/auth/register",
+        json={"email": "free-topic@example.com", "username": "free_topic", "password": "secret-pass"},
+    )
+    token = client.post(
+        "/api/v1/auth/login",
+        json={"email_or_username": "free-topic@example.com", "password": "secret-pass"},
+    ).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    chat_id = None
+    for message in (
+        "Waiting for medical care makes me anxious about my body and my future.",
+        "The delay brings back fear and grief about intimacy and relationships.",
+        "I want autonomy over my body without more years of uncertainty and waiting.",
+    ):
+        response = client.post(
+            "/api/v1/llm/message",
+            headers=headers,
+            json={"chat_id": chat_id, "context": message},
+        )
+        assert response.status_code == 200
+        assert response.json()["topic_analysis_status"] == "queued"
+        chat_id = response.json()["chat_id"]
+
+    suggestion = client.get(
+        f"/api/v1/llm/chats/{chat_id}/topic-suggestion",
+        headers=headers,
+    ).json()["suggestion"]
+    assert suggestion is not None
+
+    confirmed = client.post(
+        "/api/v1/llm/topics/confirm",
+        headers=headers,
+        json={
+            "chat_id": chat_id,
+            "topic": suggestion["topic"],
+            "description": suggestion["description"],
+            "accepted": True,
+        },
+    )
+    assert confirmed.status_code == 200
+    assert "self_authorship_map" not in confirmed.json()["profile"]
+    chat = client.get(f"/api/v1/llm/chats/{chat_id}", headers=headers).json()
+    assert chat["title"] == suggestion["topic"]
 
 
 def test_registration_rejects_filled_honeypot(client):
@@ -987,6 +1044,21 @@ def test_relationship_and_self_struggle_text_gets_semantic_topic_hint():
     assert "feeling" not in analysis.matched_patterns
 
 
+def test_healthcare_chat_gets_general_topic_hint():
+    chat_info = {
+        "messages": [
+            {"role": "user", "content": "I am applying for bottom surgery and the waiting feels heavy."},
+            {"role": "user", "content": "Testosterone changes and dysphoria have affected intimacy."},
+            {"role": "user", "content": "I want gender-affirming care and closeness with my girlfriend."},
+        ]
+    }
+
+    analysis = ChatAnalyser().analyse(chat_info)
+
+    assert analysis.should_create_topic is True
+    assert analysis.topic_hint == "healthcare access, body, and relationships"
+
+
 def test_family_autonomy_chat_gets_fitting_topic_hint():
     chat_info = {
         "messages": [
@@ -1073,8 +1145,8 @@ def test_chat_context_prioritizes_recent_messages():
 
     context = focused_chat_context(chat_info)
 
-    assert len(context["recent_messages"]) == 6
-    assert context["recent_messages"][0]["content"] == "message 6"
+    assert len(context["recent_messages"]) == 2
+    assert context["recent_messages"][0]["content"] == "message 10"
     assert context["recent_messages"][-1]["content"] == "message 11"
 
     profile = focused_profile_context(
@@ -1088,6 +1160,29 @@ def test_chat_context_prioritizes_recent_messages():
     )
     assert profile == {"preference": "direct questions"}
     assert "last_user_message" not in profile
+
+
+def test_extractive_conversation_notes_use_only_older_user_wording():
+    chat_info = {
+        "message_count": 4,
+        "messages": [
+            {"role": "user", "content": "I am applying for care and feel sad."},
+            {"role": "assistant", "content": "This is definitely trauma."},
+            {"role": "user", "content": "I do not want a breathing exercise."},
+            {"role": "assistant", "content": "Try breathing anyway."},
+            {"role": "user", "content": "I fear another long wait."},
+            {"role": "assistant", "content": "You cannot love while waiting."},
+            {"role": "user", "content": "I miss intimacy with my girlfriend."},
+            {"role": "assistant", "content": "Send a text."},
+        ],
+    }
+
+    updated = update_conversation_summary(chat_info)
+
+    assert "applying for care" in updated["conversation_summary"]
+    assert "do not want a breathing exercise" in updated["conversation_summary"]
+    assert "trauma" not in updated["conversation_summary"]
+    assert "cannot love" not in updated["conversation_summary"]
 
 
 def test_user_can_delete_only_their_own_chat(client):
@@ -1208,13 +1303,23 @@ def test_local_chat_refuses_scam_building_requests():
     assert is_scam_abuse_request("I received a phishing email; help me report it") is False
 
 
-def test_chat_system_prompt_is_solution_oriented_without_over_mirroring():
-    assert "Reflect emotion only briefly" in CHAT_SYSTEM_PROMPT
-    assert "do not mirror the same feeling or wording again" in CHAT_SYSTEM_PROMPT
-    assert "Separate observation from interpretation" in CHAT_SYSTEM_PROMPT
-    assert "what evidence points another way" in CHAT_SYSTEM_PROMPT
-    assert "one small next step" in CHAT_SYSTEM_PROMPT
-    assert "Refuse requests to deceive people" in CHAT_SYSTEM_PROMPT
+def test_system_prompts_are_general_and_avoid_over_interpreting():
+    chat_system_prompt = read_system_prompt("chat")
+    topic_system_prompt = read_system_prompt("topic")
+
+    assert "The user is the authority" in chat_system_prompt
+    assert "many different backgrounds and concerns" in chat_system_prompt
+    assert "turn a fear, prediction, or hypothesis into fact" in chat_system_prompt
+    assert "Preserve uncertainty, mixed feelings" in chat_system_prompt
+    assert "do not repeat them" in chat_system_prompt
+    assert "Do not default to breathing" in chat_system_prompt
+    assert "make the suggestion relevant to that topic" in chat_system_prompt
+    assert "Refuse harmful deception" in chat_system_prompt
+    assert "many different backgrounds and concerns" in topic_system_prompt
+    assert "single passing mood" in topic_system_prompt
+    assert "accepted_topic_names" in topic_system_prompt
+    assert "gender-affirming" not in chat_system_prompt.lower()
+    assert "gender-affirming" not in topic_system_prompt.lower()
 
 
 def test_llm_message_still_accepts_legacy_message_payload(client):
@@ -1292,7 +1397,7 @@ def test_anthropic_clients_use_messages_api_and_shared_json_contract():
     chat_request = chat_messages.requests[0]
     assert chat_request["model"] == "claude-sonnet-4-6"
     assert chat_request["max_tokens"] == 4096
-    assert "FeelY Chat-LLM" in chat_request["system"]
+    assert "reflective chat assistant" in chat_request["system"]
     assert json.loads(chat_request["messages"][0]["content"])["chat_id"] == "chat-1"
 
     topic_messages = RecordingAnthropicMessages(
