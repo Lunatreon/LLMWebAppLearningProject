@@ -22,6 +22,8 @@ def ensure_sqlite_user_columns() -> None:
         "email_verified_at": "DATETIME",
         "email_verification_token_hash": "VARCHAR(128)",
         "email_verification_sent_at": "DATETIME",
+        "password_reset_token_hash": "VARCHAR(128)",
+        "password_reset_sent_at": "DATETIME",
         "last_login_at": "DATETIME",
     }
     with engine.begin() as connection:
@@ -43,4 +45,8 @@ def ensure_sqlite_user_columns() -> None:
         connection.exec_driver_sql(
             "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email_verification_token_hash "
             "ON users (email_verification_token_hash)"
+        )
+        connection.exec_driver_sql(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_password_reset_token_hash "
+            "ON users (password_reset_token_hash)"
         )

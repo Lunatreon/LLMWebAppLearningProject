@@ -39,6 +39,7 @@ from app.services.self_authorship import (
     add_map_entry,
     create_or_link_topic_space,
     find_topic_space_for_chat,
+    link_chat_to_topic_space,
     merge_llm_profile,
     profile_data_for_access,
     read_map,
@@ -472,15 +473,33 @@ async def analyse_chat_for_topic(
             db.commit()
             return
 
+        user = db.get(User, user_id)
+        profile = db.scalar(select(UserProfile).where(UserProfile.user_id == user_id))
+        visible_map = (
+            read_map(profile.data if profile else {})
+            if user is not None and has_premium_feature_access(db, user)
+            else {"topic_spaces": []}
+        )
+        available_topics = [
+            {
+                "id": space.get("id"),
+                "title": space.get("title"),
+                "description": space.get("description", ""),
+                "parent_topic_id": space.get("parent_topic_id"),
+            }
+            for space in visible_map.get("topic_spaces", [])[:40]
+        ]
         topic_result = await get_topic_llm_client().create_topic(
             chat_info=info,
             matched_patterns=analysis.matched_patterns,
             topic_hint=analysis.topic_hint,
+            available_topics=available_topics,
         )
-        topic_result.description = (
-            f"A recurring theme in this conversation concerning {topic_result.topic.strip()}, "
-            "identified from the user's own messages and offered for the user to confirm or edit."
-        )
+        available_topic_ids = {topic.get("id") for topic in available_topics}
+        if topic_result.existing_topic_id not in available_topic_ids:
+            topic_result.existing_topic_id = None
+        if topic_result.parent_topic_id not in available_topic_ids:
+            topic_result.parent_topic_id = None
 
         accepted_topic_names = {
             normalized_topic(topic)
@@ -513,6 +532,8 @@ async def analyse_chat_for_topic(
             "confidence": analysis.confidence,
             "matched_patterns": analysis.matched_patterns,
             "topic_hint": analysis.topic_hint,
+            "existing_topic_id": topic_result.existing_topic_id,
+            "parent_topic_id": topic_result.parent_topic_id,
             "status": "pending",
             "created_at": current_timestamp(),
         }
@@ -873,11 +894,39 @@ def confirm_topic(
     if payload.accepted:
         pending_topic["status"] = "accepted"
         chat_info["title"] = payload.topic.strip()[:80]
+        accepted_topic_name = payload.topic
         if premium_access:
+            if payload.existing_topic_space_id:
+                try:
+                    profile_data, topic_space = link_chat_to_topic_space(
+                        profile_data,
+                        topic_space_id=payload.existing_topic_space_id,
+                        chat_id=payload.chat_id,
+                    )
+                except LookupError as exc:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=str(exc),
+                    ) from exc
+            else:
+                try:
+                    profile_data, topic_space = create_or_link_topic_space(
+                        profile_data,
+                        title=payload.topic,
+                        description=payload.description,
+                        chat_id=payload.chat_id,
+                        parent_topic_id=payload.parent_topic_space_id,
+                    )
+                except (LookupError, ValueError) as exc:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=str(exc),
+                    ) from exc
+
             topics = list(profile_data.get("topics", []))
             topic_entry = {
-                "topic": payload.topic,
-                "description": payload.description,
+                "topic": topic_space["title"],
+                "description": topic_space.get("description", ""),
                 "chat_id": payload.chat_id,
                 "confirmed_at": current_timestamp(),
             }
@@ -885,12 +934,7 @@ def confirm_topic(
                 topics.append(topic_entry)
             profile_data["topics"] = topics
             profile_data["last_confirmed_topic"] = topic_entry
-            profile_data, topic_space = create_or_link_topic_space(
-                profile_data,
-                title=payload.topic,
-                description=payload.description,
-                chat_id=payload.chat_id,
-            )
+            accepted_topic_name = topic_space["title"]
             profile.data = profile_data
             pending_topic["topic_space_id"] = topic_space["id"]
             chat_info["topic_space_id"] = topic_space["id"]
@@ -900,8 +944,8 @@ def confirm_topic(
                 pending_map_suggestion["topic_title"] = topic_space["title"]
                 chat_info["pending_map_suggestion"] = pending_map_suggestion
         accepted_topic_names = list(chat_info.get("accepted_topic_names", []))
-        if payload.topic not in accepted_topic_names:
-            accepted_topic_names.append(payload.topic)
+        if accepted_topic_name not in accepted_topic_names:
+            accepted_topic_names.append(accepted_topic_name)
         chat_info["accepted_topic_names"] = accepted_topic_names
 
         topic_hint = pending_topic.get("topic_hint")

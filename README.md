@@ -15,8 +15,11 @@ per-user LLM requests, and persistent user profiles.
 - Chat-LLM endpoint that sends chat context, chat history, and the saved profile to the LLM
 - Background analyser that scores chats with backend pattern rules
 - Topic-LLM flow that creates a topic and description after enough patterns match
-- User-confirmed topic spaces connecting chats, observations, and practices
+- User-confirmed topic spaces that can reuse chats, nest under broader topics,
+  connect related topics, and collect observations and practices
 - A self-authorship map for inherited scripts, personal perceptions, values, body signals, evidence, and repeatable choices
+- Premium daily journal with automatic saving, entry history, and optional AI map suggestions
+- One-time password-reset links delivered through a configurable SMTP email provider
 - Static website in `website/` with public content pages, login, registration, chat list, chat view, and topic confirmation
 - Swappable LLM service with mock, OpenAI, Anthropic, and local Ollama providers
 
@@ -153,6 +156,7 @@ Local development works without an external LLM by keeping:
 ```env
 LLM_PROVIDER="mock"
 TOPIC_LLM_PROVIDER="local"
+JOURNAL_LLM_PROVIDER="local"
 ```
 
 To use OpenAI, set:
@@ -161,13 +165,15 @@ To use OpenAI, set:
 LLM_PROVIDER="openai"
 CHAT_LLM_PROVIDER="openai"
 TOPIC_LLM_PROVIDER="openai"
+JOURNAL_LLM_PROVIDER="openai"
 OPENAI_API_KEY="your-api-key"
 OPENAI_MODEL="gpt-5.4-mini"
 OPENAI_CHAT_MODEL="gpt-5.4-mini"
 OPENAI_TOPIC_MODEL="gpt-5.4-mini"
+OPENAI_JOURNAL_MODEL="gpt-5.4-mini"
 ```
 
-`OPENAI_CHAT_MODEL` and `OPENAI_TOPIC_MODEL` can be changed independently.
+`OPENAI_CHAT_MODEL`, `OPENAI_TOPIC_MODEL`, and `OPENAI_JOURNAL_MODEL` can be changed independently.
 When either is empty, the backend falls back to `OPENAI_MODEL`. The Chat-LLM
 prompt follows a consistent conversational pattern: reflect the main concern,
 separate feelings from actions when useful, offer one manageable next step, and
@@ -179,15 +185,17 @@ To use Claude through Anthropic, set:
 LLM_PROVIDER="anthropic"
 CHAT_LLM_PROVIDER="anthropic"
 TOPIC_LLM_PROVIDER="anthropic"
+JOURNAL_LLM_PROVIDER="anthropic"
 ANTHROPIC_API_KEY="your-api-key"
 ANTHROPIC_MODEL="claude-sonnet-4-6"
 ANTHROPIC_CHAT_MODEL="claude-sonnet-4-6"
 ANTHROPIC_TOPIC_MODEL="claude-sonnet-4-6"
+ANTHROPIC_JOURNAL_MODEL="claude-sonnet-4-6"
 ANTHROPIC_MAX_TOKENS=4096
 ```
 
-`ANTHROPIC_CHAT_MODEL` and `ANTHROPIC_TOPIC_MODEL` fall back to
-`ANTHROPIC_MODEL` when empty. The two roles can also use different providers.
+The role-specific Anthropic models fall back to `ANTHROPIC_MODEL` when empty.
+Chat, topic, and journal analysis can also use different providers.
 For example, set `CHAT_LLM_PROVIDER="anthropic"` and
 `TOPIC_LLM_PROVIDER="openai"` while leaving `LLM_PROVIDER="mock"` as the
 default for any role without an override.
@@ -214,26 +222,31 @@ Configure FeelY to use the local model:
 LLM_PROVIDER="ollama"
 CHAT_LLM_PROVIDER="ollama"
 TOPIC_LLM_PROVIDER="ollama"
+JOURNAL_LLM_PROVIDER="ollama"
 OLLAMA_BASE_URL="http://127.0.0.1:11434"
 OLLAMA_MODEL="qwen3.5:4b"
 OLLAMA_CHAT_MODEL="qwen3.5:4b"
 OLLAMA_TOPIC_MODEL="qwen3.5:2b"
+OLLAMA_JOURNAL_MODEL="qwen3.5:2b"
 OLLAMA_TIMEOUT_SECONDS=180
 OLLAMA_CONTEXT_WINDOW=2048
 OLLAMA_CHAT_MAX_TOKENS=160
-OLLAMA_TOPIC_MAX_TOKENS=128
+OLLAMA_TOPIC_MAX_TOKENS=256
+OLLAMA_JOURNAL_MAX_TOKENS=768
 OLLAMA_CHAT_NUM_GPU=0
 OLLAMA_TOPIC_NUM_GPU=999
+OLLAMA_JOURNAL_NUM_GPU=999
 OLLAMA_KEEP_ALIVE=-1
 OLLAMA_PREWARM=true
 ```
 
 No API key is needed. The pattern analyser decides when topic analysis is useful;
 the 2B Topic-LLM then creates the topic and description. `OLLAMA_CHAT_NUM_GPU=0`
-forces the 4B chat model onto CPU, while `OLLAMA_TOPIC_NUM_GPU=999` lets Ollama
-offload every possible layer of the 2B topic model to GPU. `OLLAMA_KEEP_ALIVE=-1`
-keeps both models resident until Ollama stops, and startup prewarm loads both.
-`OLLAMA_CHAT_MODEL` and `OLLAMA_TOPIC_MODEL` fall back to `OLLAMA_MODEL` when empty.
+forces the 4B chat model onto CPU, while the topic and journal GPU settings let
+Ollama offload every possible layer of the 2B model to GPU. `OLLAMA_KEEP_ALIVE=-1`
+keeps the models resident until Ollama stops, and startup prewarm loads each
+distinct configured model. Role-specific model settings fall back to
+`OLLAMA_MODEL` when empty.
 The website uses the streaming message endpoint to show connection and elapsed
 status first, then renders the assistant message as Ollama generates it. The
 profile and map fields in Ollama's structured response remain server-side.
@@ -246,9 +259,9 @@ With `LLM_PROVIDER="mock"`, no external model is called. The backend uses local,
 deterministic development responses instead. Set `LLM_PROVIDER` to `openai`,
 `anthropic`, or `ollama` to receive generated responses. OpenAI and Anthropic
 require their matching API key; Ollama runs locally without one.
-`CHAT_LLM_PROVIDER` and `TOPIC_LLM_PROVIDER` can independently override
-`LLM_PROVIDER`. Topic generation defaults to `local` to avoid a second costly
-model request.
+`CHAT_LLM_PROVIDER`, `TOPIC_LLM_PROVIDER`, and `JOURNAL_LLM_PROVIDER` can
+independently override `LLM_PROVIDER`. Journal analysis falls back to the topic
+provider when its own override is empty.
 
 Change `SECRET_KEY` before deploying.
 
@@ -367,6 +380,42 @@ verification link. Users can also request another email from Account settings.
 Set `EMAIL_VERIFICATION_REQUIRED=true` only after SMTP delivery is working,
 because unverified password users cannot log in when it is required.
 
+### Password reset email
+
+Password reset uses the same SMTP connection. FeelY sends the messages, but it
+does not host a mailbox or automatically create an account with an email
+provider. Add the SMTP credentials supplied by your chosen provider above,
+verify that its sender/domain is allowed, and then enable reset links:
+
+```env
+PASSWORD_RESET_ENABLED=true
+PASSWORD_RESET_TOKEN_EXPIRE_MINUTES=60
+RATE_LIMIT_PASSWORD_RESET_IDENTIFIER_PER_HOUR=3
+PUBLIC_APP_URL="https://app.feel-y.com"
+```
+
+Restart FastAPI after editing `.env`. The login page's **Forgot password?**
+action always gives the same response whether an address exists or not. For a
+matching active account, it emails a one-time link back to `chat.html`; the link
+expires after the configured number of minutes. Keep
+`PASSWORD_RESET_ENABLED=false` until SMTP delivery has been tested.
+
+### Premium journal
+
+Journal is the third workspace beside Chat and My Map. It opens today's page by
+default, saves changes shortly after the user stops typing, and lists previous
+entries by date. The backend enforces Premium access, so changing or bypassing
+the browser interface cannot expose journal data to a free account.
+
+**Find map insights** asks the Journal-LLM for optional topic, activity,
+practice, observation, value, evidence, script, perception, or body-signal
+suggestions. Nothing is added to My Map automatically: the user can edit each
+suggestion, choose or create a topic, and explicitly save or dismiss it. Saving
+under a topic connects that dated journal page to the topic. My Map displays the
+number of connected journal pages and links back to each date. The AI
+instructions live in `prompts/journal_system.txt` and can be edited from the
+separate admin page; changes apply to the next analysis without a restart.
+
 For production, also put a reverse proxy or hosting firewall in front of the
 app. If the app runs behind a trusted proxy that sets `X-Forwarded-For`, set
 `TRUST_PROXY_HEADERS=true`; otherwise leave it `false` so clients cannot spoof
@@ -384,6 +433,8 @@ configuration.
 - `POST /api/v1/auth/google`
 - `POST /api/v1/auth/email-verification/request`
 - `POST /api/v1/auth/email-verification/confirm`
+- `POST /api/v1/auth/password-reset/request`
+- `POST /api/v1/auth/password-reset/confirm`
 - `GET /api/v1/users/me`
 - `GET /api/v1/users/me/account`
 - `PATCH /api/v1/users/me/account`
@@ -401,6 +452,11 @@ configuration.
 - `POST /api/v1/llm/message`
 - `POST /api/v1/llm/topics/confirm`
 - `POST /api/v1/llm/map-suggestions/confirm`
+- `GET /api/v1/journal/entries`
+- `GET /api/v1/journal/entries/{entry_date}`
+- `PUT /api/v1/journal/entries/{entry_date}`
+- `POST /api/v1/journal/entries/{entry_date}/analyse`
+- `POST /api/v1/journal/entries/{entry_date}/suggestions/{suggestion_id}`
 
 ## LLM Flow
 
@@ -412,13 +468,15 @@ When an authenticated user calls `POST /api/v1/llm/message`, the backend:
 3. Saves the Chat-LLM response, updated profile, and updated chat info.
 4. Returns the chat response to the app or website immediately.
 5. Starts a backend background task that checks the full stored chat with the hard-coded analyser.
-6. If enough patterns from `docs/pattern_recognition.txt` match, sends compact notes and recent
-   user messages to the Topic-LLM.
-7. Saves the Topic-LLM topic and description as a pending topic suggestion.
+6. If enough patterns from `docs/pattern_recognition.txt` match, sends compact notes, recent
+   user messages, and the user's existing topic list to the Topic-LLM.
+7. Saves the Topic-LLM topic and description as a pending suggestion. The model
+   can recommend connecting the chat to an existing topic or placing a new topic
+   under a broader one; the user confirms the choice.
 8. Returns an existing pending topic immediately and lets the frontend poll
    `GET /api/v1/llm/chats/{chat_id}/topic-suggestion` for newly generated topics.
 9. Uses an accepted topic as the chat title through `POST /api/v1/llm/topics/confirm`.
-10. For users with My Map access, also creates a Topic Space and connects the current chat.
+10. For users with My Map access, creates or reuses a Topic Space and connects the current chat.
 11. Optionally proposes one editable My Map entry from the newest user message.
 12. Writes that entry only after explicit user confirmation.
 

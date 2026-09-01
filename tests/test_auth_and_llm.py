@@ -895,6 +895,119 @@ def test_user_can_create_and_rename_map_topic(client):
     assert deleted_map["unassigned_entries"][0]["text"] == "I can name my limit."
 
 
+def test_map_topics_can_be_nested_related_and_collect_cross_topic_practice_chats(client):
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "connected-map@example.com",
+            "username": "connected_map_user",
+            "password": "super-secret",
+        },
+    )
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"email_or_username": "connected_map_user", "password": "super-secret"},
+    )
+    headers = {"Authorization": f"Bearer {login_response.json()['access_token']}"}
+    grant_premium_access(client, "connected-map@example.com")
+
+    style = client.post(
+        "/api/v1/users/me/map/topics",
+        json={"title": "Personal style", "chat_id": "style-chat"},
+        headers=headers,
+    ).json()["topic"]
+    clothing_chat_id = client.post(
+        "/api/v1/llm/chats",
+        json={"title": "Clothing notes"},
+        headers=headers,
+    ).json()["chat_id"]
+    reuse_response = client.post(
+        "/api/v1/llm/topics/confirm",
+        json={
+            "chat_id": clothing_chat_id,
+            "topic": "Clothing and self-expression",
+            "description": "Another part of personal style.",
+            "existing_topic_space_id": style["id"],
+            "accepted": True,
+        },
+        headers=headers,
+    )
+    assert reuse_response.status_code == 200
+    reused_style = next(
+        topic
+        for topic in reuse_response.json()["profile"]["self_authorship_map"]["topic_spaces"]
+        if topic["id"] == style["id"]
+    )
+    assert set(reused_style["chat_ids"]) == {"style-chat", clothing_chat_id}
+
+    confidence = client.post(
+        "/api/v1/users/me/map/topics",
+        json={"title": "Confidence", "chat_id": "confidence-chat"},
+        headers=headers,
+    ).json()["topic"]
+    clothing_response = client.post(
+        "/api/v1/users/me/map/topics",
+        json={
+            "title": "Clothing choices",
+            "chat_id": "clothing-chat",
+            "parent_topic_id": style["id"],
+            "related_topic_ids": [confidence["id"]],
+        },
+        headers=headers,
+    )
+    assert clothing_response.status_code == 200
+    clothing = clothing_response.json()["topic"]
+    assert clothing["parent_topic_id"] == style["id"]
+
+    connected_map = clothing_response.json()["map"]
+    confidence_after_link = next(
+        topic for topic in connected_map["topic_spaces"] if topic["id"] == confidence["id"]
+    )
+    assert clothing["id"] in confidence_after_link["related_topic_ids"]
+
+    practice_response = client.post(
+        "/api/v1/users/me/map/entries",
+        json={
+            "category": "practice",
+            "text": "Prepare one outfit the evening before an important day.",
+            "topic_space_id": style["id"],
+            "source_chat_id": "practice-chat",
+        },
+        headers=headers,
+    )
+    practice = practice_response.json()["entry"]
+    style_after_practice = next(
+        topic
+        for topic in practice_response.json()["map"]["topic_spaces"]
+        if topic["id"] == style["id"]
+    )
+    assert set(style_after_practice["chat_ids"]) == {
+        "style-chat",
+        clothing_chat_id,
+        "practice-chat",
+    }
+
+    moved_response = client.patch(
+        f"/api/v1/users/me/map/entries/{practice['id']}",
+        json={"topic_space_id": clothing["id"]},
+        headers=headers,
+    )
+    assert moved_response.status_code == 200
+    moved_map = moved_response.json()["map"]
+    clothing_after_move = next(
+        topic for topic in moved_map["topic_spaces"] if topic["id"] == clothing["id"]
+    )
+    assert clothing_after_move["entries"][0]["id"] == practice["id"]
+    assert set(clothing_after_move["chat_ids"]) == {"clothing-chat", "practice-chat"}
+
+    cycle_response = client.patch(
+        f"/api/v1/users/me/map/topics/{style['id']}",
+        json={"parent_topic_id": clothing["id"]},
+        headers=headers,
+    )
+    assert cycle_response.status_code == 400
+
+
 def test_map_suggestions_use_hybrid_surface_rule():
     suggestion = {
         "category": "body_signal",
@@ -1562,7 +1675,12 @@ def test_ollama_clients_use_local_chat_api_and_structured_json_contract():
     assert topic_result.topic == "Family expectations and autonomy"
     _, topic_request = topic_client.client.requests[0]
     topic_body = topic_request["json"]
-    assert topic_body["format"]["required"] == ["topic", "description"]
+    assert topic_body["format"]["required"] == [
+        "topic",
+        "description",
+        "existing_topic_id",
+        "parent_topic_id",
+    ]
     assert topic_body["options"]["temperature"] == 0.2
     assert topic_body["options"]["num_gpu"] == 999
 

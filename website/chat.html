@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+    />
     <meta name="theme-color" content="#100f13" />
     <meta name="referrer" content="no-referrer" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
@@ -19,7 +22,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=20260821-1" />
+    <link rel="stylesheet" href="styles.css?v=20260901-6" />
   </head>
   <body>
     <main class="shell">
@@ -94,6 +97,9 @@
                 required
               />
             </label>
+            <button id="forgot-password-button" class="auth-link-button" type="button">
+              Forgot your password?
+            </button>
             <label class="bot-field" aria-hidden="true">
               <span>Website</span>
               <input
@@ -155,23 +161,79 @@
           <p class="sidebar-tagline">Become your own creation.</p>
 
           <div class="workspace-switch" role="tablist" aria-label="Workspace view">
-            <button id="chat-workspace-button" class="active" type="button" role="tab">Chat</button>
+            <button id="chat-workspace-button" class="active" type="button" role="tab">
+              <svg class="workspace-switch-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 5.5h14v10H9l-4 3v-13Z" />
+              </svg>
+              <span class="workspace-switch-label">Chat</span>
+            </button>
             <button id="map-workspace-button" type="button" role="tab">
-              <span>My Map</span>
-              <span id="map-plan-badge" class="workspace-premium-badge">Unlock</span>
+              <svg class="workspace-switch-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="6" cy="7" r="2.25" />
+                <circle cx="18" cy="6" r="2.25" />
+                <circle cx="14" cy="18" r="2.25" />
+                <path d="m8 7 7.8-.8M7.5 9l5.2 7M17 8l-2 7.8" />
+              </svg>
+              <span class="workspace-switch-label">Map</span>
+              <span id="map-plan-badge" class="workspace-premium-badge" aria-hidden="true">&#10022;</span>
+            </button>
+            <button id="journal-workspace-button" type="button" role="tab">
+              <svg class="workspace-switch-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M6 4h12v16H6zM9 8h6M9 12h6M9 16h4" />
+              </svg>
+              <span class="workspace-switch-label">Journal</span>
+              <span id="journal-plan-badge" class="workspace-premium-badge" aria-hidden="true">&#10022;</span>
             </button>
           </div>
 
-          <button id="new-chat-button" class="new-chat-button" type="button">
-            <span class="button-icon" aria-hidden="true">+</span>
-            <span>New conversation</span>
-          </button>
+          <div id="chat-sidebar-content" class="sidebar-context">
+            <button id="new-chat-button" class="new-chat-button" type="button">
+              <span class="button-icon" aria-hidden="true">+</span>
+              <span>New conversation</span>
+            </button>
 
-          <div class="chat-list-heading">
-            <span>Conversations</span>
-            <span id="chat-count">0</span>
+            <div class="chat-list-heading">
+              <span>Conversations</span>
+              <span id="chat-count">0</span>
+            </div>
+            <nav id="chat-list" class="chat-list" aria-label="Chats"></nav>
           </div>
-          <nav id="chat-list" class="chat-list" aria-label="Chats"></nav>
+
+          <section id="journal-sidebar-content" class="sidebar-context journal-sidebar-content hidden">
+            <div class="journal-sidebar-heading">
+              <div>
+                <p class="eyebrow">Daily writing</p>
+                <h2>Your journal</h2>
+              </div>
+              <span class="journal-private-mark" title="Private to your account" aria-label="Private to your account">&#9679;</span>
+            </div>
+
+            <div id="journal-sidebar-locked" class="journal-sidebar-locked hidden">
+              <span class="workspace-premium-badge">Pro</span>
+              <strong>Journal is a Premium space</strong>
+              <p>Unlock daily pages, autosave, and optional map insights.</p>
+            </div>
+
+            <div id="journal-sidebar-access" class="journal-sidebar-access">
+              <button id="journal-today-button" class="journal-today-button" type="button">
+                <span>Today</span>
+                <small>Open a fresh page</small>
+              </button>
+              <div class="journal-date-navigation">
+                <button id="journal-previous-button" type="button" aria-label="Previous day">
+                  <span aria-hidden="true">&#8592;</span> Previous
+                </button>
+                <button id="journal-next-button" type="button" aria-label="Next day">
+                  Next <span aria-hidden="true">&#8594;</span>
+                </button>
+              </div>
+              <div class="journal-history-heading">
+                <span>Earlier pages</span>
+                <span id="journal-entry-count">0</span>
+              </div>
+              <nav id="journal-entry-list" class="journal-entry-list" aria-label="Journal entries"></nav>
+            </div>
+          </section>
 
           <div class="sidebar-profile">
             <span id="user-avatar" class="user-avatar" aria-hidden="true">Y</span>
@@ -239,6 +301,10 @@
                 </div>
                 <span id="map-suggestion-topic" class="suggestion-topic"></span>
               </div>
+              <label id="map-suggestion-target-field" class="suggestion-target-field hidden">
+                <span>Save under</span>
+                <select id="map-suggestion-target" aria-label="Topic for this map suggestion"></select>
+              </label>
               <textarea id="map-suggestion-text" rows="2" aria-label="Edit map suggestion"></textarea>
               <p id="map-suggestion-reason" class="suggestion-reason"></p>
               <div class="suggestion-actions">
@@ -255,6 +321,16 @@
                   <h3 id="topic-title"></h3>
                   <p id="topic-description" class="hidden" aria-hidden="true"></p>
                 </div>
+              </div>
+              <div id="topic-routing" class="topic-routing hidden">
+                <label>
+                  <span>Connect this chat to</span>
+                  <select id="topic-target" aria-label="Connect this chat to a topic"></select>
+                </label>
+                <label id="topic-parent-field">
+                  <span>Place new topic under</span>
+                  <select id="topic-parent" aria-label="Parent topic"></select>
+                </label>
               </div>
               <div class="topic-actions">
                 <button id="topic-dismiss" class="secondary-button" type="button">Not this</button>
@@ -318,15 +394,130 @@
               </button>
               <div>
                 <p class="eyebrow">Self-authorship</p>
-                <h2>What you are learning and choosing - your map grows from topics and observations you choose to save.</h2>
+                <h2>
+                  <span class="map-title-short">My Map</span>
+                  <span class="map-title-long">What you are learning and choosing - your map grows from topics and observations you choose to save.</span>
+                </h2>
               </div>
             </div>
             <button id="add-topic-button" class="map-command" type="button" hidden>+ Add topic</button>
           </header>
           <div id="map-content" class="map-content"></div>
         </section>
+
+        <section id="journal-view" class="journal-view hidden">
+          <header class="journal-header">
+            <div class="conversation-heading">
+              <button
+                id="journal-sidebar-toggle"
+                class="icon-button sidebar-toggle"
+                type="button"
+                title="Open journal pages"
+                aria-label="Open journal pages"
+              >
+                <span aria-hidden="true">&#9776;</span>
+              </button>
+              <div>
+                <p class="eyebrow">Private daily writing</p>
+                <h2 id="journal-date-heading">Today</h2>
+              </div>
+            </div>
+            <button id="journal-analyse-button" class="journal-ai-button" type="button">
+              <span aria-hidden="true">&#10022;</span>
+              Find map insights
+            </button>
+          </header>
+
+          <div id="journal-paywall" class="journal-paywall hidden">
+            <div class="map-paywall">
+              <span class="map-paywall-badge">Premium</span>
+              <h3>A private page for every day</h3>
+              <p>Write freely, return to earlier entries, and choose which AI suggestions belong in My Map.</p>
+              <ul>
+                <li>Automatic saving while you write</li>
+                <li>One clear page per day</li>
+                <li>User-confirmed topics, practices, and observations</li>
+              </ul>
+              <div class="map-paywall-actions">
+                <button id="journal-upgrade-button" class="primary-button" type="button">View Premium</button>
+                <button id="journal-return-chat" class="secondary-button" type="button">Continue with chat</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="journal-workspace" class="journal-workspace hidden">
+            <div class="journal-paper">
+              <div class="journal-paper-heading">
+                <div>
+                  <p id="journal-full-date" class="eyebrow">Today</p>
+                  <h3>What is on your mind?</h3>
+                </div>
+                <p id="journal-save-status" class="journal-save-status" role="status">Saved</p>
+              </div>
+              <textarea
+                id="journal-text"
+                class="journal-text"
+                maxlength="100000"
+                placeholder="Start writing. This page saves automatically..."
+                aria-label="Daily journal entry"
+              ></textarea>
+              <div class="journal-paper-footer">
+                <span id="journal-word-count">0 words</span>
+                <span>Private to your account</span>
+              </div>
+              <section id="journal-suggestions" class="journal-suggestions hidden" aria-live="polite">
+                <div class="journal-suggestions-heading">
+                  <div>
+                    <p class="eyebrow">Optional map additions</p>
+                    <h3>Keep only what feels true</h3>
+                  </div>
+                </div>
+                <div id="journal-suggestion-list" class="journal-suggestion-list"></div>
+              </section>
+            </div>
+          </div>
+        </section>
       </section>
     </main>
+
+    <dialog id="password-reset-dialog" class="app-dialog password-reset-dialog">
+      <button
+        class="dialog-close"
+        type="button"
+        data-close-dialog="password-reset-dialog"
+        aria-label="Close"
+      >
+        &times;
+      </button>
+      <section id="password-reset-request-view">
+        <p class="eyebrow">Account recovery</p>
+        <h2>Reset your password</h2>
+        <p>Enter the email address connected to your FeelY account.</p>
+        <form id="password-reset-request-form">
+          <label>
+            <span>Email</span>
+            <input id="password-reset-email" type="email" autocomplete="email" required />
+          </label>
+          <button class="primary-button" type="submit">Send reset link</button>
+        </form>
+      </section>
+      <section id="password-reset-confirm-view" class="hidden">
+        <p class="eyebrow">Choose a new password</p>
+        <h2>Reset your password</h2>
+        <form id="password-reset-confirm-form">
+          <label>
+            <span>New password</span>
+            <input id="password-reset-new" type="password" minlength="8" autocomplete="new-password" required />
+          </label>
+          <label>
+            <span>Confirm new password</span>
+            <input id="password-reset-confirm" type="password" minlength="8" autocomplete="new-password" required />
+          </label>
+          <button class="primary-button" type="submit">Save new password</button>
+        </form>
+      </section>
+      <p id="password-reset-status" class="form-error" role="status"></p>
+    </dialog>
 
     <dialog id="practice-dialog" class="app-dialog">
       <form id="practice-form" method="dialog">
@@ -534,6 +725,6 @@
       </form>
     </dialog>
 
-    <script src="app.js?v=20260821-5"></script>
+    <script src="app.js?v=20260901-8"></script>
   </body>
 </html>

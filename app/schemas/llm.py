@@ -40,6 +40,8 @@ class TopicSuggestion(BaseModel):
     confidence: float
     matched_patterns: list[str]
     status: str = "pending"
+    existing_topic_id: str | None = None
+    parent_topic_id: str | None = None
 
 
 class LLMResponse(BaseModel):
@@ -60,6 +62,8 @@ class TopicConfirmationRequest(BaseModel):
     topic: str = Field(min_length=1, max_length=120)
     description: str = Field(min_length=1, max_length=2000)
     accepted: bool = True
+    existing_topic_space_id: str | None = Field(default=None, max_length=64)
+    parent_topic_space_id: str | None = Field(default=None, max_length=64)
 
 
 class TopicConfirmationResponse(BaseModel):

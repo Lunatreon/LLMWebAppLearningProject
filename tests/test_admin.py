@@ -78,7 +78,11 @@ def test_admin_prompt_edits_are_loaded_from_files(monkeypatch, client, tmp_path)
 
     original = client.get("/api/v1/admin/prompts", headers=admin_headers)
     assert original.status_code == 200
-    assert {prompt["kind"] for prompt in original.json()["prompts"]} == {"chat", "topic"}
+    assert {prompt["kind"] for prompt in original.json()["prompts"]} == {
+        "chat",
+        "topic",
+        "journal",
+    }
     assert all(prompt["text"] == "" for prompt in original.json()["prompts"])
     with pytest.raises(PromptConfigurationError):
         read_system_prompt("chat")

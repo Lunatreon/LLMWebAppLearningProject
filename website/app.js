@@ -1,3 +1,7 @@
+const initialPasswordResetToken = new URLSearchParams(window.location.search).get(
+  "reset_password_token",
+);
+
 function scrubSensitiveAuthParams() {
   const url = new URL(window.location.href);
   const sensitiveNames = new Set([
@@ -8,6 +12,7 @@ function scrubSensitiveAuthParams() {
     "current_password",
     "new_password",
     "website",
+    "reset_password_token",
   ]);
   let changed = false;
   [...url.searchParams.keys()].forEach((name) => {
@@ -70,6 +75,10 @@ const state = {
   },
   account: null,
   subscription: null,
+  journalEntries: [],
+  activeJournalDate: null,
+  journalEntry: null,
+  journalDirty: false,
 };
 
 const authView = document.querySelector("#auth-view");
@@ -85,6 +94,7 @@ const usernameField = document.querySelector("#username-field");
 const emailInput = document.querySelector("#email");
 const usernameInput = document.querySelector("#username");
 const passwordInput = document.querySelector("#password");
+const forgotPasswordButton = document.querySelector("#forgot-password-button");
 const websiteInput = document.querySelector("#website");
 const captchaField = document.querySelector("#captcha-field");
 const captchaWidget = document.querySelector("#captcha-widget");
@@ -106,11 +116,17 @@ const topicCard = document.querySelector("#topic-card");
 const topicTitle = document.querySelector("#topic-title");
 const topicAccept = document.querySelector("#topic-accept");
 const topicDismiss = document.querySelector("#topic-dismiss");
+const topicRouting = document.querySelector("#topic-routing");
+const topicTarget = document.querySelector("#topic-target");
+const topicParent = document.querySelector("#topic-parent");
+const topicParentField = document.querySelector("#topic-parent-field");
 const mapSuggestionCard = document.querySelector("#map-suggestion-card");
 const mapSuggestionCategory = document.querySelector("#map-suggestion-category");
 const mapSuggestionTopic = document.querySelector("#map-suggestion-topic");
 const mapSuggestionText = document.querySelector("#map-suggestion-text");
 const mapSuggestionReason = document.querySelector("#map-suggestion-reason");
+const mapSuggestionTargetField = document.querySelector("#map-suggestion-target-field");
+const mapSuggestionTarget = document.querySelector("#map-suggestion-target");
 const mapSuggestionAccept = document.querySelector("#map-suggestion-accept");
 const mapSuggestionDismiss = document.querySelector("#map-suggestion-dismiss");
 const userAvatar = document.querySelector("#user-avatar");
@@ -120,14 +136,40 @@ const sidebar = document.querySelector("#sidebar");
 const sidebarToggle = document.querySelector("#sidebar-toggle");
 const sidebarClose = document.querySelector("#sidebar-close");
 const sidebarBackdrop = document.querySelector("#sidebar-backdrop");
+const workspaceSwitch = document.querySelector(".workspace-switch");
+const chatSidebarContent = document.querySelector("#chat-sidebar-content");
+const journalSidebarContent = document.querySelector("#journal-sidebar-content");
 const conversationView = document.querySelector("#conversation-view");
 const mapView = document.querySelector("#map-view");
 const chatWorkspaceButton = document.querySelector("#chat-workspace-button");
 const mapWorkspaceButton = document.querySelector("#map-workspace-button");
+const journalWorkspaceButton = document.querySelector("#journal-workspace-button");
 const mapPlanBadge = document.querySelector("#map-plan-badge");
+const journalPlanBadge = document.querySelector("#journal-plan-badge");
 const mapSidebarToggle = document.querySelector("#map-sidebar-toggle");
 const mapContent = document.querySelector("#map-content");
 const addTopicButton = document.querySelector("#add-topic-button");
+const journalView = document.querySelector("#journal-view");
+const journalSidebarToggle = document.querySelector("#journal-sidebar-toggle");
+const journalPaywall = document.querySelector("#journal-paywall");
+const journalWorkspace = document.querySelector("#journal-workspace");
+const journalUpgradeButton = document.querySelector("#journal-upgrade-button");
+const journalReturnChat = document.querySelector("#journal-return-chat");
+const journalAnalyseButton = document.querySelector("#journal-analyse-button");
+const journalDateHeading = document.querySelector("#journal-date-heading");
+const journalFullDate = document.querySelector("#journal-full-date");
+const journalText = document.querySelector("#journal-text");
+const journalSaveStatus = document.querySelector("#journal-save-status");
+const journalWordCount = document.querySelector("#journal-word-count");
+const journalTodayButton = document.querySelector("#journal-today-button");
+const journalPreviousButton = document.querySelector("#journal-previous-button");
+const journalNextButton = document.querySelector("#journal-next-button");
+const journalEntryList = document.querySelector("#journal-entry-list");
+const journalEntryCount = document.querySelector("#journal-entry-count");
+const journalSidebarAccess = document.querySelector("#journal-sidebar-access");
+const journalSidebarLocked = document.querySelector("#journal-sidebar-locked");
+const journalSuggestions = document.querySelector("#journal-suggestions");
+const journalSuggestionList = document.querySelector("#journal-suggestion-list");
 const practiceDialog = document.querySelector("#practice-dialog");
 const practiceForm = document.querySelector("#practice-form");
 const practiceText = document.querySelector("#practice-text");
@@ -176,6 +218,15 @@ const lensToggle = document.querySelector("#lens-toggle");
 const lensPanel = document.querySelector("#lens-panel");
 const chatPlanCopy = document.querySelector("#chat-plan-copy");
 const chatPlanUpgrade = document.querySelector("#chat-plan-upgrade");
+const passwordResetDialog = document.querySelector("#password-reset-dialog");
+const passwordResetRequestView = document.querySelector("#password-reset-request-view");
+const passwordResetConfirmView = document.querySelector("#password-reset-confirm-view");
+const passwordResetRequestForm = document.querySelector("#password-reset-request-form");
+const passwordResetConfirmForm = document.querySelector("#password-reset-confirm-form");
+const passwordResetEmail = document.querySelector("#password-reset-email");
+const passwordResetNew = document.querySelector("#password-reset-new");
+const passwordResetConfirm = document.querySelector("#password-reset-confirm");
+const passwordResetStatus = document.querySelector("#password-reset-status");
 
 const MAP_CATEGORY_LABELS = {
   inherited_script: "Inherited script",
@@ -192,6 +243,7 @@ let lastAuthSubmitAt = 0;
 let turnstileScriptPromise = null;
 let googleScriptPromise = null;
 let billingResultTimer = null;
+let journalSaveTimer = null;
 
 class ApiError extends Error {
   constructor(message, status, retryAfter = null) {
@@ -210,6 +262,7 @@ function setMode(mode) {
   loginTab.setAttribute("aria-selected", String(isLogin));
   registerTab.setAttribute("aria-selected", String(!isLogin));
   usernameField.classList.toggle("hidden", isLogin);
+  forgotPasswordButton.classList.toggle("hidden", !isLogin);
   usernameInput.required = !isLogin;
   passwordInput.autocomplete = isLogin ? "current-password" : "new-password";
   authHeading.textContent = isLogin ? "Return to your space" : "Create your private space";
@@ -476,7 +529,8 @@ async function showChat() {
   } else {
     renderMap();
   }
-  switchWorkspace(requestedView === "map" ? "map" : "chat");
+  const workspace = ["map", "journal"].includes(requestedView) ? requestedView : "chat";
+  switchWorkspace(workspace);
   startPolling();
   await handleCheckoutReturn();
   await handleAccountReturn(requestedView);
@@ -514,6 +568,73 @@ async function login() {
   await showChat();
 }
 
+function openPasswordResetRequest() {
+  passwordResetRequestView.classList.remove("hidden");
+  passwordResetConfirmView.classList.add("hidden");
+  passwordResetStatus.textContent = "";
+  passwordResetEmail.value = emailInput.value.trim();
+  passwordResetDialog.showModal();
+  passwordResetEmail.focus();
+}
+
+function openPasswordResetConfirm() {
+  passwordResetRequestView.classList.add("hidden");
+  passwordResetConfirmView.classList.remove("hidden");
+  passwordResetStatus.textContent = "";
+  passwordResetNew.value = "";
+  passwordResetConfirm.value = "";
+  passwordResetDialog.showModal();
+  passwordResetNew.focus();
+}
+
+async function requestPasswordReset(event) {
+  event.preventDefault();
+  const submit = passwordResetRequestForm.querySelector('button[type="submit"]');
+  submit.disabled = true;
+  passwordResetStatus.textContent = "Sending...";
+  try {
+    const response = await api("/auth/password-reset/request", {
+      method: "POST",
+      body: JSON.stringify({ email: passwordResetEmail.value.trim() }),
+    });
+    passwordResetStatus.textContent = response.detail;
+  } finally {
+    submit.disabled = false;
+  }
+}
+
+async function confirmPasswordReset(event) {
+  event.preventDefault();
+  if (!initialPasswordResetToken) {
+    passwordResetStatus.textContent = "This reset link is missing its token.";
+    return;
+  }
+  if (passwordResetNew.value !== passwordResetConfirm.value) {
+    passwordResetStatus.textContent = "The passwords do not match.";
+    return;
+  }
+  const submit = passwordResetConfirmForm.querySelector('button[type="submit"]');
+  submit.disabled = true;
+  passwordResetStatus.textContent = "Saving...";
+  try {
+    const response = await api("/auth/password-reset/confirm", {
+      method: "POST",
+      body: JSON.stringify({
+        token: initialPasswordResetToken,
+        new_password: passwordResetNew.value,
+      }),
+    });
+    passwordResetStatus.textContent = response.detail;
+    passwordInput.value = "";
+    window.setTimeout(() => {
+      passwordResetDialog.close();
+      emailInput.focus();
+    }, 1200);
+  } finally {
+    submit.disabled = false;
+  }
+}
+
 function logout() {
   state.token = null;
   state.user = null;
@@ -526,6 +647,11 @@ function logout() {
   state.map = null;
   state.pendingTopic = null;
   state.pendingMapSuggestion = null;
+  state.journalEntries = [];
+  state.activeJournalDate = null;
+  state.journalEntry = null;
+  state.journalDirty = false;
+  if (journalSaveTimer) window.clearTimeout(journalSaveTimer);
   localStorage.removeItem("feely_token");
   authForm.reset();
   renderChats();
@@ -548,6 +674,7 @@ function freeSubscriptionState() {
     plan: "free",
     premium: false,
     my_map_access: false,
+    journal_access: false,
     chat_daily_limit: 10,
     cancel_at_period_end: false,
     current_period_end: null,
@@ -560,6 +687,10 @@ function freeSubscriptionState() {
 
 function hasMyMapAccess() {
   return Boolean(state.subscription?.my_map_access);
+}
+
+function hasJournalAccess() {
+  return Boolean(state.subscription?.journal_access ?? state.subscription?.my_map_access);
 }
 
 async function loadSubscription() {
@@ -580,6 +711,8 @@ async function loadMap() {
   }
   state.map = await api("/users/me/map", { headers: authHeaders() });
   renderMap();
+  if (state.pendingTopic) renderTopic(state.pendingTopic);
+  if (state.pendingMapSuggestion) renderMapSuggestion(state.pendingMapSuggestion);
 }
 
 function renderUser() {
@@ -686,12 +819,18 @@ function renderSubscription() {
 
 function renderPremiumAccess() {
   const mapAccess = hasMyMapAccess();
+  const journalAccess = hasJournalAccess();
   const dailyLimit = state.subscription?.chat_daily_limit || 10;
-  mapPlanBadge.hidden = false;
-  mapPlanBadge.textContent = mapAccess ? "Premium" : "Unlock";
-  mapPlanBadge.classList.toggle("active", mapAccess);
+  mapPlanBadge.hidden = mapAccess;
+  mapPlanBadge.textContent = "✦";
   mapWorkspaceButton.classList.toggle("premium-locked", !mapAccess);
   mapWorkspaceButton.title = mapAccess ? "Open My Map" : "My Map is included with Premium";
+  journalPlanBadge.hidden = journalAccess;
+  journalPlanBadge.textContent = "✦";
+  journalWorkspaceButton.classList.toggle("premium-locked", !journalAccess);
+  journalWorkspaceButton.title = journalAccess
+    ? "Open Journal"
+    : "Journal is included with Premium";
   addTopicButton.hidden = !mapAccess;
   chatPlanCopy.textContent = mapAccess
     ? `Premium - up to ${dailyLimit} messages per day.`
@@ -865,6 +1004,7 @@ async function startLimitSubscriptionCheckout(button) {
     button.disabled = false;
     button.textContent = originalLabel;
   }
+  if (!journalView.classList.contains("hidden")) renderJournalAccess();
 }
 
 function buildPortalReturnUrl() {
@@ -1316,9 +1456,43 @@ function renderTopic(topic) {
   topicCard.classList.toggle("hidden", !topic);
   if (!topic) {
     topicTitle.textContent = "";
+    topicRouting.classList.add("hidden");
     return;
   }
   topicTitle.textContent = topic.topic;
+  const spaces = state.map?.topic_spaces || [];
+  topicRouting.classList.toggle("hidden", !hasMyMapAccess() || !spaces.length);
+  topicTarget.replaceChildren();
+  const createOption = document.createElement("option");
+  createOption.value = "";
+  createOption.textContent = `Create “${topic.topic}”`;
+  topicTarget.append(createOption);
+  spaces.forEach((space) => {
+    const option = document.createElement("option");
+    option.value = space.id;
+    option.textContent = `Add chat to ${space.title}`;
+    topicTarget.append(option);
+  });
+  if (spaces.some((space) => space.id === topic.existing_topic_id)) {
+    topicTarget.value = topic.existing_topic_id;
+  }
+
+  topicParent.replaceChildren();
+  const noParent = document.createElement("option");
+  noParent.value = "";
+  noParent.textContent = "No broader topic";
+  topicParent.append(noParent);
+  spaces.forEach((space) => {
+    const option = document.createElement("option");
+    option.value = space.id;
+    option.textContent = space.title;
+    topicParent.append(option);
+  });
+  if (spaces.some((space) => space.id === topic.parent_topic_id)) {
+    topicParent.value = topic.parent_topic_id;
+  }
+  topicParentField.classList.toggle("hidden", Boolean(topicTarget.value));
+  topicAccept.textContent = topicTarget.value ? "Connect chat" : "Save topic";
 }
 
 function renderMapSuggestion(suggestion) {
@@ -1330,6 +1504,8 @@ function renderMapSuggestion(suggestion) {
     mapSuggestionTopic.textContent = "";
     mapSuggestionText.value = "";
     mapSuggestionReason.textContent = "";
+    mapSuggestionTargetField.classList.add("hidden");
+    mapSuggestionTarget.replaceChildren();
     return;
   }
 
@@ -1340,6 +1516,22 @@ function renderMapSuggestion(suggestion) {
     : "Not connected to a topic yet";
   mapSuggestionText.value = suggestion.text || "";
   mapSuggestionReason.textContent = suggestion.reason || "";
+  const spaces = state.map?.topic_spaces || [];
+  mapSuggestionTargetField.classList.toggle("hidden", !spaces.length);
+  mapSuggestionTarget.replaceChildren();
+  const unassigned = document.createElement("option");
+  unassigned.value = "";
+  unassigned.textContent = "Across topics";
+  mapSuggestionTarget.append(unassigned);
+  spaces.forEach((space) => {
+    const option = document.createElement("option");
+    option.value = space.id;
+    option.textContent = space.title;
+    mapSuggestionTarget.append(option);
+  });
+  if (spaces.some((space) => space.id === suggestion.topic_space_id)) {
+    mapSuggestionTarget.value = suggestion.topic_space_id;
+  }
 }
 
 async function sendMessage(event) {
@@ -1483,6 +1675,9 @@ function stopPolling() {
 async function confirmTopic(accepted) {
   if (!state.pendingTopic) return;
   const topic = state.pendingTopic;
+  const existingTopicSpaceId = accepted && topicTarget.value ? topicTarget.value : null;
+  const parentTopicSpaceId =
+    accepted && !existingTopicSpaceId && topicParent.value ? topicParent.value : null;
   renderTopic(null);
   await api("/llm/topics/confirm", {
     method: "POST",
@@ -1492,6 +1687,8 @@ async function confirmTopic(accepted) {
       topic: topic.topic,
       description: topic.description,
       accepted,
+      existing_topic_space_id: existingTopicSpaceId,
+      parent_topic_space_id: parentTopicSpaceId,
     }),
   });
   if (hasMyMapAccess()) await loadMap();
@@ -1503,6 +1700,9 @@ async function confirmMapSuggestion(accepted) {
   const suggestion = state.pendingMapSuggestion;
   const text = mapSuggestionText.value.trim();
   if (accepted && !text) return;
+  const targetTopicSpaceId = mapSuggestionTargetField.classList.contains("hidden")
+    ? suggestion.topic_space_id
+    : mapSuggestionTarget.value || null;
 
   renderMapSuggestion(null);
   const response = await api("/llm/map-suggestions/confirm", {
@@ -1514,10 +1714,13 @@ async function confirmMapSuggestion(accepted) {
       category: suggestion.category,
       text: text || suggestion.text,
       reason: suggestion.reason,
-      topic_space_id: suggestion.topic_space_id,
+      topic_space_id: targetTopicSpaceId,
     }),
   });
   state.map = response.map;
+  if (Object.prototype.hasOwnProperty.call(payload, "topic_space_id")) {
+    state.activeMapNodeId = payload.topic_space_id || "__across_topics";
+  }
   renderMap();
 }
 
@@ -1536,19 +1739,390 @@ function closeSidebar() {
   sidebarBackdrop.classList.add("hidden");
 }
 
+function localDateKey(value = new Date()) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function dateFromKey(value) {
+  return new Date(`${value}T12:00:00`);
+}
+
+function shiftedDateKey(value, offset) {
+  const date = dateFromKey(value);
+  date.setDate(date.getDate() + offset);
+  return localDateKey(date);
+}
+
+function formattedJournalDate(value, options = { dateStyle: "full" }) {
+  return new Intl.DateTimeFormat(undefined, options).format(dateFromKey(value));
+}
+
+function journalWordTotal(content) {
+  return content.trim() ? content.trim().split(/\s+/).length : 0;
+}
+
+function setJournalSaveStatus(text, status = "saved") {
+  journalSaveStatus.textContent = text;
+  journalSaveStatus.dataset.state = status;
+}
+
+function renderJournalAccess() {
+  const allowed = hasJournalAccess();
+  journalPaywall.classList.toggle("hidden", allowed);
+  journalWorkspace.classList.toggle("hidden", !allowed);
+  journalSidebarAccess.classList.toggle("hidden", !allowed);
+  journalSidebarLocked.classList.toggle("hidden", allowed);
+  journalAnalyseButton.hidden = !allowed;
+  if (!allowed) {
+    journalDateHeading.textContent = "Journal";
+    return;
+  }
+  if (!state.activeJournalDate) state.activeJournalDate = localDateKey();
+  journalDateHeading.textContent = formattedJournalDate(state.activeJournalDate, {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+async function loadJournalIndex() {
+  if (!hasJournalAccess()) return;
+  state.journalEntries = await api("/journal/entries?limit=180", {
+    headers: authHeaders(),
+  });
+  renderJournalHistory();
+}
+
+function renderJournalHistory() {
+  journalEntryList.replaceChildren();
+  journalEntryCount.textContent = String(state.journalEntries.length);
+  if (!state.journalEntries.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "Your saved pages will appear here.";
+    journalEntryList.append(empty);
+    return;
+  }
+  state.journalEntries.forEach((entry) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "journal-entry-button";
+    button.classList.toggle("active", entry.entry_date === state.activeJournalDate);
+    const date = document.createElement("strong");
+    date.textContent = formattedJournalDate(entry.entry_date, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+    const excerpt = document.createElement("span");
+    excerpt.textContent = entry.excerpt || `${entry.word_count || 0} words`;
+    button.append(date, excerpt);
+    button.addEventListener("click", () => {
+      openJournalDateFromSidebar(entry.entry_date).catch(renderInlineError);
+    });
+    journalEntryList.append(button);
+  });
+}
+
+async function openJournalDateFromSidebar(entryDate) {
+  await openJournalDate(entryDate);
+  if (window.matchMedia("(max-width: 900px)").matches) closeSidebar();
+}
+
+function renderJournalEntry() {
+  const entry = state.journalEntry || {
+    entry_date: state.activeJournalDate || localDateKey(),
+    content: "",
+    word_count: 0,
+    suggestions: [],
+  };
+  journalText.value = entry.content || "";
+  journalDateHeading.textContent = formattedJournalDate(entry.entry_date, {
+    month: "short",
+    day: "numeric",
+  });
+  journalFullDate.textContent = formattedJournalDate(entry.entry_date);
+  const words = journalWordTotal(entry.content || "");
+  journalWordCount.textContent = `${words} ${words === 1 ? "word" : "words"}`;
+  journalNextButton.disabled = entry.entry_date >= localDateKey();
+  setJournalSaveStatus(entry.updated_at ? "Saved" : "New page");
+  renderJournalSuggestions();
+  renderJournalHistory();
+}
+
+async function openJournalDate(entryDate) {
+  if (!hasJournalAccess()) return;
+  if (state.journalDirty) await saveJournalEntry();
+  state.activeJournalDate = entryDate;
+  setJournalSaveStatus("Loading...", "saving");
+  state.journalEntry = await api(`/journal/entries/${encodeURIComponent(entryDate)}`, {
+    headers: authHeaders(),
+  });
+  state.journalDirty = false;
+  renderJournalEntry();
+}
+
+function updateJournalIndexFromEntry(entry) {
+  const compact = (entry.content || "").replace(/\s+/g, " ").trim();
+  const item = {
+    entry_date: entry.entry_date,
+    excerpt: compact.length > 120 ? `${compact.slice(0, 117)}...` : compact,
+    word_count: journalWordTotal(entry.content || ""),
+    suggestion_count: entry.suggestions?.length || 0,
+    updated_at: entry.updated_at,
+  };
+  const index = state.journalEntries.findIndex(
+    (candidate) => candidate.entry_date === entry.entry_date,
+  );
+  if (index >= 0) state.journalEntries.splice(index, 1);
+  if (item.word_count || item.suggestion_count) state.journalEntries.unshift(item);
+  state.journalEntries.sort((a, b) => b.entry_date.localeCompare(a.entry_date));
+  renderJournalHistory();
+}
+
+async function saveJournalEntry({ keepalive = false } = {}) {
+  if (!hasJournalAccess() || !state.activeJournalDate || !state.journalDirty) return;
+  if (journalSaveTimer) window.clearTimeout(journalSaveTimer);
+  journalSaveTimer = null;
+  const entryDate = state.activeJournalDate;
+  const content = journalText.value;
+  setJournalSaveStatus("Saving...", "saving");
+
+  if (keepalive) {
+    state.journalDirty = false;
+    fetch(`${API_BASE}/journal/entries/${encodeURIComponent(entryDate)}`, {
+      method: "PUT",
+      keepalive: true,
+      headers: authHeaders(),
+      body: JSON.stringify({ content }),
+    }).catch(() => {});
+    return;
+  }
+
+  try {
+    const saved = await api(`/journal/entries/${encodeURIComponent(entryDate)}`, {
+      method: "PUT",
+      headers: authHeaders(),
+      body: JSON.stringify({ content }),
+    });
+    if (entryDate === state.activeJournalDate && content === journalText.value) {
+      state.journalEntry = saved;
+      state.journalDirty = false;
+      setJournalSaveStatus("Saved");
+    }
+    updateJournalIndexFromEntry(saved);
+  } catch (error) {
+    setJournalSaveStatus("Could not save", "error");
+    throw error;
+  }
+}
+
+function scheduleJournalSave() {
+  state.journalDirty = true;
+  setJournalSaveStatus("Unsaved", "saving");
+  const words = journalWordTotal(journalText.value);
+  journalWordCount.textContent = `${words} ${words === 1 ? "word" : "words"}`;
+  if (journalSaveTimer) window.clearTimeout(journalSaveTimer);
+  journalSaveTimer = window.setTimeout(() => {
+    saveJournalEntry().catch((error) => {
+      setJournalSaveStatus(error instanceof Error ? error.message : "Could not save", "error");
+    });
+  }, 900);
+}
+
+async function analyseJournalEntry() {
+  if (!hasJournalAccess() || !state.activeJournalDate) return;
+  if (state.journalDirty) await saveJournalEntry();
+  journalAnalyseButton.disabled = true;
+  const originalLabel = journalAnalyseButton.textContent;
+  journalAnalyseButton.textContent = "Finding insights...";
+  setJournalSaveStatus("Analysing...", "saving");
+  try {
+    const response = await api(
+      `/journal/entries/${encodeURIComponent(state.activeJournalDate)}/analyse`,
+      { method: "POST", headers: authHeaders() },
+    );
+    state.journalEntry = response.entry;
+    updateJournalIndexFromEntry(response.entry);
+    renderJournalSuggestions();
+    setJournalSaveStatus("Analysis ready");
+  } finally {
+    journalAnalyseButton.disabled = false;
+    journalAnalyseButton.textContent = originalLabel;
+  }
+}
+
+function journalTopicOptions(select, selectedValue = "", emptyLabel = "Across topics") {
+  const across = document.createElement("option");
+  across.value = "";
+  across.textContent = emptyLabel;
+  select.append(across);
+  (state.map?.topic_spaces || []).forEach((topic) => {
+    const option = document.createElement("option");
+    option.value = topic.id;
+    option.textContent = topic.title;
+    option.selected = topic.id === selectedValue;
+    select.append(option);
+  });
+}
+
+function createJournalSuggestionCard(suggestion) {
+  const card = document.createElement("article");
+  card.className = "journal-suggestion";
+  card.dataset.status = suggestion.status;
+
+  const kind = document.createElement("span");
+  kind.className = "journal-suggestion-kind";
+  kind.textContent = suggestion.kind === "topic"
+    ? "Possible topic"
+    : MAP_CATEGORY_LABELS[suggestion.category] || suggestion.category;
+  card.append(kind);
+
+  let titleInput = null;
+  if (suggestion.kind === "topic") {
+    titleInput = document.createElement("input");
+    titleInput.name = "journal_topic_title";
+    titleInput.value = suggestion.title || "";
+    titleInput.maxLength = 120;
+    titleInput.setAttribute("aria-label", "Topic title");
+    card.append(titleInput);
+  }
+
+  const textInput = document.createElement("textarea");
+  textInput.name = "journal_suggestion_text";
+  textInput.value = suggestion.text || "";
+  textInput.maxLength = 1000;
+  textInput.setAttribute("aria-label", suggestion.kind === "topic" ? "Topic description" : "Map entry");
+  card.append(textInput);
+
+  let categoryInput = null;
+  let topicInput = null;
+  if (suggestion.kind === "topic") {
+    topicInput = document.createElement("select");
+    topicInput.name = "journal_topic_space_id";
+    topicInput.setAttribute("aria-label", "Connect this journal page to a topic");
+    journalTopicOptions(topicInput, "", `Create “${suggestion.title || "new topic"}”`);
+    card.append(topicInput);
+  } else if (suggestion.kind === "map_entry") {
+    categoryInput = document.createElement("select");
+    categoryInput.name = "journal_map_category";
+    Object.entries(MAP_CATEGORY_LABELS).forEach(([value, label]) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      option.selected = value === suggestion.category;
+      categoryInput.append(option);
+    });
+    categoryInput.setAttribute("aria-label", "Map category");
+    topicInput = document.createElement("select");
+    topicInput.name = "journal_map_topic_space_id";
+    topicInput.setAttribute("aria-label", "Connect to topic");
+    journalTopicOptions(topicInput);
+    card.append(categoryInput, topicInput);
+  }
+
+  const reason = document.createElement("p");
+  reason.className = "journal-suggestion-reason";
+  reason.textContent = suggestion.reason;
+  card.append(reason);
+
+  if (suggestion.status === "pending") {
+    const actions = document.createElement("div");
+    actions.className = "journal-suggestion-actions";
+    const dismiss = document.createElement("button");
+    dismiss.type = "button";
+    dismiss.className = "secondary-button";
+    dismiss.textContent = "Not this";
+    const accept = document.createElement("button");
+    accept.type = "button";
+    accept.className = "primary-button small";
+    accept.textContent = suggestion.kind === "topic" ? "Save topic" : "Add to map";
+    dismiss.addEventListener("click", () =>
+      decideJournalSuggestion(suggestion, false).catch(renderInlineError),
+    );
+    accept.addEventListener("click", () =>
+      decideJournalSuggestion(suggestion, true, {
+        title: titleInput?.value || null,
+        text: textInput.value,
+        category: categoryInput?.value || null,
+        topic_space_id: topicInput?.value || null,
+      }).catch(renderInlineError),
+    );
+    actions.append(dismiss, accept);
+    card.append(actions);
+  } else {
+    const status = document.createElement("strong");
+    status.textContent = suggestion.status === "saved" ? "Saved to My Map" : "Dismissed";
+    card.append(status);
+    card.querySelectorAll("input, textarea, select").forEach((field) => {
+      field.disabled = true;
+    });
+  }
+  return card;
+}
+
+function renderJournalSuggestions() {
+  const suggestions = state.journalEntry?.suggestions || [];
+  journalSuggestions.classList.toggle("hidden", suggestions.length === 0);
+  journalSuggestionList.replaceChildren(
+    ...suggestions.map(createJournalSuggestionCard),
+  );
+}
+
+async function decideJournalSuggestion(suggestion, accepted, edits = {}) {
+  const response = await api(
+    `/journal/entries/${encodeURIComponent(state.activeJournalDate)}/suggestions/${encodeURIComponent(suggestion.id)}`,
+    {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ accepted, ...edits }),
+    },
+  );
+  state.map = response.map;
+  const index = (state.journalEntry?.suggestions || []).findIndex(
+    (item) => item.id === suggestion.id,
+  );
+  if (index >= 0) state.journalEntry.suggestions[index] = response.suggestion;
+  renderJournalSuggestions();
+  renderMap();
+}
+
+async function loadJournalWorkspace() {
+  renderJournalAccess();
+  if (!hasJournalAccess()) return;
+  if (!state.activeJournalDate) state.activeJournalDate = localDateKey();
+  await Promise.all([loadJournalIndex(), openJournalDate(state.activeJournalDate)]);
+}
+
 function switchWorkspace(view) {
   const showMap = view === "map";
+  const showJournal = view === "journal";
   if (showMap) {
     state.activeMapNodeId = null;
     state.mapDetailOpen = false;
   }
-  conversationView.classList.toggle("hidden", showMap);
+  if (!showJournal && state.journalDirty) saveJournalEntry().catch(renderInlineError);
+  conversationView.classList.toggle("hidden", showMap || showJournal);
   mapView.classList.toggle("hidden", !showMap);
-  chatWorkspaceButton.classList.toggle("active", !showMap);
+  journalView.classList.toggle("hidden", !showJournal);
+  chatWorkspaceButton.classList.toggle("active", !showMap && !showJournal);
   mapWorkspaceButton.classList.toggle("active", showMap);
-  chatWorkspaceButton.setAttribute("aria-selected", String(!showMap));
+  journalWorkspaceButton.classList.toggle("active", showJournal);
+  chatSidebarContent.classList.toggle("hidden", showJournal);
+  journalSidebarContent.classList.toggle("hidden", !showJournal);
+  chatWorkspaceButton.setAttribute("aria-selected", String(!showMap && !showJournal));
   mapWorkspaceButton.setAttribute("aria-selected", String(showMap));
-  document.title = showMap ? "My Map | FeelY" : `${chatTitle.textContent} | FeelY`;
+  journalWorkspaceButton.setAttribute("aria-selected", String(showJournal));
+  chatWorkspaceButton.tabIndex = !showMap && !showJournal ? 0 : -1;
+  mapWorkspaceButton.tabIndex = showMap ? 0 : -1;
+  journalWorkspaceButton.tabIndex = showJournal ? 0 : -1;
+  document.title = showMap
+    ? "My Map | FeelY"
+    : showJournal
+      ? "Journal | FeelY"
+      : `${chatTitle.textContent} | FeelY`;
   closeSidebar();
   if (showMap) {
     if (hasMyMapAccess()) {
@@ -1557,6 +2131,7 @@ function switchWorkspace(view) {
       renderMap();
     }
   }
+  if (showJournal) loadJournalWorkspace().catch(renderInlineError);
 }
 
 function createMapEntryElement(entry) {
@@ -1649,7 +2224,7 @@ function createConceptNode(node, index) {
   button.dataset.category = primaryEntryCategory(node.entries || []);
   button.setAttribute("aria-pressed", String(node.id === state.activeMapNodeId));
   button.setAttribute("aria-label", `Open ${node.title}`);
-  const position = mapNodePosition(index);
+  const position = node.position || mapNodePosition(index);
   button.style.left = `${position.x}%`;
   button.style.top = `${position.y}%`;
   button.style.setProperty("--node-delay", `${index * 90}ms`);
@@ -1658,10 +2233,16 @@ function createConceptNode(node, index) {
   title.textContent = node.title;
   const meta = document.createElement("span");
   const entryCount = node.entries?.length || 0;
+  const chatCount = node.chat_ids?.length || 0;
+  const journalCount = node.journal_dates?.length || 0;
+  const journalLabel = `${journalCount} ${journalCount === 1 ? "journal entry" : "journal entries"}`;
+  const entryLabel = `${entryCount} ${entryCount === 1 ? "entry" : "entries"}`;
   meta.textContent =
     node.id === state.activeMapNodeId && !state.mapDetailOpen
       ? "Open details"
-      : `${entryCount} ${entryCount === 1 ? "entry" : "entries"}`;
+      : node.parent_title
+        ? `Under ${node.parent_title} · ${journalLabel}`
+        : `${chatCount} ${chatCount === 1 ? "chat" : "chats"} · ${journalLabel} · ${entryLabel}`;
   button.append(title, meta);
 
   button.addEventListener("click", () => {
@@ -1672,19 +2253,55 @@ function createConceptNode(node, index) {
   return button;
 }
 
-async function createThreadMapEntry(node, category, text) {
+function createMapConnectionLayer(nodes) {
+  const namespace = "http://www.w3.org/2000/svg";
+  const layer = document.createElementNS(namespace, "svg");
+  layer.classList.add("map-connection-layer");
+  layer.setAttribute("viewBox", "0 0 100 100");
+  layer.setAttribute("preserveAspectRatio", "none");
+  layer.setAttribute("aria-hidden", "true");
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const renderedRelations = new Set();
+
+  const addLine = (source, target, type) => {
+    if (!source?.position || !target?.position) return;
+    const line = document.createElementNS(namespace, "line");
+    line.classList.add("map-topic-link", `map-topic-link-${type}`);
+    line.setAttribute("x1", source.position.x);
+    line.setAttribute("y1", source.position.y);
+    line.setAttribute("x2", target.position.x);
+    line.setAttribute("y2", target.position.y);
+    layer.append(line);
+  };
+
+  nodes.forEach((node) => {
+    if (node.parent_topic_id) addLine(byId.get(node.parent_topic_id), node, "parent");
+    (node.related_topic_ids || []).forEach((relatedId) => {
+      const relationKey = [node.id, relatedId].sort().join(":");
+      if (renderedRelations.has(relationKey)) return;
+      renderedRelations.add(relationKey);
+      addLine(node, byId.get(relatedId), "related");
+    });
+  });
+  return layer;
+}
+
+async function createThreadMapEntry(node, category, text, topicSpaceId = undefined) {
   const response = await api("/users/me/map/entries", {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify({
       category,
       text,
-      topic_space_id: node.kind === "topic" ? node.id : null,
+      topic_space_id:
+        topicSpaceId === undefined
+          ? node.kind === "topic" ? node.id : null
+          : topicSpaceId,
       source_chat_id: state.activeChatId,
     }),
   });
   state.map = response.map;
-  state.activeMapNodeId = node.id;
+  state.activeMapNodeId = topicSpaceId || (node.kind === "topic" ? node.id : "__across_topics");
   renderMap();
 }
 
@@ -1759,21 +2376,63 @@ function openMapTopicPopup(topic = null) {
 
   const titleInput = document.createElement("input");
   titleInput.type = "text";
+  titleInput.name = "topic_title";
   titleInput.required = true;
   titleInput.maxLength = 120;
   titleInput.placeholder = "Topic title";
   titleInput.value = topic?.title || "";
 
   const descriptionInput = document.createElement("textarea");
+  descriptionInput.name = "topic_description";
   descriptionInput.rows = 3;
   descriptionInput.maxLength = 1000;
   descriptionInput.placeholder = "Optional note about this topic";
   descriptionInput.value = topic?.description || "";
 
+  const parentLabel = document.createElement("label");
+  parentLabel.className = "map-action-field";
+  const parentLabelText = document.createElement("span");
+  parentLabelText.textContent = "Broader topic";
+  const parentInput = document.createElement("select");
+  parentInput.name = "parent_topic_id";
+  const noParent = document.createElement("option");
+  noParent.value = "";
+  noParent.textContent = "No parent topic";
+  parentInput.append(noParent);
+  (state.map?.topic_spaces || []).forEach((space) => {
+    if (space.id === topic?.id) return;
+    const option = document.createElement("option");
+    option.value = space.id;
+    option.textContent = space.title;
+    parentInput.append(option);
+  });
+  parentInput.value = topic?.parent_topic_id || "";
+  parentLabel.append(parentLabelText, parentInput);
+
+  const relatedFieldset = document.createElement("fieldset");
+  relatedFieldset.className = "map-related-picker";
+  const relatedLegend = document.createElement("legend");
+  relatedLegend.textContent = "Connect related topics";
+  relatedFieldset.append(relatedLegend);
+  (state.map?.topic_spaces || []).forEach((space) => {
+    if (space.id === topic?.id) return;
+    const label = document.createElement("label");
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.name = "related_topic_ids";
+    input.value = space.id;
+    input.checked = Boolean(topic?.related_topic_ids?.includes(space.id));
+    const text = document.createElement("span");
+    text.textContent = space.title;
+    label.append(input, text);
+    relatedFieldset.append(label);
+  });
+  if (relatedFieldset.children.length === 1) relatedFieldset.classList.add("hidden");
+
   const submit = document.createElement("button");
   submit.type = "submit";
   submit.textContent = isEdit ? "Save topic" : "Create topic";
-  form.append(titleInput, descriptionInput, submit);
+  form.append(titleInput, descriptionInput, parentLabel, relatedFieldset, submit);
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -1783,6 +2442,10 @@ function openMapTopicPopup(topic = null) {
     const payload = {
       title: titleText,
       description: descriptionInput.value.trim(),
+      parent_topic_id: parentInput.value || null,
+      related_topic_ids: [...relatedFieldset.querySelectorAll("input:checked")].map(
+        (input) => input.value,
+      ),
     };
     const request = isEdit
       ? updateMapTopic(topic.id, payload)
@@ -1854,7 +2517,7 @@ function openMapActionPopup(node, mode, entry = null) {
   popup.className = "map-action-popup";
   popup.setAttribute("role", "dialog");
   popup.setAttribute("aria-modal", "true");
-  popup.setAttribute("aria-label", isEdit ? "Edit entry" : isTask ? "Add task" : "Add entry");
+  popup.setAttribute("aria-label", isEdit ? "Edit entry" : isTask ? "Add practice" : "Add entry");
 
   const closeButton = document.createElement("button");
   closeButton.type = "button";
@@ -1868,7 +2531,13 @@ function openMapActionPopup(node, mode, entry = null) {
   eyebrow.textContent = node?.title || "Map entry";
 
   const title = document.createElement("h3");
-  title.textContent = isPracticeEdit ? "Edit task" : isEdit ? "Edit entry" : isTask ? "Add a task" : "Add an entry";
+  title.textContent = isPracticeEdit
+    ? "Edit practice"
+    : isEdit
+      ? "Edit entry"
+      : isTask
+        ? "Add a practice"
+        : "Add an entry";
 
   const form = document.createElement("form");
   form.className = "map-action-form";
@@ -1893,17 +2562,34 @@ function openMapActionPopup(node, mode, entry = null) {
     if (entry) categoryInput.value = entry.category;
   }
 
+  const topicInput = document.createElement("select");
+  topicInput.name = "topic_space_id";
+  topicInput.setAttribute("aria-label", "Topic for this entry");
+  const acrossTopics = document.createElement("option");
+  acrossTopics.value = "";
+  acrossTopics.textContent = "Across topics";
+  topicInput.append(acrossTopics);
+  (state.map?.topic_spaces || []).forEach((space) => {
+    const option = document.createElement("option");
+    option.value = space.id;
+    option.textContent = space.title;
+    topicInput.append(option);
+  });
+  topicInput.value = node?.kind === "topic" ? node.id : "";
+  form.append(topicInput);
+
   const textInput = document.createElement("textarea");
+  textInput.name = "entry_text";
   textInput.rows = 4;
   textInput.required = true;
   textInput.placeholder = isTask
-    ? "What task or practice belongs to this thread?"
+    ? "What repeatable practice belongs to this topic?"
     : "What observation do you want to save here?";
   if (entry) textInput.value = entry.text || "";
 
   const submit = document.createElement("button");
   submit.type = "submit";
-  submit.textContent = isEdit ? "Save changes" : isTask ? "Save task" : "Save entry";
+  submit.textContent = isEdit ? "Save changes" : isTask ? "Save practice" : "Save entry";
   form.append(textInput, submit);
 
   form.addEventListener("submit", (event) => {
@@ -1915,11 +2601,15 @@ function openMapActionPopup(node, mode, entry = null) {
       updateMapEntry(entry.id, {
         category: isPracticeEdit ? "practice" : categoryInput.value,
         text,
+        topic_space_id: topicInput.value || null,
       }).catch(renderInlineError);
     } else {
-      createThreadMapEntry(node, isTask ? "practice" : categoryInput.value, text).catch(
-        renderInlineError,
-      );
+      createThreadMapEntry(
+        node,
+        isTask ? "practice" : categoryInput.value,
+        text,
+        topicInput.value || null,
+      ).catch(renderInlineError);
     }
   });
 
@@ -2082,7 +2772,7 @@ function createEntryPreviewElement(node, entry) {
     } else {
       const statusButton = document.createElement("button");
       statusButton.type = "button";
-      statusButton.textContent = entry.status === "paused" ? "Resume task" : "Pause task";
+      statusButton.textContent = entry.status === "paused" ? "Resume practice" : "Pause practice";
       statusButton.addEventListener("click", () => {
         closeEntryMenus();
         updatePractice(entry.id, entry.status === "paused" ? "active" : "paused").catch(
@@ -2093,7 +2783,7 @@ function createEntryPreviewElement(node, entry) {
 
       const completeButton = document.createElement("button");
       completeButton.type = "button";
-      completeButton.textContent = "Complete task";
+      completeButton.textContent = "Complete practice";
       completeButton.addEventListener("click", () => {
         closeEntryMenus();
         openReflectionDialog(entry.id);
@@ -2130,7 +2820,7 @@ function createThreadActions(node) {
 
   [
     ["entry", "+ Entry"],
-    ["task", "+ Task"],
+    ["task", "+ Practice"],
   ].forEach(([mode, label]) => {
     const button = document.createElement("button");
     button.type = "button";
@@ -2174,7 +2864,7 @@ function createConceptDetails(node) {
     const editTopicButton = document.createElement("button");
     editTopicButton.type = "button";
     editTopicButton.className = "map-title-edit-button";
-    editTopicButton.textContent = "Edit title";
+    editTopicButton.textContent = "Edit & connect";
     editTopicButton.addEventListener("click", () => openMapTopicPopup(node));
     titleActions.append(editTopicButton);
 
@@ -2191,8 +2881,13 @@ function createConceptDetails(node) {
   const stats = document.createElement("div");
   stats.className = "map-node-stats";
   const chats = node.chat_ids?.length || 0;
+  const journals = node.journal_dates?.length || 0;
   const entries = node.entries || [];
-  [`${chats} ${chats === 1 ? "chat" : "chats"}`, `${entries.length} ${entries.length === 1 ? "entry" : "entries"}`].forEach(
+  [
+    `${chats} ${chats === 1 ? "chat" : "chats"}`,
+    `${journals} ${journals === 1 ? "journal entry" : "journal entries"}`,
+    `${entries.length} ${entries.length === 1 ? "entry" : "entries"}`,
+  ].forEach(
     (value) => {
       const item = document.createElement("span");
       item.textContent = value;
@@ -2214,7 +2909,100 @@ function createConceptDetails(node) {
     signals.append(signal);
   }
 
-  panel.append(closeButton, eyebrow, titleRow, stats, signals);
+  const description = document.createElement("p");
+  description.className = "map-node-description";
+  description.textContent = node.description || "A thread you chose to keep visible.";
+
+  panel.append(closeButton, eyebrow, titleRow, description, stats, signals);
+
+  if (node.kind === "topic") {
+    const spaces = state.map?.topic_spaces || [];
+    const byId = new Map(spaces.map((space) => [space.id, space]));
+    const connections = [];
+    if (node.parent_topic_id && byId.has(node.parent_topic_id)) {
+      connections.push(["Under", byId.get(node.parent_topic_id)]);
+    }
+    spaces
+      .filter((space) => space.parent_topic_id === node.id)
+      .forEach((space) => connections.push(["Contains", space]));
+    (node.related_topic_ids || []).forEach((topicId) => {
+      if (byId.has(topicId)) connections.push(["Related", byId.get(topicId)]);
+    });
+
+    if (connections.length) {
+      const connectionSection = document.createElement("section");
+      connectionSection.className = "map-detail-section";
+      const heading = document.createElement("h4");
+      heading.textContent = "Topic connections";
+      const connectionList = document.createElement("div");
+      connectionList.className = "map-topic-connections";
+      connections.forEach(([relationship, space]) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        const relationshipLabel = document.createElement("span");
+        relationshipLabel.textContent = relationship;
+        const topicLabel = document.createElement("strong");
+        topicLabel.textContent = space.title;
+        button.append(relationshipLabel, topicLabel);
+        button.addEventListener("click", () => {
+          state.activeMapNodeId = space.id;
+          state.mapDetailOpen = true;
+          renderMap();
+        });
+        connectionList.append(button);
+      });
+      connectionSection.append(heading, connectionList);
+      panel.append(connectionSection);
+    }
+
+    if (node.chat_ids?.length) {
+      const chatSection = document.createElement("section");
+      chatSection.className = "map-detail-section";
+      const heading = document.createElement("h4");
+      heading.textContent = "Connected conversations";
+      const chatListElement = document.createElement("div");
+      chatListElement.className = "map-connected-chats";
+      node.chat_ids.forEach((chatId) => {
+        const chat = state.chats.find((item) => item.chat_id === chatId);
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = chat?.title || "Conversation";
+        button.addEventListener("click", () => {
+          switchWorkspace("chat");
+          loadChat(chatId).catch(renderInlineError);
+        });
+        chatListElement.append(button);
+      });
+      chatSection.append(heading, chatListElement);
+      panel.append(chatSection);
+    }
+
+    if (node.journal_dates?.length) {
+      const journalSection = document.createElement("section");
+      journalSection.className = "map-detail-section";
+      const heading = document.createElement("h4");
+      heading.textContent = "Connected journal entries";
+      const journalListElement = document.createElement("div");
+      journalListElement.className = "map-connected-journals";
+      [...node.journal_dates].sort().reverse().forEach((journalDate) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = formattedJournalDate(journalDate, {
+          month: "long",
+          day: "numeric",
+          year: "numeric",
+        });
+        button.addEventListener("click", () => {
+          state.activeJournalDate = journalDate;
+          switchWorkspace("journal");
+        });
+        journalListElement.append(button);
+      });
+      journalSection.append(heading, journalListElement);
+      panel.append(journalSection);
+    }
+  }
+
   panel.append(createThreadActions(node));
 
   if (entries.length) {
@@ -2303,12 +3091,17 @@ function renderMap() {
     return;
   }
 
-  const nodes = spaces.map((space) => ({
+  const topicTitles = new Map(spaces.map((space) => [space.id, space.title || "Untitled"]));
+  const nodes = spaces.map((space, index) => ({
     ...space,
     kind: "topic",
     title: space.title || "Untitled",
     description: space.description || "A thread you chose to keep visible.",
+    parent_title: topicTitles.get(space.parent_topic_id) || null,
+    related_topic_ids: space.related_topic_ids || [],
+    journal_dates: space.journal_dates || [],
     entries: space.entries || [],
+    position: mapNodePosition(index),
   }));
   if (unassigned.length) {
     nodes.push({
@@ -2317,7 +3110,9 @@ function renderMap() {
       title: "Across topics",
       description: "Observations and practices that belong to more than one thread.",
       chat_ids: [],
+      journal_dates: [],
       entries: unassigned,
+      position: mapNodePosition(nodes.length),
     });
   }
 
@@ -2333,11 +3128,7 @@ function renderMap() {
   const board = document.createElement("div");
   board.className = "map-concept-board";
   board.setAttribute("aria-label", "Interactive concept map");
-  ["one", "two", "three"].forEach((name) => {
-    const line = document.createElement("span");
-    line.className = `map-connection map-connection-${name}`;
-    board.append(line);
-  });
+  board.append(createMapConnectionLayer(nodes.filter((node) => node.kind === "topic")));
   nodes.forEach((node, index) => board.append(createConceptNode(node, index)));
 
   const detailWrap = document.createElement("div");
@@ -2433,6 +3224,17 @@ async function completePractice(event) {
 
 loginTab.addEventListener("click", () => setMode("login"));
 registerTab.addEventListener("click", () => setMode("register"));
+forgotPasswordButton.addEventListener("click", openPasswordResetRequest);
+passwordResetRequestForm.addEventListener("submit", (event) =>
+  requestPasswordReset(event).catch((error) => {
+    passwordResetStatus.textContent = error instanceof Error ? error.message : String(error);
+  }),
+);
+passwordResetConfirmForm.addEventListener("submit", (event) =>
+  confirmPasswordReset(event).catch((error) => {
+    passwordResetStatus.textContent = error instanceof Error ? error.message : String(error);
+  }),
+);
 logoutButton.addEventListener("click", logout);
 accountButton.addEventListener("click", () => openAccountDialog().catch(renderInlineError));
 refreshButton.addEventListener("click", () => loadChats().catch(renderInlineError));
@@ -2442,16 +3244,58 @@ newChatButton.addEventListener("click", () => {
 });
 sidebarToggle.addEventListener("click", openSidebar);
 mapSidebarToggle.addEventListener("click", openSidebar);
+journalSidebarToggle.addEventListener("click", openSidebar);
 sidebarClose.addEventListener("click", closeSidebar);
 sidebarBackdrop.addEventListener("click", closeSidebar);
 chatWorkspaceButton.addEventListener("click", () => switchWorkspace("chat"));
 mapWorkspaceButton.addEventListener("click", () => switchWorkspace("map"));
+journalWorkspaceButton.addEventListener("click", () => switchWorkspace("journal"));
+workspaceSwitch.addEventListener("keydown", (event) => {
+  if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+  const tabs = [chatWorkspaceButton, mapWorkspaceButton, journalWorkspaceButton];
+  const currentIndex = tabs.indexOf(document.activeElement);
+  if (currentIndex < 0) return;
+  event.preventDefault();
+  const direction = event.key === "ArrowRight" ? 1 : -1;
+  tabs[(currentIndex + direction + tabs.length) % tabs.length].click();
+  tabs[(currentIndex + direction + tabs.length) % tabs.length].focus();
+});
+journalReturnChat.addEventListener("click", () => switchWorkspace("chat"));
+journalUpgradeButton.addEventListener("click", () => {
+  const monthlyAvailable = state.subscription?.available_plans?.includes("monthly");
+  const request = monthlyAvailable
+    ? startSubscriptionCheckout("monthly")
+    : openAccountDialog();
+  request.catch(renderInlineError);
+});
+journalAnalyseButton.addEventListener("click", () =>
+  analyseJournalEntry().catch((error) => {
+    setJournalSaveStatus(error instanceof Error ? error.message : String(error), "error");
+  }),
+);
+journalTodayButton.addEventListener("click", () =>
+  openJournalDateFromSidebar(localDateKey()).catch(renderInlineError),
+);
+journalPreviousButton.addEventListener("click", () =>
+  openJournalDateFromSidebar(shiftedDateKey(state.activeJournalDate || localDateKey(), -1)).catch(
+    renderInlineError,
+  ),
+);
+journalNextButton.addEventListener("click", () => {
+  const nextDate = shiftedDateKey(state.activeJournalDate || localDateKey(), 1);
+  if (nextDate <= localDateKey()) openJournalDateFromSidebar(nextDate).catch(renderInlineError);
+});
+journalText.addEventListener("input", scheduleJournalSave);
 messageForm.addEventListener("submit", sendMessage);
 chatPlanUpgrade.addEventListener("click", () =>
   startLimitSubscriptionCheckout(chatPlanUpgrade).catch(renderInlineError),
 );
 topicAccept.addEventListener("click", () => confirmTopic(true).catch(renderInlineError));
 topicDismiss.addEventListener("click", () => confirmTopic(false).catch(renderInlineError));
+topicTarget.addEventListener("change", () => {
+  topicParentField.classList.toggle("hidden", Boolean(topicTarget.value));
+  topicAccept.textContent = topicTarget.value ? "Connect chat" : "Save topic";
+});
 mapSuggestionAccept.addEventListener("click", () =>
   confirmMapSuggestion(true).catch(renderInlineError),
 );
@@ -2525,6 +3369,14 @@ document.addEventListener("keydown", (event) => {
 });
 chatList.addEventListener("scroll", closeChatActionsMenu);
 window.addEventListener("resize", closeChatActionsMenu);
+window.addEventListener("beforeunload", () => {
+  if (state.journalDirty) saveJournalEntry({ keepalive: true });
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden" && state.journalDirty) {
+    saveJournalEntry({ keepalive: true });
+  }
+});
 document.querySelectorAll("[data-close-dialog]").forEach((button) => {
   button.addEventListener("click", () => {
     document.querySelector(`#${button.dataset.closeDialog}`).close();
@@ -2601,6 +3453,7 @@ async function init() {
   } else {
     showAuth();
   }
+  if (initialPasswordResetToken) openPasswordResetConfirm();
 }
 
 init().catch(() => {

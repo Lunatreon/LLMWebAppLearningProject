@@ -47,10 +47,97 @@ def read_map(profile_data: dict[str, Any] | None) -> dict[str, Any]:
         return empty_map()
 
     result = empty_map()
-    result["topic_spaces"] = list(raw_map.get("topic_spaces", []))
-    result["unassigned_entries"] = list(raw_map.get("unassigned_entries", []))
+    result["topic_spaces"] = deepcopy(list(raw_map.get("topic_spaces", [])))
+    result["unassigned_entries"] = deepcopy(list(raw_map.get("unassigned_entries", [])))
     result["updated_at"] = raw_map.get("updated_at") or result["updated_at"]
+    topic_ids = {
+        str(space.get("id"))
+        for space in result["topic_spaces"]
+        if isinstance(space, dict) and space.get("id")
+    }
+    for space in result["topic_spaces"]:
+        if not isinstance(space, dict):
+            continue
+        space_id = str(space.get("id") or "")
+        parent_id = space.get("parent_topic_id")
+        space["parent_topic_id"] = (
+            parent_id if parent_id in topic_ids and parent_id != space_id else None
+        )
+        space["related_topic_ids"] = list(
+            dict.fromkeys(
+                related_id
+                for related_id in space.get("related_topic_ids", [])
+                if related_id in topic_ids and related_id != space_id
+            )
+        )
+        space["chat_ids"] = list(dict.fromkeys(space.get("chat_ids", [])))
+        space["journal_dates"] = list(
+            dict.fromkeys(
+                journal_date
+                for journal_date in space.get("journal_dates", [])
+                if isinstance(journal_date, str) and journal_date
+            )
+        )
+        space["entries"] = list(space.get("entries", []))
     return result
+
+
+def find_topic_space(map_data: dict[str, Any], topic_space_id: str) -> dict[str, Any]:
+    for space in map_data["topic_spaces"]:
+        if space.get("id") == topic_space_id:
+            return space
+    raise LookupError("Topic space not found")
+
+
+def validate_parent_topic(
+    map_data: dict[str, Any],
+    *,
+    topic_space_id: str | None,
+    parent_topic_id: str | None,
+) -> None:
+    if parent_topic_id is None:
+        return
+    if parent_topic_id == topic_space_id:
+        raise ValueError("A topic cannot be its own parent")
+    parent = find_topic_space(map_data, parent_topic_id)
+    visited = {topic_space_id}
+    while parent is not None:
+        parent_id = parent.get("id")
+        if parent_id in visited:
+            raise ValueError("Topic hierarchy cannot contain a cycle")
+        visited.add(parent_id)
+        next_parent_id = parent.get("parent_topic_id")
+        if not next_parent_id:
+            break
+        parent = find_topic_space(map_data, next_parent_id)
+
+
+def set_related_topics(
+    map_data: dict[str, Any],
+    *,
+    topic_space: dict[str, Any],
+    related_topic_ids: list[str],
+) -> None:
+    topic_space_id = topic_space["id"]
+    cleaned_ids = list(dict.fromkeys(related_topic_ids))
+    if topic_space_id in cleaned_ids:
+        raise ValueError("A topic cannot be related to itself")
+    for related_id in cleaned_ids:
+        find_topic_space(map_data, related_id)
+
+    previous_ids = set(topic_space.get("related_topic_ids", []))
+    next_ids = set(cleaned_ids)
+    topic_space["related_topic_ids"] = cleaned_ids
+    for space in map_data["topic_spaces"]:
+        space_id = space.get("id")
+        if space_id == topic_space_id:
+            continue
+        backlinks = list(space.get("related_topic_ids", []))
+        if space_id in next_ids and topic_space_id not in backlinks:
+            backlinks.append(topic_space_id)
+        if space_id in previous_ids - next_ids:
+            backlinks = [value for value in backlinks if value != topic_space_id]
+        space["related_topic_ids"] = backlinks
 
 
 def profile_data_for_access(
@@ -133,6 +220,7 @@ def create_or_link_topic_space(
     title: str,
     description: str,
     chat_id: str,
+    parent_topic_id: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     map_data = read_map(profile_data)
     normalized_title = title.strip().lower()
@@ -145,7 +233,15 @@ def create_or_link_topic_space(
         if chat_id not in chat_ids:
             chat_ids.append(chat_id)
         space["chat_ids"] = chat_ids
-        space["description"] = description
+        if description.strip() and not space.get("description"):
+            space["description"] = description.strip()
+        if parent_topic_id is not None:
+            validate_parent_topic(
+                map_data,
+                topic_space_id=space.get("id"),
+                parent_topic_id=parent_topic_id,
+            )
+            space["parent_topic_id"] = parent_topic_id
         space["updated_at"] = now
         return write_map(profile_data, map_data), space
 
@@ -155,9 +251,16 @@ def create_or_link_topic_space(
         "description": description.strip(),
         "chat_ids": [chat_id],
         "entries": [],
+        "parent_topic_id": parent_topic_id,
+        "related_topic_ids": [],
         "created_at": now,
         "updated_at": now,
     }
+    validate_parent_topic(
+        map_data,
+        topic_space_id=space["id"],
+        parent_topic_id=parent_topic_id,
+    )
     map_data["topic_spaces"].append(space)
     return write_map(profile_data, map_data), space
 
@@ -168,6 +271,9 @@ def create_topic_space(
     title: str,
     description: str = "",
     chat_id: str | None = None,
+    journal_date: str | None = None,
+    parent_topic_id: str | None = None,
+    related_topic_ids: list[str] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     map_data = read_map(profile_data)
     normalized_title = title.strip().lower()
@@ -184,8 +290,26 @@ def create_topic_space(
             if chat_id not in chat_ids:
                 chat_ids.append(chat_id)
             space["chat_ids"] = chat_ids
+        if journal_date:
+            journal_dates = list(space.get("journal_dates", []))
+            if journal_date not in journal_dates:
+                journal_dates.append(journal_date)
+            space["journal_dates"] = journal_dates
         if description.strip():
             space["description"] = description.strip()
+        if parent_topic_id is not None:
+            validate_parent_topic(
+                map_data,
+                topic_space_id=space.get("id"),
+                parent_topic_id=parent_topic_id,
+            )
+            space["parent_topic_id"] = parent_topic_id
+        if related_topic_ids is not None:
+            set_related_topics(
+                map_data,
+                topic_space=space,
+                related_topic_ids=related_topic_ids,
+            )
         space["updated_at"] = now
         return write_map(profile_data, map_data), space
 
@@ -194,11 +318,57 @@ def create_topic_space(
         "title": title.strip(),
         "description": description.strip(),
         "chat_ids": [chat_id] if chat_id else [],
+        "journal_dates": [journal_date] if journal_date else [],
         "entries": [],
+        "parent_topic_id": parent_topic_id,
+        "related_topic_ids": [],
         "created_at": now,
         "updated_at": now,
     }
+    validate_parent_topic(
+        map_data,
+        topic_space_id=space["id"],
+        parent_topic_id=parent_topic_id,
+    )
     map_data["topic_spaces"].append(space)
+    if related_topic_ids:
+        set_related_topics(
+            map_data,
+            topic_space=space,
+            related_topic_ids=related_topic_ids,
+        )
+    return write_map(profile_data, map_data), space
+
+
+def link_chat_to_topic_space(
+    profile_data: dict[str, Any] | None,
+    *,
+    topic_space_id: str,
+    chat_id: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    map_data = read_map(profile_data)
+    space = find_topic_space(map_data, topic_space_id)
+    chat_ids = list(space.get("chat_ids", []))
+    if chat_id not in chat_ids:
+        chat_ids.append(chat_id)
+    space["chat_ids"] = chat_ids
+    space["updated_at"] = current_timestamp()
+    return write_map(profile_data, map_data), space
+
+
+def link_journal_to_topic_space(
+    profile_data: dict[str, Any] | None,
+    *,
+    topic_space_id: str,
+    journal_date: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    map_data = read_map(profile_data)
+    space = find_topic_space(map_data, topic_space_id)
+    journal_dates = list(space.get("journal_dates", []))
+    if journal_date not in journal_dates:
+        journal_dates.append(journal_date)
+    space["journal_dates"] = journal_dates
+    space["updated_at"] = current_timestamp()
     return write_map(profile_data, map_data), space
 
 
@@ -208,6 +378,10 @@ def update_topic_space(
     topic_space_id: str,
     title: str | None = None,
     description: str | None = None,
+    parent_topic_id: str | None = None,
+    update_parent: bool = False,
+    related_topic_ids: list[str] | None = None,
+    update_related: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     map_data = read_map(profile_data)
 
@@ -221,6 +395,19 @@ def update_topic_space(
             space["title"] = cleaned_title
         if description is not None:
             space["description"] = description.strip()
+        if update_parent:
+            validate_parent_topic(
+                map_data,
+                topic_space_id=topic_space_id,
+                parent_topic_id=parent_topic_id,
+            )
+            space["parent_topic_id"] = parent_topic_id
+        if update_related:
+            set_related_topics(
+                map_data,
+                topic_space=space,
+                related_topic_ids=related_topic_ids or [],
+            )
         space["updated_at"] = current_timestamp()
         return write_map(profile_data, map_data), space
 
@@ -239,6 +426,14 @@ def delete_topic_space(
             continue
         map_data["topic_spaces"].remove(space)
         map_data["unassigned_entries"].extend(space.get("entries", []))
+        for remaining_space in map_data["topic_spaces"]:
+            if remaining_space.get("parent_topic_id") == topic_space_id:
+                remaining_space["parent_topic_id"] = space.get("parent_topic_id")
+            remaining_space["related_topic_ids"] = [
+                related_id
+                for related_id in remaining_space.get("related_topic_ids", [])
+                if related_id != topic_space_id
+            ]
         return write_map(profile_data, map_data), space
 
     raise LookupError("Topic space not found")
@@ -261,6 +456,7 @@ def add_map_entry(
     text: str,
     topic_space_id: str | None = None,
     source_chat_id: str | None = None,
+    source_journal_date: str | None = None,
     reason: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     if category not in ENTRY_CATEGORIES:
@@ -272,6 +468,7 @@ def add_map_entry(
         "category": category,
         "text": text.strip(),
         "source_chat_id": source_chat_id,
+        "source_journal_date": source_journal_date,
         "reason": reason.strip() if reason else None,
         "created_at": now,
         "updated_at": now,
@@ -285,6 +482,14 @@ def add_map_entry(
         for space in map_data["topic_spaces"]:
             if space.get("id") == topic_space_id:
                 space.setdefault("entries", []).append(entry)
+                if source_chat_id:
+                    chat_ids = space.setdefault("chat_ids", [])
+                    if source_chat_id not in chat_ids:
+                        chat_ids.append(source_chat_id)
+                if source_journal_date:
+                    journal_dates = space.setdefault("journal_dates", [])
+                    if source_journal_date not in journal_dates:
+                        journal_dates.append(source_journal_date)
                 space["updated_at"] = now
                 return write_map(profile_data, map_data), entry
         raise LookupError("Topic space not found")
@@ -311,12 +516,14 @@ def update_map_entry(
     category: str | None = None,
     text: str | None = None,
     reason: str | None = None,
+    topic_space_id: str | None = None,
+    move_entry: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     if category is not None and category not in ENTRY_CATEGORIES:
         raise ValueError(f"Unsupported map category: {category}")
 
     map_data = read_map(profile_data)
-    _, entry = find_entry_group(map_data, entry_id)
+    current_entries, entry = find_entry_group(map_data, entry_id)
 
     if category is not None and category != entry.get("category"):
         entry["category"] = category
@@ -330,6 +537,25 @@ def update_map_entry(
         entry["text"] = text.strip()
     if reason is not None:
         entry["reason"] = reason.strip() if reason else None
+    if move_entry:
+        target_entries = map_data["unassigned_entries"]
+        target_space = None
+        if topic_space_id:
+            target_space = find_topic_space(map_data, topic_space_id)
+            target_entries = target_space.setdefault("entries", [])
+        if target_entries is not current_entries:
+            current_entries.remove(entry)
+            target_entries.append(entry)
+        if target_space and entry.get("source_chat_id"):
+            chat_ids = target_space.setdefault("chat_ids", [])
+            if entry["source_chat_id"] not in chat_ids:
+                chat_ids.append(entry["source_chat_id"])
+            target_space["updated_at"] = current_timestamp()
+        if target_space and entry.get("source_journal_date"):
+            journal_dates = target_space.setdefault("journal_dates", [])
+            if entry["source_journal_date"] not in journal_dates:
+                journal_dates.append(entry["source_journal_date"])
+            target_space["updated_at"] = current_timestamp()
     entry["updated_at"] = current_timestamp()
     return write_map(profile_data, map_data), entry
 

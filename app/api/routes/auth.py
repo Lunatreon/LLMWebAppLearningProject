@@ -17,6 +17,12 @@ from app.core.google_auth import (
     google_public_config,
     verify_google_credential,
 )
+from app.core.password_reset import (
+    create_password_reset_token,
+    hash_password_reset_token,
+    password_reset_is_expired,
+    send_password_reset_message,
+)
 from app.core.rate_limit import client_ip, enforce_rate_limit
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models.user import User, UserProfile, utc_now
@@ -29,6 +35,10 @@ from app.schemas.auth import (
     GoogleAuthConfig,
     GoogleLoginRequest,
     LoginRequest,
+    PasswordResetConfirmRequest,
+    PasswordResetConfirmResponse,
+    PasswordResetRequest,
+    PasswordResetRequestResponse,
     Token,
 )
 from app.schemas.user import UserCreate, UserRead
@@ -291,4 +301,70 @@ def confirm_email_verification(
     return EmailVerificationConfirmResponse(
         verified=True,
         detail="Email verified.",
+    )
+
+
+@router.post(
+    "/password-reset/request",
+    response_model=PasswordResetRequestResponse,
+    dependencies=[Depends(rate_limit_auth)],
+)
+def request_password_reset(
+    payload: PasswordResetRequest,
+    db: Session = Depends(get_db),
+) -> PasswordResetRequestResponse:
+    if not settings.password_reset_enabled or not settings.email_delivery_configured:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Password reset email is not configured.",
+        )
+
+    email = str(payload.email).strip().lower()
+    enforce_rate_limit(
+        f"password-reset:{email}",
+        max_attempts=settings.rate_limit_password_reset_identifier_per_hour,
+        window_seconds=3600,
+        detail="Too many password reset requests. Please try again later.",
+    )
+    generic_response = PasswordResetRequestResponse(
+        sent=True,
+        detail="If that account exists, a password reset email has been sent.",
+    )
+    user = db.scalar(select(User).where(User.email == email))
+    if user is None or not user.is_active:
+        return generic_response
+
+    token = create_password_reset_token(user)
+    db.commit()
+    db.refresh(user)
+    send_password_reset_message(user, token)
+    return generic_response
+
+
+@router.post(
+    "/password-reset/confirm",
+    response_model=PasswordResetConfirmResponse,
+    dependencies=[Depends(rate_limit_auth)],
+)
+def confirm_password_reset(
+    payload: PasswordResetConfirmRequest,
+    db: Session = Depends(get_db),
+) -> PasswordResetConfirmResponse:
+    token_hash = hash_password_reset_token(payload.token)
+    user = db.scalar(select(User).where(User.password_reset_token_hash == token_hash))
+    if user is None or password_reset_is_expired(user.password_reset_sent_at):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password reset link is invalid or expired.",
+        )
+
+    user.hashed_password = hash_password(payload.new_password)
+    if "password" not in user.auth_provider:
+        user.auth_provider = f"{user.auth_provider},password"
+    user.password_reset_token_hash = None
+    user.password_reset_sent_at = None
+    db.commit()
+    return PasswordResetConfirmResponse(
+        reset=True,
+        detail="Your password has been reset. You can now log in.",
     )

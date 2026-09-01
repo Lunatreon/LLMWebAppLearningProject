@@ -245,6 +245,8 @@ def create_map_topic(
             title=payload.title,
             description=payload.description,
             chat_id=payload.chat_id,
+            parent_topic_id=payload.parent_topic_id,
+            related_topic_ids=payload.related_topic_ids,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -269,6 +271,10 @@ def change_map_topic(
             topic_space_id=topic_space_id,
             title=payload.title,
             description=payload.description,
+            parent_topic_id=payload.parent_topic_id,
+            update_parent="parent_topic_id" in payload.model_fields_set,
+            related_topic_ids=payload.related_topic_ids,
+            update_related="related_topic_ids" in payload.model_fields_set,
         )
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
@@ -292,6 +298,8 @@ def remove_map_topic(
         profile_data, topic = delete_topic_space(profile.data, topic_space_id=topic_space_id)
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     profile.data = profile_data
     db.commit()
@@ -339,9 +347,13 @@ def change_map_entry(
             category=payload.category,
             text=payload.text,
             reason=payload.reason,
+            topic_space_id=payload.topic_space_id,
+            move_entry="topic_space_id" in payload.model_fields_set,
         )
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     profile.data = profile_data
     db.commit()

@@ -65,7 +65,7 @@ class AdminSubscriptionReset(BaseModel):
 
 
 class AdminPromptRead(BaseModel):
-    kind: Literal["chat", "topic"]
+    kind: Literal["chat", "topic", "journal"]
     text: str
 
 

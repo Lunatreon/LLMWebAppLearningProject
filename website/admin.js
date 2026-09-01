@@ -117,7 +117,8 @@ document.querySelectorAll(".admin-prompt-form").forEach((form) => {
     const kind = form.dataset.kind;
     const textarea = form.querySelector("textarea");
     const updated = await api(`/admin/prompts/${kind}`, { method: "PUT", headers: authHeaders(), body: JSON.stringify({ text: textarea.value }) });
-    textarea.value = updated.text; setStatus(`${kind === "chat" ? "Chat" : "Topic"} prompt saved and active for the next request.`);
+    const labels = { chat: "Chat", topic: "Topic", journal: "Journal" };
+    textarea.value = updated.text; setStatus(`${labels[kind] || kind} prompt saved and active for the next request.`);
   });
 });
 

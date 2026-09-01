@@ -1,5 +1,5 @@
-.admin-body { min-height: 100vh; background: #f7f3ee; color: var(--ink); }
-.admin-login-view { position: relative; display: grid; min-height: 100vh; grid-template-columns: minmax(0, 1fr) minmax(390px, 520px); overflow: hidden; background: linear-gradient(135deg, #100f13 0%, #1b1720 48%, #292132 100%); }
+.admin-body { min-height: var(--app-height); background: #f7f3ee; color: var(--ink); }
+.admin-login-view { position: relative; display: grid; min-height: var(--app-height); grid-template-columns: minmax(0, 1fr) minmax(390px, 520px); overflow: hidden; background: linear-gradient(135deg, #100f13 0%, #1b1720 48%, #292132 100%); }
 .admin-login-view::before { position: absolute; z-index: 0; inset: 0; background: radial-gradient(circle at 18% 18%, rgba(169, 136, 232, .2), transparent 34%), radial-gradient(circle at 72% 82%, rgba(130, 183, 168, .1), transparent 32%); content: ""; }
 .admin-login-story, .admin-login-panel { position: relative; z-index: 1; }
 .admin-login-story { display: flex; min-width: 0; flex-direction: column; justify-content: space-between; padding: clamp(32px, 5vw, 72px); }
@@ -7,7 +7,7 @@
 .admin-login-story-copy h1 { max-width: 670px; margin: 0 0 24px; color: var(--white); font-size: clamp(43px, 6vw, 80px); letter-spacing: -.045em; line-height: 1.02; }
 .admin-login-story-copy > p:last-child { max-width: 570px; margin: 0; color: rgba(255, 253, 249, .78); font-size: clamp(16px, 1.5vw, 20px); line-height: 1.65; }
 .admin-login-story-note { margin: 0; color: rgba(255, 253, 249, .58); font-size: 12px; }
-.admin-login-panel { align-self: center; width: calc(100% - 48px); max-height: calc(100vh - 48px); margin: 24px; overflow-y: auto; border: 1px solid rgba(255, 255, 255, .38); border-radius: 12px; background: rgba(250, 247, 241, .97); box-shadow: var(--shadow); color: var(--ink); }
+.admin-login-panel { align-self: center; width: calc(100% - 48px); max-height: calc(var(--app-height) - 48px); margin: 24px; overflow-y: auto; border: 1px solid rgba(255, 255, 255, .38); border-radius: 12px; background: rgba(250, 247, 241, .97); box-shadow: var(--shadow); color: var(--ink); }
 .admin-login-card { display: grid; gap: 18px; padding: clamp(30px, 5vw, 54px); }
 .admin-login-card-brand { display: none; margin-bottom: 14px; }
 .admin-login-heading { margin-bottom: 6px; }
@@ -52,10 +52,10 @@
 .danger-zone { color: #7f312c; }
 .danger-button { min-height: 40px; border: 1px solid #b95950; border-radius: 8px; background: #fff3f1; color: #8e332c; padding: 0 13px; font-weight: 800; }
 .admin-help { color: var(--muted); font-size: 12px; line-height: 1.5; }
-.admin-prompt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.admin-prompt-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
 .admin-prompt-form { display: grid; gap: 12px; }
 .admin-prompt-form textarea { min-height: 440px; resize: vertical; font-family: Consolas, "Courier New", monospace; font-size: 12px; line-height: 1.5; }
 @media (max-width: 900px) { .admin-login-view { grid-template-columns: minmax(0, 1fr) minmax(370px, 48%); } .admin-login-story-copy h1 { font-size: clamp(38px, 6vw, 58px); } }
 @media (max-width: 820px) { .admin-user-layout, .admin-prompt-grid { grid-template-columns: 1fr; } .admin-form { grid-template-columns: 1fr; } }
-@media (max-width: 680px) { .admin-login-view { display: flex; align-items: center; justify-content: center; padding: 18px; } .admin-login-story { display: none; } .admin-login-panel { width: min(460px, 100%); max-height: calc(100vh - 36px); margin: 0; } .admin-login-card { gap: 16px; padding: 30px 23px; } .admin-login-card-brand { display: inline-flex; } }
+@media (max-width: 680px) { .admin-login-view { display: flex; align-items: center; justify-content: center; padding: calc(18px + var(--safe-area-top)) calc(18px + var(--safe-area-right)) calc(18px + var(--safe-area-bottom)) calc(18px + var(--safe-area-left)); } .admin-login-story { display: none; } .admin-login-panel { width: min(460px, 100%); max-height: calc(var(--app-height) - 36px - var(--safe-area-top) - var(--safe-area-bottom)); margin: 0; } .admin-login-card { gap: 16px; padding: 30px 23px; } .admin-login-card-brand { display: inline-flex; } }
 @media (max-width: 560px) { .admin-header { align-items: flex-start; flex-direction: column; } .admin-inline-form { grid-template-columns: 1fr; } }

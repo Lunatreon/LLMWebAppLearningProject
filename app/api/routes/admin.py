@@ -176,7 +176,7 @@ def remove_admin_user_subscription(
 
 @router.get("/prompts", response_model=AdminPromptBundle)
 def read_admin_prompts(_: str = Depends(get_current_admin)) -> AdminPromptBundle:
-    def editable_text(kind: Literal["chat", "topic"]) -> str:
+    def editable_text(kind: Literal["chat", "topic", "journal"]) -> str:
         try:
             return read_system_prompt(kind)
         except PromptConfigurationError:
@@ -189,13 +189,14 @@ def read_admin_prompts(_: str = Depends(get_current_admin)) -> AdminPromptBundle
         prompts=[
             AdminPromptRead(kind="chat", text=editable_text("chat")),
             AdminPromptRead(kind="topic", text=editable_text("topic")),
+            AdminPromptRead(kind="journal", text=editable_text("journal")),
         ]
     )
 
 
 @router.put("/prompts/{kind}", response_model=AdminPromptRead)
 def update_admin_prompt(
-    kind: Literal["chat", "topic"],
+    kind: Literal["chat", "topic", "journal"],
     payload: AdminPromptUpdate,
     admin_username: str = Depends(get_current_admin),
 ) -> AdminPromptRead:

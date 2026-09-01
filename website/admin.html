@@ -2,13 +2,16 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+    />
     <meta name="referrer" content="no-referrer" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta name="feely-api-base" content="https://api.feel-y.com/api/v1" />
     <title>FeelY Administration</title>
-    <link rel="stylesheet" href="styles.css?v=20260821-1" />
-    <link rel="stylesheet" href="admin.css?v=20260821-3" />
+    <link rel="stylesheet" href="styles.css?v=20260831-4" />
+    <link rel="stylesheet" href="admin.css?v=20260831-1" />
   </head>
   <body class="admin-body">
     <section id="admin-login-view" class="admin-login-view">
@@ -116,10 +119,15 @@
             <textarea id="topic-prompt" rows="22" minlength="100" required></textarea>
             <button class="primary-button" type="submit">Save topic prompt</button>
           </form>
+          <form class="admin-panel admin-prompt-form" data-kind="journal">
+            <h3>Journal insights</h3>
+            <textarea id="journal-prompt" rows="22" minlength="100" required></textarea>
+            <button class="primary-button" type="submit">Save journal prompt</button>
+          </form>
         </div>
       </section>
     </main>
     </div>
-    <script src="admin.js?v=20260821-2"></script>
+    <script src="admin.js?v=20260831-1"></script>
   </body>
 </html>

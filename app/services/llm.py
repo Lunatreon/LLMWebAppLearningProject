@@ -91,6 +91,26 @@ async def warm_ollama_model() -> None:
                 settings.ollama_topic_num_gpu,
             )
         )
+    journal_provider = (
+        settings.journal_llm_provider
+        or settings.topic_llm_provider
+        or settings.llm_provider
+    ).lower()
+    journal_model = (
+        settings.ollama_journal_model
+        or settings.ollama_topic_model
+        or settings.ollama_model
+    )
+    journal_num_gpu = (
+        settings.ollama_journal_num_gpu
+        if settings.ollama_journal_num_gpu is not None
+        else settings.ollama_topic_num_gpu
+    )
+    if journal_provider == "ollama" and not any(
+        model == journal_model and num_gpu == journal_num_gpu
+        for _, model, num_gpu in role_models
+    ):
+        role_models.append(("journal", journal_model, journal_num_gpu))
 
     for role, model, num_gpu in role_models:
         try:
@@ -358,6 +378,13 @@ class ChatLLMResult:
 class TopicLLMResult:
     topic: str
     description: str
+    existing_topic_id: str | None = None
+    parent_topic_id: str | None = None
+
+
+@dataclass
+class JournalLLMResult:
+    suggestions: list[dict[str, str]]
 
 
 class ChatLLMClient(Protocol):
@@ -379,6 +406,7 @@ class TopicLLMClient(Protocol):
         chat_info: dict[str, Any],
         matched_patterns: list[str],
         topic_hint: str | None = None,
+        available_topics: list[dict[str, Any]] | None = None,
     ) -> TopicLLMResult:
         """Return a topic and short description for an analysed chat."""
 
@@ -647,6 +675,7 @@ class LocalTopicLLMClient:
         chat_info: dict[str, Any],
         matched_patterns: list[str],
         topic_hint: str | None = None,
+        available_topics: list[dict[str, Any]] | None = None,
     ) -> TopicLLMResult:
         user_messages = topic_chat_context(chat_info)["user_messages"]
         topic = topic_hint or infer_local_freeform_topic(user_messages)
@@ -660,6 +689,7 @@ class LocalTopicLLMClient:
 PROMPT_FILENAMES = {
     "chat": "chat_system.txt",
     "topic": "topic_system.txt",
+    "journal": "journal_system.txt",
 }
 
 
@@ -742,8 +772,50 @@ TOPIC_RESPONSE_SCHEMA = {
     "properties": {
         "topic": {"type": "string"},
         "description": {"type": "string"},
+        "existing_topic_id": {
+            "anyOf": [{"type": "string"}, {"type": "null"}],
+        },
+        "parent_topic_id": {
+            "anyOf": [{"type": "string"}, {"type": "null"}],
+        },
     },
-    "required": ["topic", "description"],
+    "required": ["topic", "description", "existing_topic_id", "parent_topic_id"],
+    "additionalProperties": False,
+}
+
+
+JOURNAL_RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "suggestions": {
+            "type": "array",
+            "maxItems": 6,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "kind": {"type": "string", "enum": ["topic", "map_entry"]},
+                    "category": {
+                        "type": "string",
+                        "enum": [
+                            "topic",
+                            "inherited_script",
+                            "own_perception",
+                            "value",
+                            "body_signal",
+                            "practice",
+                            "evidence",
+                        ],
+                    },
+                    "title": {"type": "string"},
+                    "text": {"type": "string"},
+                    "reason": {"type": "string"},
+                },
+                "required": ["kind", "category", "title", "text", "reason"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["suggestions"],
     "additionalProperties": False,
 }
 
@@ -769,12 +841,25 @@ def topic_request_payload(
     chat_info: dict[str, Any],
     matched_patterns: list[str],
     topic_hint: str | None,
+    available_topics: list[dict[str, Any]] | None = None,
 ) -> str:
     return json.dumps(
         {
             "topic_chat_context": topic_chat_context(chat_info or {}),
             "matched_patterns": matched_patterns,
             "topic_hint": topic_hint,
+            "available_topics": available_topics or [],
+        },
+        ensure_ascii=True,
+    )
+
+
+def journal_request_payload(journal_text: str, entry_date: str) -> str:
+    return json.dumps(
+        {
+            "entry_date": entry_date,
+            "journal_text": journal_text,
+            "instruction": "Return only grounded suggestions. The user decides what to save.",
         },
         ensure_ascii=True,
     )
@@ -816,7 +901,61 @@ def topic_result_from_payload(payload: dict[str, Any]) -> TopicLLMResult:
     description = payload.get("description")
     if not isinstance(topic, str) or not isinstance(description, str):
         raise_bad_gateway("Topic-LLM response did not match the expected schema")
-    return TopicLLMResult(topic=topic[:120], description=description[:2000])
+    existing_topic_id = payload.get("existing_topic_id")
+    parent_topic_id = payload.get("parent_topic_id")
+    return TopicLLMResult(
+        topic=topic[:120],
+        description=description[:2000],
+        existing_topic_id=existing_topic_id if isinstance(existing_topic_id, str) else None,
+        parent_topic_id=parent_topic_id if isinstance(parent_topic_id, str) else None,
+    )
+
+
+def journal_result_from_payload(payload: dict[str, Any]) -> JournalLLMResult:
+    raw_suggestions = payload.get("suggestions")
+    if not isinstance(raw_suggestions, list):
+        raise_bad_gateway("Journal-LLM response did not match the expected schema")
+
+    valid_map_categories = {
+        "inherited_script",
+        "own_perception",
+        "value",
+        "body_signal",
+        "practice",
+        "evidence",
+    }
+    suggestions: list[dict[str, str]] = []
+    for raw in raw_suggestions[:6]:
+        if not isinstance(raw, dict):
+            continue
+        kind = raw.get("kind")
+        category = raw.get("category")
+        title = raw.get("title")
+        text = raw.get("text")
+        reason = raw.get("reason")
+        if not all(isinstance(value, str) for value in (category, title, text, reason)):
+            continue
+        if kind == "topic" and category == "topic" and title.strip() and text.strip():
+            suggestions.append(
+                {
+                    "kind": "topic",
+                    "category": "topic",
+                    "title": title.strip()[:120],
+                    "text": text.strip()[:1000],
+                    "reason": reason.strip()[:1000],
+                }
+            )
+        elif kind == "map_entry" and category in valid_map_categories and text.strip():
+            suggestions.append(
+                {
+                    "kind": "map_entry",
+                    "category": category,
+                    "title": title.strip()[:120],
+                    "text": text.strip()[:1000],
+                    "reason": reason.strip()[:1000],
+                }
+            )
+    return JournalLLMResult(suggestions=suggestions)
 
 
 class OpenAIBaseClient:
@@ -865,6 +1004,7 @@ class OpenAITopicLLMClient(OpenAIBaseClient):
         chat_info: dict[str, Any],
         matched_patterns: list[str],
         topic_hint: str | None = None,
+        available_topics: list[dict[str, Any]] | None = None,
     ) -> TopicLLMResult:
         response = await self.client.chat.completions.create(
             model=self.model,
@@ -876,7 +1016,12 @@ class OpenAITopicLLMClient(OpenAIBaseClient):
                 },
                 {
                     "role": "user",
-                    "content": topic_request_payload(chat_info, matched_patterns, topic_hint),
+                    "content": topic_request_payload(
+                        chat_info,
+                        matched_patterns,
+                        topic_hint,
+                        available_topics,
+                    ),
                 },
             ],
         )
@@ -936,6 +1081,7 @@ class AnthropicTopicLLMClient(AnthropicBaseClient):
         chat_info: dict[str, Any],
         matched_patterns: list[str],
         topic_hint: str | None = None,
+        available_topics: list[dict[str, Any]] | None = None,
     ) -> TopicLLMResult:
         response = await self.client.messages.create(
             model=self.model,
@@ -948,6 +1094,7 @@ class AnthropicTopicLLMClient(AnthropicBaseClient):
                         chat_info,
                         matched_patterns,
                         topic_hint,
+                        available_topics,
                     ),
                 }
             ],
@@ -1222,10 +1369,16 @@ class OllamaTopicLLMClient(OllamaBaseClient):
         chat_info: dict[str, Any],
         matched_patterns: list[str],
         topic_hint: str | None = None,
+        available_topics: list[dict[str, Any]] | None = None,
     ) -> TopicLLMResult:
         payload = await self.request_json(
             system_prompt=read_system_prompt("topic"),
-            user_payload=topic_request_payload(chat_info, matched_patterns, topic_hint),
+            user_payload=topic_request_payload(
+                chat_info,
+                matched_patterns,
+                topic_hint,
+                available_topics,
+            ),
             response_schema=TOPIC_RESPONSE_SCHEMA,
             temperature=0.2,
         )
@@ -1468,4 +1621,149 @@ def get_topic_llm_client() -> TopicLLMClient:
         )
     if provider in {"mock", "local"}:
         return LocalTopicLLMClient()
+    unsupported_provider(provider)
+
+
+def local_journal_analysis(journal_text: str) -> JournalLLMResult:
+    suggestions: list[dict[str, str]] = []
+    words = journal_text.split()
+    if len(words) >= 20:
+        topic = infer_local_freeform_topic([journal_text])
+        suggestions.append(
+            {
+                "kind": "topic",
+                "category": "topic",
+                "title": topic,
+                "text": f"A recurring journal thread concerning {topic.lower()}.",
+                "reason": "This theme appears repeatedly in today's journal entry.",
+            }
+        )
+    map_suggestion = LocalChatLLMClient().local_map_suggestion(journal_text)
+    if map_suggestion:
+        suggestions.append(
+            {
+                "kind": "map_entry",
+                "category": map_suggestion["category"],
+                "title": "",
+                "text": map_suggestion["text"],
+                "reason": map_suggestion["reason"],
+            }
+        )
+    return JournalLLMResult(suggestions=suggestions)
+
+
+async def analyse_journal_text(journal_text: str, entry_date: str) -> JournalLLMResult:
+    """Find optional map candidates without changing the user's confirmed map."""
+
+    provider = (
+        settings.journal_llm_provider
+        or settings.topic_llm_provider
+        or settings.llm_provider
+    ).lower()
+    request_payload = journal_request_payload(journal_text, entry_date)
+
+    if provider in {"mock", "local"}:
+        return local_journal_analysis(journal_text)
+    if provider == "openai":
+        client = OpenAIBaseClient(
+            api_key=ensure_openai_api_key(),
+            model=(
+                settings.openai_journal_model
+                or settings.openai_topic_model
+                or settings.openai_model
+            ),
+        )
+        response = await client.client.chat.completions.create(
+            model=client.model,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": read_system_prompt("journal")},
+                {"role": "user", "content": request_payload},
+            ],
+        )
+        return journal_result_from_payload(
+            parse_json_response(response.choices[0].message.content)
+        )
+    if provider == "anthropic":
+        client = AnthropicBaseClient(
+            api_key=ensure_anthropic_api_key(),
+            model=(
+                settings.anthropic_journal_model
+                or settings.anthropic_topic_model
+                or settings.anthropic_model
+            ),
+            max_tokens=settings.anthropic_max_tokens,
+        )
+        response = await client.client.messages.create(
+            model=client.model,
+            max_tokens=client.max_tokens,
+            system=read_system_prompt("journal"),
+            messages=[{"role": "user", "content": request_payload}],
+        )
+        return journal_result_from_payload(
+            parse_json_response(client.response_text(response))
+        )
+    if provider == "ollama":
+        num_gpu = (
+            settings.ollama_journal_num_gpu
+            if settings.ollama_journal_num_gpu is not None
+            else settings.ollama_topic_num_gpu
+        )
+        client_options = {
+            "base_url": settings.ollama_base_url,
+            "model": (
+                settings.ollama_journal_model
+                or settings.ollama_topic_model
+                or settings.ollama_model
+            ),
+            "timeout_seconds": settings.ollama_timeout_seconds,
+            "context_window": settings.ollama_context_window,
+            "num_gpu": num_gpu,
+        }
+        client = OllamaBaseClient(
+            **client_options,
+            max_tokens=settings.ollama_journal_max_tokens,
+        )
+        system_prompt = read_system_prompt("journal")
+        try:
+            payload = await client.request_json(
+                system_prompt=system_prompt,
+                user_payload=request_payload,
+                response_schema=JOURNAL_RESPONSE_SCHEMA,
+                temperature=0.2,
+            )
+            return journal_result_from_payload(payload)
+        except HTTPException as exc:
+            retryable_details = {
+                "LLM returned an empty response",
+                "LLM returned invalid JSON",
+                "LLM returned a non-object JSON response",
+                "Journal-LLM response did not match the expected schema",
+            }
+            if exc.status_code != status.HTTP_502_BAD_GATEWAY or exc.detail not in retryable_details:
+                raise
+
+            retry_max_tokens = min(
+                1536,
+                max(768, settings.ollama_journal_max_tokens * 2),
+            )
+            logger.warning(
+                "Retrying Ollama journal analysis after an incomplete structured response "
+                "with %s output tokens",
+                retry_max_tokens,
+            )
+            retry_client = OllamaBaseClient(
+                **client_options,
+                max_tokens=retry_max_tokens,
+            )
+            payload = await retry_client.request_json(
+                system_prompt=(
+                    f"{system_prompt}\n\nKeep every field concise so the complete JSON object "
+                    "fits within the response limit."
+                ),
+                user_payload=request_payload,
+                response_schema=JOURNAL_RESPONSE_SCHEMA,
+                temperature=0.1,
+            )
+            return journal_result_from_payload(payload)
     unsupported_provider(provider)

@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     rate_limit_register_ip_per_hour: int = 20
     rate_limit_login_identifier_attempts: int = 8
     rate_limit_login_identifier_window_seconds: int = 900
+    rate_limit_password_reset_identifier_per_hour: int = 3
     rate_limit_llm_user_per_minute: int = 30
     rate_limit_llm_free_user_per_day: int = 10
     rate_limit_llm_user_per_day: int = 400
@@ -71,6 +72,8 @@ class Settings(BaseSettings):
     email_verification_enabled: bool = False
     email_verification_required: bool = False
     email_verification_token_expire_hours: int = 24
+    password_reset_enabled: bool = False
+    password_reset_token_expire_minutes: int = 60
     public_app_url: str = "http://127.0.0.1:5500"
     smtp_host: str | None = None
     smtp_port: int = 587
@@ -92,25 +95,31 @@ class Settings(BaseSettings):
     llm_provider: str = "mock"
     chat_llm_provider: str | None = None
     topic_llm_provider: str | None = "local"
+    journal_llm_provider: str | None = None
     openai_api_key: str | None = None
     openai_model: str = "gpt-5.4-mini"
     openai_chat_model: str | None = None
     openai_topic_model: str | None = None
+    openai_journal_model: str | None = None
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-sonnet-4-6"
     anthropic_chat_model: str | None = None
     anthropic_topic_model: str | None = None
+    anthropic_journal_model: str | None = None
     anthropic_max_tokens: int = 4096
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "qwen3.5:4b"
     ollama_chat_model: str | None = None
     ollama_topic_model: str | None = None
+    ollama_journal_model: str | None = None
     ollama_timeout_seconds: float = 180.0
     ollama_context_window: int = 2048
     ollama_chat_max_tokens: int = 160
-    ollama_topic_max_tokens: int = 128
+    ollama_topic_max_tokens: int = 256
+    ollama_journal_max_tokens: int = 768
     ollama_chat_num_gpu: int = 0
     ollama_topic_num_gpu: int = 999
+    ollama_journal_num_gpu: int | None = None
     ollama_keep_alive: int = -1
     ollama_prewarm: bool = True
     prompt_directory: str = "prompts"
@@ -154,6 +163,8 @@ class Settings(BaseSettings):
             )
         if self.email_verification_enabled and not self.email_delivery_configured:
             raise RuntimeError("SMTP settings must be configured when email verification is enabled.")
+        if self.password_reset_enabled and not self.email_delivery_configured:
+            raise RuntimeError("SMTP settings must be configured when password reset is enabled.")
 
     @property
     def email_delivery_configured(self) -> bool:

@@ -48,3 +48,22 @@ class EmailVerificationConfirmRequest(BaseModel):
 class EmailVerificationConfirmResponse(BaseModel):
     verified: bool
     detail: str
+
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetRequestResponse(BaseModel):
+    sent: bool
+    detail: str
+
+
+class PasswordResetConfirmRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=512)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class PasswordResetConfirmResponse(BaseModel):
+    reset: bool
+    detail: str

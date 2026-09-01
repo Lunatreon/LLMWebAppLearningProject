@@ -44,6 +44,7 @@ class MapEntryUpdate(BaseModel):
     category: MapEntryCategory | None = None
     text: str | None = Field(default=None, min_length=1, max_length=1000)
     reason: str | None = Field(default=None, max_length=1000)
+    topic_space_id: str | None = Field(default=None, max_length=64)
 
 
 class MapEntryUpdateResponse(BaseModel):
@@ -61,11 +62,15 @@ class TopicSpaceCreate(BaseModel):
     title: str = Field(min_length=1, max_length=120)
     description: str = Field(default="", max_length=1000)
     chat_id: str | None = Field(default=None, max_length=120)
+    parent_topic_id: str | None = Field(default=None, max_length=64)
+    related_topic_ids: list[str] = Field(default_factory=list, max_length=24)
 
 
 class TopicSpaceUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=120)
     description: str | None = Field(default=None, max_length=1000)
+    parent_topic_id: str | None = Field(default=None, max_length=64)
+    related_topic_ids: list[str] | None = Field(default=None, max_length=24)
 
 
 class TopicSpaceResponse(BaseModel):
