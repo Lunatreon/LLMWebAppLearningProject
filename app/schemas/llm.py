@@ -29,6 +29,7 @@ class ChatRead(BaseModel):
     message_count: int
     updated_at: str | None = None
     pending_topic: dict[str, Any] | None = None
+    pending_topics: list[dict[str, Any]] = Field(default_factory=list)
     pending_map_suggestion: dict[str, Any] | None = None
     messages: list[dict[str, Any]] = Field(default_factory=list)
 
@@ -42,6 +43,9 @@ class TopicSuggestion(BaseModel):
     status: str = "pending"
     existing_topic_id: str | None = None
     parent_topic_id: str | None = None
+    suggestion_id: str | None = None
+    queue_position: int = 1
+    queue_total: int = 1
 
 
 class LLMResponse(BaseModel):
@@ -55,6 +59,8 @@ class LLMResponse(BaseModel):
 
 class TopicSuggestionResponse(BaseModel):
     suggestion: TopicSuggestion | None = None
+    suggestions: list[TopicSuggestion] = Field(default_factory=list)
+    chat_title: str | None = None
 
 
 class TopicConfirmationRequest(BaseModel):

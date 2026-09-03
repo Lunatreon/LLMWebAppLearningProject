@@ -6,6 +6,7 @@ from uuid import uuid4
 MAP_KEY = "self_authorship_map"
 ENTRY_CATEGORIES = {
     "inherited_script",
+    "merged_topic",
     "own_perception",
     "value",
     "body_signal",
@@ -412,6 +413,106 @@ def update_topic_space(
         return write_map(profile_data, map_data), space
 
     raise LookupError("Topic space not found")
+
+
+def merge_topic_spaces(
+    profile_data: dict[str, Any] | None,
+    *,
+    source_topic_space_id: str,
+    target_topic_space_id: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Move a redundant topic's contents into a chosen existing topic."""
+
+    if source_topic_space_id == target_topic_space_id:
+        raise ValueError("A topic cannot be merged into itself")
+
+    map_data = read_map(profile_data)
+    source = find_topic_space(map_data, source_topic_space_id)
+    target = find_topic_space(map_data, target_topic_space_id)
+
+    ancestor_id = target.get("parent_topic_id")
+    while ancestor_id:
+        if ancestor_id == source_topic_space_id:
+            raise ValueError("A topic cannot be merged into one of its child topics")
+        ancestor_id = find_topic_space(map_data, ancestor_id).get("parent_topic_id")
+
+    for field in ("chat_ids", "journal_dates"):
+        target[field] = list(
+            dict.fromkeys([*target.get(field, []), *source.get(field, [])])
+        )
+
+    entries_by_id: dict[str, dict[str, Any]] = {}
+    entries_without_id: list[dict[str, Any]] = []
+    for entry in [*target.get("entries", []), *source.get("entries", [])]:
+        entry_id = entry.get("id") if isinstance(entry, dict) else None
+        if isinstance(entry_id, str) and entry_id:
+            entries_by_id[entry_id] = entry
+        elif isinstance(entry, dict) and entry not in entries_without_id:
+            entries_without_id.append(entry)
+    target["entries"] = [*entries_by_id.values(), *entries_without_id]
+
+    source_title = str(source.get("title") or "Merged topic").strip()
+    source_description = str(source.get("description") or "").strip()
+    preserved_text = (
+        f"{source_title}: {source_description}" if source_description else source_title
+    )[:1000]
+    now = current_timestamp()
+    target["entries"].append(
+        {
+            "id": uuid4().hex,
+            "category": "merged_topic",
+            "text": preserved_text,
+            "source_chat_id": None,
+            "source_journal_date": None,
+            "source_topic_id": source_topic_space_id,
+            "source_topic_title": source_title,
+            "reason": f"Preserved when this topic was merged into {target.get('title') or 'another topic'}.",
+            "created_at": now,
+            "updated_at": now,
+        }
+    )
+
+    if not str(target.get("description") or "").strip():
+        target["description"] = str(source.get("description") or "").strip()
+
+    source_parent_id = source.get("parent_topic_id")
+    source_related_ids = list(source.get("related_topic_ids", []))
+    map_data["topic_spaces"] = [
+        space for space in map_data["topic_spaces"] if space.get("id") != source_topic_space_id
+    ]
+
+    for space in map_data["topic_spaces"]:
+        space_id = space.get("id")
+        if space.get("parent_topic_id") == source_topic_space_id:
+            space["parent_topic_id"] = (
+                source_parent_id if space_id == target_topic_space_id else target_topic_space_id
+            )
+
+        next_related_ids: list[str] = []
+        for related_id in space.get("related_topic_ids", []):
+            replacement_id = (
+                target_topic_space_id
+                if related_id == source_topic_space_id
+                else related_id
+            )
+            if replacement_id != space_id and replacement_id not in next_related_ids:
+                next_related_ids.append(replacement_id)
+        space["related_topic_ids"] = next_related_ids
+
+    target_related_ids = list(target.get("related_topic_ids", []))
+    for related_id in source_related_ids:
+        if related_id in {source_topic_space_id, target_topic_space_id}:
+            continue
+        if related_id not in target_related_ids:
+            target_related_ids.append(related_id)
+    target["related_topic_ids"] = target_related_ids
+    set_related_topics(
+        map_data,
+        topic_space=target,
+        related_topic_ids=target_related_ids,
+    )
+    target["updated_at"] = now
+    return write_map(profile_data, map_data), target
 
 
 def delete_topic_space(

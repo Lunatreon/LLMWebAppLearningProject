@@ -10,6 +10,7 @@ from sqlalchemy import select
 
 from app.api.dependencies import get_db
 from app.api.routes import auth as auth_routes
+from app.api.routes import llm as llm_routes
 from app.api.routes.llm import (
     remember_map_suggestion_event,
     should_surface_map_suggestion,
@@ -27,7 +28,9 @@ from app.services.llm import (
     LocalTopicLLMClient,
     OllamaChatLLMClient,
     OllamaTopicLLMClient,
+    TopicLLMResult,
     assistant_message_prefix_from_json,
+    best_existing_topic_match,
     chat_result_from_payload,
     focused_chat_context,
     focused_profile_context,
@@ -38,6 +41,7 @@ from app.services.llm import (
     parse_json_response,
     read_system_prompt,
     topic_chat_context,
+    topic_result_from_payload,
     update_conversation_summary,
 )
 from app.services.pattern_recognition import ChatAnalyser
@@ -258,7 +262,7 @@ def test_user_can_register_login_and_send_llm_message(client):
 
     updated_chat_response = client.get(f"/api/v1/llm/chats/{chat_id}", headers=headers)
     assert updated_chat_response.status_code == 200
-    assert updated_chat_response.json()["title"] == suggestion["topic"]
+    assert updated_chat_response.json()["title"] == "Cozy work"
 
     message_after_acceptance = client.post(
         "/api/v1/llm/message",
@@ -1007,6 +1011,217 @@ def test_map_topics_can_be_nested_related_and_collect_cross_topic_practice_chats
     )
     assert cycle_response.status_code == 400
 
+    unrelated_response = client.patch(
+        f"/api/v1/users/me/map/topics/{clothing['id']}",
+        json={"related_topic_ids": []},
+        headers=headers,
+    )
+    assert unrelated_response.status_code == 200
+    unrelated_map = unrelated_response.json()["map"]
+    clothing_without_relation = next(
+        topic for topic in unrelated_map["topic_spaces"] if topic["id"] == clothing["id"]
+    )
+    confidence_without_relation = next(
+        topic for topic in unrelated_map["topic_spaces"] if topic["id"] == confidence["id"]
+    )
+    assert clothing_without_relation["related_topic_ids"] == []
+    assert clothing["id"] not in confidence_without_relation["related_topic_ids"]
+
+    detached_response = client.patch(
+        f"/api/v1/users/me/map/topics/{clothing['id']}",
+        json={"parent_topic_id": None},
+        headers=headers,
+    )
+    assert detached_response.status_code == 200
+    assert detached_response.json()["topic"]["parent_topic_id"] is None
+
+
+def test_duplicate_map_topic_can_merge_into_broader_existing_topic(client):
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "merge-map@example.com",
+            "username": "merge_map_user",
+            "password": "super-secret",
+        },
+    )
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"email_or_username": "merge_map_user", "password": "super-secret"},
+    )
+    headers = {"Authorization": f"Bearer {login_response.json()['access_token']}"}
+    grant_premium_access(client, "merge-map@example.com")
+
+    broader = client.post(
+        "/api/v1/users/me/map/topics",
+        json={"title": "Navigating Social Interactions with Men", "chat_id": "older-chat"},
+        headers=headers,
+    ).json()["topic"]
+    duplicate = client.post(
+        "/api/v1/users/me/map/topics",
+        json={
+            "title": "Public interactions and vulnerability",
+            "chat_id": "newer-chat",
+        },
+        headers=headers,
+    ).json()["topic"]
+    client.post(
+        "/api/v1/users/me/map/entries",
+        json={
+            "category": "body_signal",
+            "text": "I tense up when an interaction starts to feel unsafe.",
+            "topic_space_id": duplicate["id"],
+            "source_chat_id": "newer-chat",
+        },
+        headers=headers,
+    )
+
+    merge_response = client.post(
+        f"/api/v1/users/me/map/topics/{duplicate['id']}/merge",
+        json={"target_topic_space_id": broader["id"]},
+        headers=headers,
+    )
+
+    assert merge_response.status_code == 200
+    merged_map = merge_response.json()["map"]
+    assert len(merged_map["topic_spaces"]) == 1
+    merged = merged_map["topic_spaces"][0]
+    assert merged["id"] == broader["id"]
+    assert set(merged["chat_ids"]) == {"older-chat", "newer-chat"}
+    assert merged["entries"][0]["source_chat_id"] == "newer-chat"
+    preserved_topic = next(
+        entry for entry in merged["entries"] if entry["category"] == "merged_topic"
+    )
+    assert preserved_topic["source_topic_id"] == duplicate["id"]
+    assert "Public interactions and vulnerability" in preserved_topic["text"]
+
+
+def test_one_chat_can_be_connected_to_multiple_detected_topics(monkeypatch, client):
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "multi-topic@example.com",
+            "username": "multi_topic_user",
+            "password": "super-secret",
+        },
+    )
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"email_or_username": "multi_topic_user", "password": "super-secret"},
+    )
+    headers = {"Authorization": f"Bearer {login_response.json()['access_token']}"}
+    grant_premium_access(client, "multi-topic@example.com")
+
+    relationships = client.post(
+        "/api/v1/users/me/map/topics",
+        json={"title": "Relationship boundaries"},
+        headers=headers,
+    ).json()["topic"]
+    work = client.post(
+        "/api/v1/users/me/map/topics",
+        json={"title": "Workload and recovery"},
+        headers=headers,
+    ).json()["topic"]
+
+    class MultipleTopicClient:
+        async def create_topic(self, **_kwargs):
+            return TopicLLMResult(
+                topic="Boundaries with close people",
+                description="The user reflects on boundaries in a close relationship.",
+                existing_topic_id=relationships["id"],
+                additional_topics=[
+                    TopicLLMResult(
+                        topic="Recovering after demanding work",
+                        description="The user also discusses workload and recovery.",
+                        existing_topic_id=work["id"],
+                    )
+                ],
+            )
+
+    monkeypatch.setattr(llm_routes, "get_topic_llm_client", MultipleTopicClient)
+    monkeypatch.setattr(
+        llm_routes,
+        "ChatAnalyser",
+        lambda: SimpleNamespace(
+            analyse=lambda _chat_info: SimpleNamespace(
+                should_create_topic=True,
+                matched_patterns=["relationship", "work"],
+                topic_hint="relationships and work",
+                confidence=0.9,
+            )
+        ),
+    )
+
+    response = client.post(
+        "/api/v1/llm/message",
+        json={
+            "context": (
+                "I am considering a boundary in my relationship, and I am also trying "
+                "to recover after a demanding week at work."
+            )
+        },
+        headers=headers,
+    )
+    assert response.status_code == 200
+    chat_id = response.json()["chat_id"]
+    opening_excerpt_title = response.json()["chat_info"]["title"]
+
+    suggestion_response = client.get(
+        f"/api/v1/llm/chats/{chat_id}/topic-suggestion",
+        headers=headers,
+    )
+    suggestions = suggestion_response.json()["suggestions"]
+    assert len(suggestions) == 2
+    assert opening_excerpt_title != suggestions[0]["topic"]
+    assert suggestion_response.json()["chat_title"] == suggestions[0]["topic"]
+    assert suggestions[0]["existing_topic_id"] == relationships["id"]
+    assert suggestions[1]["existing_topic_id"] == work["id"]
+
+    for suggestion in suggestions:
+        confirmation = client.post(
+            "/api/v1/llm/topics/confirm",
+            json={
+                "chat_id": chat_id,
+                "topic": suggestion["topic"],
+                "description": suggestion["description"],
+                "existing_topic_space_id": suggestion["existing_topic_id"],
+                "accepted": True,
+            },
+            headers=headers,
+        )
+        assert confirmation.status_code == 200
+
+    map_data = client.get("/api/v1/users/me/map", headers=headers).json()
+    connected_topics = [
+        topic["id"] for topic in map_data["topic_spaces"] if chat_id in topic["chat_ids"]
+    ]
+    assert set(connected_topics) == {relationships["id"], work["id"]}
+    assert client.get(f"/api/v1/llm/chats/{chat_id}", headers=headers).json()[
+        "title"
+    ] == suggestions[0]["topic"]
+
+
+def test_topic_payload_can_return_additional_distinct_topics():
+    result = topic_result_from_payload(
+        {
+            "topic": "Relationship boundaries",
+            "description": "A recurring relationship thread.",
+            "existing_topic_id": "relationship-topic",
+            "parent_topic_id": None,
+            "additional_topics": [
+                {
+                    "topic": "Workload and recovery",
+                    "description": "A separate durable work thread.",
+                    "existing_topic_id": "work-topic",
+                    "parent_topic_id": None,
+                }
+            ],
+        }
+    )
+
+    assert result.additional_topics[0].topic == "Workload and recovery"
+    assert result.additional_topics[0].existing_topic_id == "work-topic"
+
 
 def test_map_suggestions_use_hybrid_surface_rule():
     suggestion = {
@@ -1244,6 +1459,49 @@ def test_long_uncategorized_chat_can_request_a_freeform_topic():
     assert analysis.topic_hint is None
     assert analysis.matched_patterns == ["open-topic-analysis"]
     assert "Bicycle" in topic or "Bicycles" in topic
+
+
+def test_similar_chat_topic_reuses_broader_existing_map_thread():
+    existing_topic_id = best_existing_topic_match(
+        "Social interactions in public spaces and feelings of vulnerability",
+        (
+            "Unwanted attention from men in public spaces creates concerns about "
+            "aggression and women's safety."
+        ),
+        [
+            {
+                "id": "social-men",
+                "title": "Navigating Social Interactions with Men",
+                "description": (
+                    "Learning how to deal with men while avoiding interactions that feel "
+                    "unsafe or pressured."
+                ),
+            },
+            {
+                "id": "workload",
+                "title": "Workload and personal boundaries",
+                "description": "Keeping work demands manageable without overcommitting.",
+            },
+        ],
+    )
+
+    assert existing_topic_id == "social-men"
+
+
+def test_topic_reuse_matcher_does_not_merge_on_one_generic_shared_word():
+    existing_topic_id = best_existing_topic_match(
+        "Social confidence at a new workplace",
+        "Getting to know colleagues and speaking during team meetings.",
+        [
+            {
+                "id": "social-men",
+                "title": "Navigating Social Interactions with Men",
+                "description": "Handling unsafe or pressured encounters with men.",
+            }
+        ],
+    )
+
+    assert existing_topic_id is None
 
 
 def test_chat_context_prioritizes_recent_messages():
@@ -1680,6 +1938,7 @@ def test_ollama_clients_use_local_chat_api_and_structured_json_contract():
         "description",
         "existing_topic_id",
         "parent_topic_id",
+        "additional_topics",
     ]
     assert topic_body["options"]["temperature"] == 0.2
     assert topic_body["options"]["num_gpu"] == 999
@@ -1734,6 +1993,56 @@ def test_ollama_chat_streams_only_assistant_text_from_structured_response():
     stream_path, stream_request = chat_client.client.requests[0]
     assert stream_path == "/api/chat"
     assert stream_request["json"]["stream"] is True
+
+
+def test_ollama_chat_keeps_streamed_message_when_final_json_is_invalid():
+    assistant_message = "The waiting feels heavy. What part is hardest today?"
+    generated_json = json.dumps(
+        {
+            "assistant_message": assistant_message,
+            "profile": {},
+            "map_suggestion": None,
+        }
+    )[:-1]
+    generated_chunks = [
+        generated_json[index : index + 7]
+        for index in range(0, len(generated_json), 7)
+    ]
+    chat_client = make_ollama_client(OllamaChatLLMClient, {})
+    chat_client.client = RecordingOllamaStreamHttpClient(generated_chunks)
+    visible_chunks = []
+
+    async def collect_text(chunk):
+        visible_chunks.append(chunk)
+
+    result = asyncio.run(
+        chat_client.respond(
+            "I am tired of waiting.",
+            {},
+            {"message_count": 0, "messages": []},
+            "chat-recovered",
+            on_text_chunk=collect_text,
+        )
+    )
+
+    assert "".join(visible_chunks) == assistant_message
+    assert result.assistant_message == assistant_message
+    assert result.profile == {}
+    assert result.map_suggestion is None
+
+
+def test_chat_result_keeps_message_when_optional_map_suggestion_is_malformed():
+    result = chat_result_from_payload(
+        {
+            "assistant_message": "A complete useful response.",
+            "profile": {"ordinary_note": "kept"},
+            "map_suggestion": {"category": "not-a-category", "text": "Incomplete"},
+        }
+    )
+
+    assert result.assistant_message == "A complete useful response."
+    assert result.profile == {"ordinary_note": "kept"}
+    assert result.map_suggestion is None
 
 
 def test_provider_factories_can_select_ollama_per_role(monkeypatch):

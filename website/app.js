@@ -1,6 +1,47 @@
 const initialPasswordResetToken = new URLSearchParams(window.location.search).get(
   "reset_password_token",
 );
+const THEME_STORAGE_KEY = "feely_theme";
+
+function syncViewportHeight() {
+  const viewportHeight = window.visualViewport?.height || window.innerHeight;
+  if (viewportHeight > 0) {
+    document.documentElement.style.setProperty("--app-height", `${viewportHeight}px`);
+  }
+}
+
+syncViewportHeight();
+
+function readSavedTheme() {
+  try {
+    return localStorage.getItem(THEME_STORAGE_KEY) === "light" ? "light" : "dark";
+  } catch {
+    return "dark";
+  }
+}
+
+function applyTheme(theme, { persist = false } = {}) {
+  const selectedTheme = theme === "light" ? "light" : "dark";
+  document.documentElement.dataset.theme = selectedTheme;
+  const themeColor = document.querySelector('meta[name="theme-color"]');
+  if (themeColor) themeColor.content = selectedTheme === "light" ? "#fff4f7" : "#100f13";
+  if (persist) {
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, selectedTheme);
+    } catch {
+      // The appearance still changes when browser storage is unavailable.
+    }
+  }
+  document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
+    const isLight = selectedTheme === "light";
+    const nextTheme = isLight ? "dark" : "light";
+    button.setAttribute("aria-checked", String(isLight));
+    button.setAttribute("aria-label", `Use ${nextTheme} appearance`);
+    button.title = `Use ${nextTheme} appearance`;
+  });
+}
+
+applyTheme(readSavedTheme());
 
 function scrubSensitiveAuthParams() {
   const url = new URL(window.location.href);
@@ -103,7 +144,6 @@ const googleAuthField = document.querySelector("#google-auth-field");
 const googleButton = document.querySelector("#google-button");
 const logoutButton = document.querySelector("#logout-button");
 const accountButton = document.querySelector("#account-button");
-const refreshButton = document.querySelector("#refresh-button");
 const newChatButton = document.querySelector("#new-chat-button");
 const chatList = document.querySelector("#chat-list");
 const chatCount = document.querySelector("#chat-count");
@@ -114,10 +154,15 @@ const messageInput = document.querySelector("#message-input");
 const sendButton = document.querySelector("#send-button");
 const topicCard = document.querySelector("#topic-card");
 const topicTitle = document.querySelector("#topic-title");
+const topicDescription = document.querySelector("#topic-description");
+const topicNameLabel = document.querySelector("#topic-name-label");
+const topicQueueStatus = document.querySelector("#topic-queue-status");
 const topicAccept = document.querySelector("#topic-accept");
 const topicDismiss = document.querySelector("#topic-dismiss");
 const topicRouting = document.querySelector("#topic-routing");
 const topicTarget = document.querySelector("#topic-target");
+const topicMatchBadge = document.querySelector("#topic-match-badge");
+const topicRouteHint = document.querySelector("#topic-route-hint");
 const topicParent = document.querySelector("#topic-parent");
 const topicParentField = document.querySelector("#topic-parent-field");
 const mapSuggestionCard = document.querySelector("#map-suggestion-card");
@@ -138,6 +183,12 @@ const sidebarClose = document.querySelector("#sidebar-close");
 const sidebarBackdrop = document.querySelector("#sidebar-backdrop");
 const workspaceSwitch = document.querySelector(".workspace-switch");
 const chatSidebarContent = document.querySelector("#chat-sidebar-content");
+const mapSidebarContent = document.querySelector("#map-sidebar-content");
+const mapSidebarAccess = document.querySelector("#map-sidebar-access");
+const mapSidebarLocked = document.querySelector("#map-sidebar-locked");
+const mapSidebarAddTopic = document.querySelector("#map-sidebar-add-topic");
+const mapTopicList = document.querySelector("#map-topic-list");
+const mapTopicCount = document.querySelector("#map-topic-count");
 const journalSidebarContent = document.querySelector("#journal-sidebar-content");
 const conversationView = document.querySelector("#conversation-view");
 const mapView = document.querySelector("#map-view");
@@ -156,7 +207,6 @@ const journalWorkspace = document.querySelector("#journal-workspace");
 const journalUpgradeButton = document.querySelector("#journal-upgrade-button");
 const journalReturnChat = document.querySelector("#journal-return-chat");
 const journalAnalyseButton = document.querySelector("#journal-analyse-button");
-const journalDateHeading = document.querySelector("#journal-date-heading");
 const journalFullDate = document.querySelector("#journal-full-date");
 const journalText = document.querySelector("#journal-text");
 const journalSaveStatus = document.querySelector("#journal-save-status");
@@ -230,12 +280,15 @@ const passwordResetStatus = document.querySelector("#password-reset-status");
 
 const MAP_CATEGORY_LABELS = {
   inherited_script: "Inherited script",
+  merged_topic: "Merged topic",
   own_perception: "My perception",
   value: "Value",
   body_signal: "Body signal",
   practice: "Practice",
   evidence: "Evidence",
 };
+const OVERALL_MAP_NODE_ID = "__across_topics";
+const OVERALL_MAP_TITLE = "Overall";
 
 const TOPIC_POLL_DELAYS = [700, 1800, 4000, 8000];
 
@@ -502,7 +555,7 @@ async function handleGoogleCredential(response) {
     state.token = payload.access_token;
     localStorage.setItem("feely_token", state.token);
     if (authStatus) authStatus.textContent = "";
-    await showChat();
+    await showChat({ startFreshChat: true });
   } catch (error) {
     authError.textContent = error instanceof Error ? error.message : String(error);
     if (authStatus) authStatus.textContent = "";
@@ -517,7 +570,8 @@ function showAuth() {
   stopPolling();
 }
 
-async function showChat() {
+async function showChat({ startFreshChat = false } = {}) {
+  if (startFreshChat) state.activeChatId = null;
   authView.classList.add("hidden");
   chatView.classList.remove("hidden");
   document.title = "FeelY | Conversations";
@@ -531,6 +585,7 @@ async function showChat() {
   }
   const workspace = ["map", "journal"].includes(requestedView) ? requestedView : "chat";
   switchWorkspace(workspace);
+  if (startFreshChat && workspace === "chat") startNewChat();
   startPolling();
   await handleCheckoutReturn();
   await handleAccountReturn(requestedView);
@@ -565,7 +620,7 @@ async function login() {
   });
   state.token = payload.access_token;
   localStorage.setItem("feely_token", state.token);
-  await showChat();
+  await showChat({ startFreshChat: true });
 }
 
 function openPasswordResetRequest() {
@@ -1176,7 +1231,7 @@ async function loadChats() {
     (chat) => chat.chat_id === state.activeChatId,
   );
   if (!activeChatStillExists) {
-    state.activeChatId = state.chats[0]?.chat_id || null;
+    state.activeChatId = null;
   }
 
   renderChats();
@@ -1189,15 +1244,11 @@ async function loadChats() {
   }
 }
 
-async function createChat() {
-  const chat = await api("/llm/chats", {
-    method: "POST",
-    headers: authHeaders(),
-    body: JSON.stringify({ title: "New conversation" }),
-  });
-  state.activeChatId = chat.chat_id;
-  upsertChat({ ...chat, messages: [] });
-  chatTitle.textContent = chat.title || "New conversation";
+function startNewChat() {
+  stopPolling();
+  state.activeChatId = null;
+  chatTitle.textContent = "New conversation";
+  document.title = "New conversation | FeelY";
   renderChats();
   renderMessages([]);
   renderTopic(null);
@@ -1451,26 +1502,78 @@ function appendStreamingText(bubble, text) {
   messages.scrollTop = messages.scrollHeight;
 }
 
+function topicContentsLabel(space) {
+  const chatCount = space.chat_ids?.length || 0;
+  const journalCount = space.journal_dates?.length || 0;
+  return [
+    `${chatCount} ${chatCount === 1 ? "chat" : "chats"}`,
+    `${journalCount} ${journalCount === 1 ? "journal" : "journals"}`,
+  ].join(" and ");
+}
+
+function updateTopicRoutePresentation() {
+  const topic = state.pendingTopic;
+  if (!topic) return;
+  const spaces = state.map?.topic_spaces || [];
+  const selectedSpace = spaces.find((space) => space.id === topicTarget.value);
+  const isRecommended = selectedSpace?.id === topic.existing_topic_id;
+
+  topicParentField.classList.toggle("hidden", Boolean(selectedSpace));
+  topicMatchBadge.classList.toggle("hidden", !isRecommended);
+  topicNameLabel.textContent = selectedSpace ? "Detected aspect" : "New topic name";
+  if (selectedSpace) {
+    const prefix = isRecommended ? "Best match found. " : "";
+    topicRouteHint.textContent =
+      `${prefix}This chat will join “${selectedSpace.title}” ` +
+      `(${topicContentsLabel(selectedSpace)}), so no extra map bubble is created. ` +
+      "The same chat can also belong to other topics.";
+    topicAccept.textContent = "Connect chat";
+  } else {
+    topicRouteHint.textContent =
+      "This creates a new map topic and connects this chat to it. Its name is independent from the conversation name.";
+    topicAccept.textContent = "Create and connect";
+  }
+}
+
 function renderTopic(topic) {
   state.pendingTopic = topic;
   topicCard.classList.toggle("hidden", !topic);
   if (!topic) {
-    topicTitle.textContent = "";
+    topicTitle.value = "";
+    topicDescription.value = "";
+    topicQueueStatus.textContent = "";
+    topicQueueStatus.classList.add("hidden");
+    topicRouteHint.textContent = "";
+    topicMatchBadge.classList.add("hidden");
     topicRouting.classList.add("hidden");
     return;
   }
-  topicTitle.textContent = topic.topic;
+  topicTitle.value = topic.topic || "";
+  topicDescription.value = topic.description || "";
+  const queueTotal = Number(topic.queue_total || 1);
+  const queuePosition = Number(topic.queue_position || 1);
+  topicQueueStatus.textContent = `Suggestion ${queuePosition} of ${queueTotal}`;
+  topicQueueStatus.classList.toggle("hidden", queueTotal <= 1);
   const spaces = state.map?.topic_spaces || [];
   topicRouting.classList.toggle("hidden", !hasMyMapAccess() || !spaces.length);
   topicTarget.replaceChildren();
   const createOption = document.createElement("option");
   createOption.value = "";
-  createOption.textContent = `Create “${topic.topic}”`;
+  createOption.textContent = "Create a new map topic";
   topicTarget.append(createOption);
-  spaces.forEach((space) => {
+
+  const orderedSpaces = [...spaces].sort((first, second) => {
+    if (first.id === topic.existing_topic_id) return -1;
+    if (second.id === topic.existing_topic_id) return 1;
+    return String(first.title || "").localeCompare(String(second.title || ""));
+  });
+  orderedSpaces.forEach((space) => {
     const option = document.createElement("option");
     option.value = space.id;
-    option.textContent = `Add chat to ${space.title}`;
+    option.textContent =
+      space.id === topic.existing_topic_id
+        ? `Recommended: ${space.title}`
+        : `Existing topic: ${space.title}`;
     topicTarget.append(option);
   });
   if (spaces.some((space) => space.id === topic.existing_topic_id)) {
@@ -1491,8 +1594,7 @@ function renderTopic(topic) {
   if (spaces.some((space) => space.id === topic.parent_topic_id)) {
     topicParent.value = topic.parent_topic_id;
   }
-  topicParentField.classList.toggle("hidden", Boolean(topicTarget.value));
-  topicAccept.textContent = topicTarget.value ? "Connect chat" : "Save topic";
+  updateTopicRoutePresentation();
 }
 
 function renderMapSuggestion(suggestion) {
@@ -1521,7 +1623,7 @@ function renderMapSuggestion(suggestion) {
   mapSuggestionTarget.replaceChildren();
   const unassigned = document.createElement("option");
   unassigned.value = "";
-  unassigned.textContent = "Across topics";
+  unassigned.textContent = OVERALL_MAP_TITLE;
   mapSuggestionTarget.append(unassigned);
   spaces.forEach((space) => {
     const option = document.createElement("option");
@@ -1538,10 +1640,6 @@ async function sendMessage(event) {
   event.preventDefault();
   const context = messageInput.value.trim();
   if (!context || sendButton.disabled) return;
-
-  if (!state.activeChatId) {
-    await createChat();
-  }
 
   sendButton.disabled = true;
   messageInput.value = "";
@@ -1582,6 +1680,7 @@ async function sendMessage(event) {
       message_count: response.chat_info.message_count || 0,
       updated_at: response.chat_info.updated_at,
       pending_topic: response.chat_info.pending_topic || null,
+      pending_topics: response.chat_info.pending_topics || [],
       messages: response.chat_info.messages || [],
       pending_map_suggestion: response.map_suggestion || null,
     };
@@ -1652,12 +1751,24 @@ function pollTopicSoon(attempt = 0) {
 
 async function pollTopicOnce() {
   if (!state.activeChatId || !state.token) return false;
+  const requestedChatId = state.activeChatId;
   const payload = await api(
-    `/llm/chats/${encodeURIComponent(state.activeChatId)}/topic-suggestion`,
+    `/llm/chats/${encodeURIComponent(requestedChatId)}/topic-suggestion`,
     { headers: authHeaders() },
   );
-  renderTopic(payload.suggestion);
-  return Boolean(payload.suggestion);
+  if (state.activeChatId !== requestedChatId) return false;
+  if (payload.chat_title) {
+    const chat = state.chats.find((item) => item.chat_id === requestedChatId);
+    if (chat && chat.title !== payload.chat_title) {
+      chat.title = payload.chat_title;
+      renderChats();
+    }
+    chatTitle.textContent = payload.chat_title;
+    document.title = `${payload.chat_title} | FeelY`;
+  }
+  const suggestion = payload.suggestions?.[0] || payload.suggestion || null;
+  renderTopic(suggestion);
+  return Boolean(suggestion);
 }
 
 function startPolling() {
@@ -1675,6 +1786,12 @@ function stopPolling() {
 async function confirmTopic(accepted) {
   if (!state.pendingTopic) return;
   const topic = state.pendingTopic;
+  const editedTopic = topicTitle.value.trim() || topic.topic;
+  const editedDescription = topicDescription.value.trim() || topic.description;
+  if (accepted && !editedTopic) {
+    topicTitle.focus();
+    return;
+  }
   const existingTopicSpaceId = accepted && topicTarget.value ? topicTarget.value : null;
   const parentTopicSpaceId =
     accepted && !existingTopicSpaceId && topicParent.value ? topicParent.value : null;
@@ -1684,8 +1801,8 @@ async function confirmTopic(accepted) {
     headers: authHeaders(),
     body: JSON.stringify({
       chat_id: topic.chat_id,
-      topic: topic.topic,
-      description: topic.description,
+      topic: editedTopic,
+      description: editedDescription,
       accepted,
       existing_topic_space_id: existingTopicSpaceId,
       parent_topic_space_id: parentTopicSpaceId,
@@ -1718,9 +1835,7 @@ async function confirmMapSuggestion(accepted) {
     }),
   });
   state.map = response.map;
-  if (Object.prototype.hasOwnProperty.call(payload, "topic_space_id")) {
-    state.activeMapNodeId = payload.topic_space_id || "__across_topics";
-  }
+  state.activeMapNodeId = targetTopicSpaceId || OVERALL_MAP_NODE_ID;
   renderMap();
 }
 
@@ -1776,14 +1891,90 @@ function renderJournalAccess() {
   journalSidebarAccess.classList.toggle("hidden", !allowed);
   journalSidebarLocked.classList.toggle("hidden", allowed);
   journalAnalyseButton.hidden = !allowed;
-  if (!allowed) {
-    journalDateHeading.textContent = "Journal";
-    return;
-  }
+  if (!allowed) return;
   if (!state.activeJournalDate) state.activeJournalDate = localDateKey();
-  journalDateHeading.textContent = formattedJournalDate(state.activeJournalDate, {
-    month: "short",
-    day: "numeric",
+}
+
+function orderedMapTopics(spaces) {
+  const topicIds = new Set(spaces.map((space) => space.id));
+  const childrenByParent = new Map();
+  spaces.forEach((space) => {
+    const parentId = topicIds.has(space.parent_topic_id) ? space.parent_topic_id : null;
+    if (!childrenByParent.has(parentId)) childrenByParent.set(parentId, []);
+    childrenByParent.get(parentId).push(space);
+  });
+
+  const ordered = [];
+  const visited = new Set();
+  const addBranch = (space, depth) => {
+    if (visited.has(space.id)) return;
+    visited.add(space.id);
+    ordered.push({ space, depth });
+    (childrenByParent.get(space.id) || []).forEach((child) => addBranch(child, depth + 1));
+  };
+  (childrenByParent.get(null) || []).forEach((space) => addBranch(space, 0));
+  spaces.forEach((space) => addBranch(space, 0));
+  return ordered;
+}
+
+function overallMapNode(map = state.map) {
+  const entries = map?.unassigned_entries || [];
+  return {
+    id: OVERALL_MAP_NODE_ID,
+    kind: "unassigned",
+    title: OVERALL_MAP_TITLE,
+    description:
+      "A permanent home for observations, values, evidence, and practices that matter across several topics.",
+    chat_ids: [...new Set(entries.map((entry) => entry.source_chat_id).filter(Boolean))],
+    journal_dates: [
+      ...new Set(entries.map((entry) => entry.source_journal_date).filter(Boolean)),
+    ],
+    entries,
+    position: mapNodePosition(0),
+  };
+}
+
+function appendMapSidebarTopic(space, depth = 0, { overall = false } = {}) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "map-topic-button";
+  button.classList.toggle("overall", overall);
+  button.classList.toggle("active", space.id === state.activeMapNodeId);
+  button.style.setProperty("--topic-indent", `${Math.min(depth, 5) * 14}px`);
+  button.setAttribute("aria-current", space.id === state.activeMapNodeId ? "page" : "false");
+
+  const title = document.createElement("strong");
+  title.textContent = space.title || "Untitled topic";
+  const meta = document.createElement("span");
+  const chats = space.chat_ids?.length || 0;
+  const journals = space.journal_dates?.length || 0;
+  const entries = space.entries?.length || 0;
+  meta.textContent = `${chats} ${chats === 1 ? "chat" : "chats"} · ${journals} ${journals === 1 ? "journal" : "journals"} · ${entries} ${entries === 1 ? "entry" : "entries"}`;
+  button.title = `${title.textContent} — ${meta.textContent}`;
+  button.append(title, meta);
+  button.addEventListener("click", () => {
+    state.activeMapNodeId = space.id;
+    state.mapDetailOpen = true;
+    renderMap();
+    closeSidebar();
+  });
+  mapTopicList.append(button);
+}
+
+function renderMapSidebar() {
+  const allowed = hasMyMapAccess();
+  mapSidebarAccess.classList.toggle("hidden", !allowed);
+  mapSidebarLocked.classList.toggle("hidden", allowed);
+  mapTopicList.replaceChildren();
+
+  const spaces = allowed ? state.map?.topic_spaces || [] : [];
+  mapTopicCount.textContent = String(allowed ? spaces.length + 1 : 0);
+  if (!allowed) return;
+
+  appendMapSidebarTopic(overallMapNode(), 0, { overall: true });
+
+  orderedMapTopics(spaces).forEach(({ space, depth }) => {
+    appendMapSidebarTopic(space, depth);
   });
 }
 
@@ -1839,10 +2030,6 @@ function renderJournalEntry() {
     suggestions: [],
   };
   journalText.value = entry.content || "";
-  journalDateHeading.textContent = formattedJournalDate(entry.entry_date, {
-    month: "short",
-    day: "numeric",
-  });
   journalFullDate.textContent = formattedJournalDate(entry.entry_date);
   const words = journalWordTotal(entry.content || "");
   journalWordCount.textContent = `${words} ${words === 1 ? "word" : "words"}`;
@@ -1954,7 +2141,7 @@ async function analyseJournalEntry() {
   }
 }
 
-function journalTopicOptions(select, selectedValue = "", emptyLabel = "Across topics") {
+function journalTopicOptions(select, selectedValue = "", emptyLabel = OVERALL_MAP_TITLE) {
   const across = document.createElement("option");
   across.value = "";
   across.textContent = emptyLabel;
@@ -2099,6 +2286,7 @@ async function loadJournalWorkspace() {
 function switchWorkspace(view) {
   const showMap = view === "map";
   const showJournal = view === "journal";
+  const returningToChat = !showMap && !showJournal && conversationView.classList.contains("hidden");
   if (showMap) {
     state.activeMapNodeId = null;
     state.mapDetailOpen = false;
@@ -2110,7 +2298,8 @@ function switchWorkspace(view) {
   chatWorkspaceButton.classList.toggle("active", !showMap && !showJournal);
   mapWorkspaceButton.classList.toggle("active", showMap);
   journalWorkspaceButton.classList.toggle("active", showJournal);
-  chatSidebarContent.classList.toggle("hidden", showJournal);
+  chatSidebarContent.classList.toggle("hidden", showMap || showJournal);
+  mapSidebarContent.classList.toggle("hidden", !showMap);
   journalSidebarContent.classList.toggle("hidden", !showJournal);
   chatWorkspaceButton.setAttribute("aria-selected", String(!showMap && !showJournal));
   mapWorkspaceButton.setAttribute("aria-selected", String(showMap));
@@ -2132,6 +2321,7 @@ function switchWorkspace(view) {
     }
   }
   if (showJournal) loadJournalWorkspace().catch(renderInlineError);
+  if (returningToChat) startNewChat();
 }
 
 function createMapEntryElement(entry) {
@@ -2221,6 +2411,7 @@ function createConceptNode(node, index) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "map-node";
+  button.classList.toggle("overall", node.id === OVERALL_MAP_NODE_ID);
   button.dataset.category = primaryEntryCategory(node.entries || []);
   button.setAttribute("aria-pressed", String(node.id === state.activeMapNodeId));
   button.setAttribute("aria-label", `Open ${node.title}`);
@@ -2301,7 +2492,8 @@ async function createThreadMapEntry(node, category, text, topicSpaceId = undefin
     }),
   });
   state.map = response.map;
-  state.activeMapNodeId = topicSpaceId || (node.kind === "topic" ? node.id : "__across_topics");
+  state.activeMapNodeId =
+    topicSpaceId || (node.kind === "topic" ? node.id : OVERALL_MAP_NODE_ID);
   renderMap();
 }
 
@@ -2429,10 +2621,60 @@ function openMapTopicPopup(topic = null) {
   });
   if (relatedFieldset.children.length === 1) relatedFieldset.classList.add("hidden");
 
+  let mergeField = null;
+  if (isEdit && (state.map?.topic_spaces || []).length > 1) {
+    mergeField = document.createElement("section");
+    mergeField.className = "map-topic-merge";
+    const mergeHeading = document.createElement("strong");
+    mergeHeading.textContent = "Duplicate topic?";
+    const mergeCopy = document.createElement("p");
+    mergeCopy.textContent =
+      "Move this topic’s chats, journals, and entries into another topic, then remove this bubble.";
+    const mergeTarget = document.createElement("select");
+    mergeTarget.setAttribute("aria-label", "Topic to merge into");
+    const chooseTarget = document.createElement("option");
+    chooseTarget.value = "";
+    chooseTarget.textContent = "Choose the topic to keep";
+    mergeTarget.append(chooseTarget);
+    (state.map?.topic_spaces || []).forEach((space) => {
+      if (space.id === topic.id) return;
+      const option = document.createElement("option");
+      option.value = space.id;
+      option.textContent = space.title;
+      mergeTarget.append(option);
+    });
+    const mergeButton = document.createElement("button");
+    mergeButton.type = "button";
+    mergeButton.className = "map-merge-button";
+    mergeButton.textContent = "Merge into selected topic";
+    mergeButton.disabled = true;
+    mergeTarget.addEventListener("change", () => {
+      mergeButton.disabled = !mergeTarget.value;
+    });
+    mergeButton.addEventListener("click", () => {
+      const target = (state.map?.topic_spaces || []).find(
+        (space) => space.id === mergeTarget.value,
+      );
+      if (!target) return;
+      if (
+        !window.confirm(
+          `Merge “${topic.title}” into “${target.title}”? The second topic will be kept.`,
+        )
+      ) {
+        return;
+      }
+      closeMapActionPopup();
+      mergeMapTopic(topic.id, target.id).catch(renderInlineError);
+    });
+    mergeField.append(mergeHeading, mergeCopy, mergeTarget, mergeButton);
+  }
+
   const submit = document.createElement("button");
   submit.type = "submit";
   submit.textContent = isEdit ? "Save topic" : "Create topic";
-  form.append(titleInput, descriptionInput, parentLabel, relatedFieldset, submit);
+  form.append(titleInput, descriptionInput, parentLabel, relatedFieldset);
+  if (mergeField) form.append(mergeField);
+  form.append(submit);
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -2486,10 +2728,54 @@ async function updateMapTopic(topicId, payload) {
   renderMap();
 }
 
+async function disconnectMapTopicConnection(node, relationship, connectedTopic) {
+  if (
+    !window.confirm(
+      `Disconnect “${node.title}” and “${connectedTopic.title}”? Both topics and their contents will be kept.`,
+    )
+  ) {
+    return;
+  }
+
+  const topicId = relationship === "Contains" ? connectedTopic.id : node.id;
+  const payload =
+    relationship === "Related"
+      ? {
+          related_topic_ids: (node.related_topic_ids || []).filter(
+            (topicIdValue) => topicIdValue !== connectedTopic.id,
+          ),
+        }
+      : { parent_topic_id: null };
+  const response = await api(`/users/me/map/topics/${encodeURIComponent(topicId)}`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  state.map = response.map;
+  state.activeMapNodeId = node.id;
+  state.mapDetailOpen = true;
+  renderMap();
+}
+
+async function mergeMapTopic(sourceTopicId, targetTopicId) {
+  const response = await api(
+    `/users/me/map/topics/${encodeURIComponent(sourceTopicId)}/merge`,
+    {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ target_topic_space_id: targetTopicId }),
+    },
+  );
+  state.map = response.map;
+  state.activeMapNodeId = response.topic.id;
+  state.mapDetailOpen = true;
+  renderMap();
+}
+
 async function deleteMapTopic(topic) {
   if (
     !window.confirm(
-      "Delete this topic? Its entries will move to Across topics instead of being deleted.",
+      "Delete this topic? Its entries will move to Overall instead of being deleted.",
     )
   ) {
     return;
@@ -2546,13 +2832,15 @@ function openMapActionPopup(node, mode, entry = null) {
   if (!isTask && !isPracticeEdit) {
     categoryInput = document.createElement("select");
     categoryInput.setAttribute("aria-label", "Entry type");
-    [
+    const entryCategories = [
       "own_perception",
       "value",
       "body_signal",
       "evidence",
       "inherited_script",
-    ].forEach((category) => {
+    ];
+    if (entry?.category === "merged_topic") entryCategories.unshift("merged_topic");
+    entryCategories.forEach((category) => {
       const option = document.createElement("option");
       option.value = category;
       option.textContent = MAP_CATEGORY_LABELS[category] || category;
@@ -2567,7 +2855,7 @@ function openMapActionPopup(node, mode, entry = null) {
   topicInput.setAttribute("aria-label", "Topic for this entry");
   const acrossTopics = document.createElement("option");
   acrossTopics.value = "";
-  acrossTopics.textContent = "Across topics";
+  acrossTopics.textContent = OVERALL_MAP_TITLE;
   topicInput.append(acrossTopics);
   (state.map?.topic_spaces || []).forEach((space) => {
     const option = document.createElement("option");
@@ -2848,7 +3136,7 @@ function createConceptDetails(node) {
 
   const eyebrow = document.createElement("p");
   eyebrow.className = "eyebrow";
-  eyebrow.textContent = node.kind === "unassigned" ? "Across topics" : "Selected thread";
+  eyebrow.textContent = node.kind === "unassigned" ? "Built-in overall thread" : "Selected thread";
 
   const titleRow = document.createElement("div");
   titleRow.className = "map-detail-title-row";
@@ -2937,19 +3225,33 @@ function createConceptDetails(node) {
       const connectionList = document.createElement("div");
       connectionList.className = "map-topic-connections";
       connections.forEach(([relationship, space]) => {
-        const button = document.createElement("button");
-        button.type = "button";
+        const row = document.createElement("div");
+        row.className = "map-topic-connection-row";
+        const openButton = document.createElement("button");
+        openButton.type = "button";
+        openButton.className = "map-topic-connection-open";
         const relationshipLabel = document.createElement("span");
         relationshipLabel.textContent = relationship;
         const topicLabel = document.createElement("strong");
         topicLabel.textContent = space.title;
-        button.append(relationshipLabel, topicLabel);
-        button.addEventListener("click", () => {
+        openButton.append(relationshipLabel, topicLabel);
+        openButton.addEventListener("click", () => {
           state.activeMapNodeId = space.id;
           state.mapDetailOpen = true;
           renderMap();
         });
-        connectionList.append(button);
+
+        const disconnectButton = document.createElement("button");
+        disconnectButton.type = "button";
+        disconnectButton.className = "map-topic-connection-remove";
+        disconnectButton.textContent = "×";
+        disconnectButton.title = `Disconnect from ${space.title}`;
+        disconnectButton.setAttribute("aria-label", `Disconnect from ${space.title}`);
+        disconnectButton.addEventListener("click", () => {
+          disconnectMapTopicConnection(node, relationship, space).catch(renderInlineError);
+        });
+        row.append(openButton, disconnectButton);
+        connectionList.append(row);
       });
       connectionSection.append(heading, connectionList);
       panel.append(connectionSection);
@@ -3072,6 +3374,7 @@ function renderMapPaywall() {
 }
 
 function renderMap() {
+  renderMapSidebar();
   mapContent.replaceChildren();
 
   if (!hasMyMapAccess()) {
@@ -3081,40 +3384,22 @@ function renderMap() {
 
   const map = state.map || { topic_spaces: [], unassigned_entries: [] };
   const spaces = map.topic_spaces || [];
-  const unassigned = map.unassigned_entries || [];
-  if (!spaces.length && !unassigned.length) {
-    const empty = document.createElement("p");
-    empty.className = "map-empty";
-    empty.textContent =
-      "When you accept a recurring topic or save a useful observation from chat, it will appear here. You can also begin with one small practice.";
-    mapContent.append(empty);
-    return;
-  }
 
   const topicTitles = new Map(spaces.map((space) => [space.id, space.title || "Untitled"]));
-  const nodes = spaces.map((space, index) => ({
-    ...space,
-    kind: "topic",
-    title: space.title || "Untitled",
-    description: space.description || "A thread you chose to keep visible.",
-    parent_title: topicTitles.get(space.parent_topic_id) || null,
-    related_topic_ids: space.related_topic_ids || [],
-    journal_dates: space.journal_dates || [],
-    entries: space.entries || [],
-    position: mapNodePosition(index),
-  }));
-  if (unassigned.length) {
-    nodes.push({
-      id: "__across_topics",
-      kind: "unassigned",
-      title: "Across topics",
-      description: "Observations and practices that belong to more than one thread.",
-      chat_ids: [],
-      journal_dates: [],
-      entries: unassigned,
-      position: mapNodePosition(nodes.length),
-    });
-  }
+  const nodes = [
+    overallMapNode(map),
+    ...spaces.map((space, index) => ({
+      ...space,
+      kind: "topic",
+      title: space.title || "Untitled",
+      description: space.description || "A thread you chose to keep visible.",
+      parent_title: topicTitles.get(space.parent_topic_id) || null,
+      related_topic_ids: space.related_topic_ids || [],
+      journal_dates: space.journal_dates || [],
+      entries: space.entries || [],
+      position: mapNodePosition(index + 1),
+    })),
+  ];
 
   if (!nodes.some((node) => node.id === state.activeMapNodeId)) {
     state.activeMapNodeId = null;
@@ -3145,7 +3430,7 @@ function openPracticeDialog() {
   practiceTopic.replaceChildren();
   const unassigned = document.createElement("option");
   unassigned.value = "";
-  unassigned.textContent = "Across topics";
+  unassigned.textContent = OVERALL_MAP_TITLE;
   practiceTopic.append(unassigned);
   (state.map?.topic_spaces || []).forEach((space) => {
     const option = document.createElement("option");
@@ -3237,10 +3522,15 @@ passwordResetConfirmForm.addEventListener("submit", (event) =>
 );
 logoutButton.addEventListener("click", logout);
 accountButton.addEventListener("click", () => openAccountDialog().catch(renderInlineError));
-refreshButton.addEventListener("click", () => loadChats().catch(renderInlineError));
+document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const nextTheme = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+    applyTheme(nextTheme, { persist: true });
+  });
+});
 newChatButton.addEventListener("click", () => {
   switchWorkspace("chat");
-  createChat().catch(renderInlineError);
+  startNewChat();
 });
 sidebarToggle.addEventListener("click", openSidebar);
 mapSidebarToggle.addEventListener("click", openSidebar);
@@ -3293,8 +3583,7 @@ chatPlanUpgrade.addEventListener("click", () =>
 topicAccept.addEventListener("click", () => confirmTopic(true).catch(renderInlineError));
 topicDismiss.addEventListener("click", () => confirmTopic(false).catch(renderInlineError));
 topicTarget.addEventListener("change", () => {
-  topicParentField.classList.toggle("hidden", Boolean(topicTarget.value));
-  topicAccept.textContent = topicTarget.value ? "Connect chat" : "Save topic";
+  updateTopicRoutePresentation();
 });
 mapSuggestionAccept.addEventListener("click", () =>
   confirmMapSuggestion(true).catch(renderInlineError),
@@ -3303,6 +3592,10 @@ mapSuggestionDismiss.addEventListener("click", () =>
   confirmMapSuggestion(false).catch(renderInlineError),
 );
 addTopicButton.addEventListener("click", () => openMapTopicPopup());
+mapSidebarAddTopic.addEventListener("click", () => {
+  closeSidebar();
+  openMapTopicPopup();
+});
 practiceForm.addEventListener("submit", (event) => createPractice(event).catch(renderInlineError));
 reflectionForm.addEventListener("submit", (event) =>
   completePractice(event).catch(renderInlineError),
@@ -3368,7 +3661,12 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") closeEntryMenus();
 });
 chatList.addEventListener("scroll", closeChatActionsMenu);
-window.addEventListener("resize", closeChatActionsMenu);
+window.addEventListener("resize", () => {
+  syncViewportHeight();
+  closeChatActionsMenu();
+});
+window.addEventListener("orientationchange", syncViewportHeight);
+window.visualViewport?.addEventListener("resize", syncViewportHeight);
 window.addEventListener("beforeunload", () => {
   if (state.journalDirty) saveJournalEntry({ keepalive: true });
 });
@@ -3441,7 +3739,7 @@ async function init() {
   await confirmEmailVerificationFromUrl();
   if (state.token) {
     try {
-      await showChat();
+      await showChat({ startFreshChat: true });
     } catch (error) {
       // A temporary backend failure should not erase a valid saved session.
       if (error instanceof ApiError && [401, 403].includes(error.status)) {

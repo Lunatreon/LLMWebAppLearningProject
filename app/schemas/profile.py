@@ -13,6 +13,7 @@ class ProfileUpdate(BaseModel):
 
 MapEntryCategory = Literal[
     "inherited_script",
+    "merged_topic",
     "own_perception",
     "value",
     "body_signal",
@@ -71,6 +72,10 @@ class TopicSpaceUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=1000)
     parent_topic_id: str | None = Field(default=None, max_length=64)
     related_topic_ids: list[str] | None = Field(default=None, max_length=24)
+
+
+class TopicSpaceMerge(BaseModel):
+    target_topic_space_id: str = Field(min_length=1, max_length=64)
 
 
 class TopicSpaceResponse(BaseModel):

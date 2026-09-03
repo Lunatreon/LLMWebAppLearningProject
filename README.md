@@ -506,6 +506,9 @@ in `website/chat.html`. The standalone marketing pages were moved out of this
 backend repository; embed or copy this app page from the repository that owns the
 public website.
 
+The in-app sidebar follows the active workspace: Chat lists conversations, My
+Map lists topics in their parent/child hierarchy, and Journal lists dated pages.
+
 ## Adding New API Functions
 
 Create a new route module in `app/api/routes`, define an `APIRouter`, and include

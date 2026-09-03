@@ -20,6 +20,7 @@ from app.schemas.profile import (
     SelfAuthorshipMapRead,
     TopicSpaceCreate,
     TopicSpaceDeleteResponse,
+    TopicSpaceMerge,
     TopicSpaceResponse,
     TopicSpaceUpdate,
 )
@@ -36,6 +37,7 @@ from app.services.self_authorship import (
     create_topic_space,
     delete_map_entry,
     delete_topic_space,
+    merge_topic_spaces,
     preserve_premium_profile_fields,
     profile_data_for_access,
     read_map,
@@ -275,6 +277,31 @@ def change_map_topic(
             update_parent="parent_topic_id" in payload.model_fields_set,
             related_topic_ids=payload.related_topic_ids,
             update_related="related_topic_ids" in payload.model_fields_set,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    profile.data = profile_data
+    db.commit()
+    db.refresh(profile)
+    return TopicSpaceResponse(topic=topic, map=read_map(profile.data))
+
+
+@router.post("/me/map/topics/{topic_space_id}/merge", response_model=TopicSpaceResponse)
+def merge_map_topic(
+    topic_space_id: str,
+    payload: TopicSpaceMerge,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_premium_user),
+) -> TopicSpaceResponse:
+    profile = get_or_create_profile(db, current_user)
+    try:
+        profile_data, topic = merge_topic_spaces(
+            profile.data,
+            source_topic_space_id=topic_space_id,
+            target_topic_space_id=payload.target_topic_space_id,
         )
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

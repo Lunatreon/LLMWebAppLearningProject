@@ -30,6 +30,7 @@ from app.schemas.llm import (
 from app.services.billing import has_premium_feature_access
 from app.services.llm import (
     TextChunkCallback,
+    best_existing_topic_match,
     get_chat_llm_client,
     get_topic_llm_client,
     update_conversation_summary,
@@ -181,6 +182,40 @@ def normalized_topic(value: Any) -> str:
     return str(value or "").strip().lower()
 
 
+def pending_topic_queue(chat_info: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_queue = chat_info.get("pending_topics")
+    candidates = raw_queue if isinstance(raw_queue, list) else []
+    if not candidates:
+        candidates = [chat_info.get("pending_topic")]
+    return [
+        dict(candidate)
+        for candidate in candidates
+        if isinstance(candidate, dict)
+        and candidate.get("status") == "pending"
+        and not is_generic_topic(candidate.get("topic"))
+    ]
+
+
+def set_pending_topic_queue(
+    chat_info: dict[str, Any],
+    suggestions: list[dict[str, Any]],
+) -> None:
+    queue = [dict(suggestion) for suggestion in suggestions]
+    total = len(queue)
+    for position, suggestion in enumerate(queue, start=1):
+        suggestion["status"] = "pending"
+        suggestion["queue_position"] = position
+        suggestion["queue_total"] = total
+    if queue:
+        chat_info["pending_topics"] = queue
+        chat_info["pending_topic"] = queue[0]
+        chat_info["analysis_status"] = "topic_ready"
+        return
+    chat_info.pop("pending_topics", None)
+    chat_info.pop("pending_topic", None)
+    chat_info["analysis_status"] = "idle"
+
+
 def normalized_map_suggestion_text(value: Any) -> str:
     return " ".join(str(value or "").strip().lower().split())
 
@@ -299,6 +334,8 @@ def default_chat_info(user_id: int, chat_id: str, title: str | None = None) -> d
         "user_id": user_id,
         "chat_id": chat_id,
         "title": title or "New chat",
+        "title_source": "provided" if title else "automatic",
+        "initial_topic_title_set": bool(title),
         "message_count": 0,
         "messages": [],
         "created_at": current_timestamp(),
@@ -324,23 +361,20 @@ def chat_info_for_access(
     if not premium_access:
         visible_info.pop("pending_map_suggestion", None)
         visible_info.pop("topic_space_id", None)
+        visible_info.pop("topic_space_ids", None)
     return visible_info
 
 
 def chat_read(chat_session: ChatSession, *, premium_access: bool) -> ChatRead:
     info = chat_info_for_access(chat_session.info, premium_access=premium_access)
-    pending_topic = info.get("pending_topic")
-    accepted_topic = (
-        pending_topic.get("topic")
-        if isinstance(pending_topic, dict) and pending_topic.get("status") == "accepted"
-        else None
-    )
+    queued_topics = pending_topic_queue(info)
     return ChatRead(
         chat_id=chat_session.chat_id,
-        title=str(accepted_topic or info.get("title") or "New chat"),
+        title=str(info.get("title") or "New chat"),
         message_count=int(info.get("message_count", 0)),
         updated_at=info.get("updated_at"),
-        pending_topic=info.get("pending_topic"),
+        pending_topic=queued_topics[0] if queued_topics else None,
+        pending_topics=queued_topics,
         pending_map_suggestion=info.get("pending_map_suggestion"),
         messages=list(info.get("messages", [])),
     )
@@ -399,6 +433,7 @@ def append_chat_exchange(
     next_info["chat_id"] = chat_id
     if not next_info.get("title") or next_info.get("title") == "New chat":
         next_info["title"] = chat_title_from_text(user_input)
+        next_info["title_source"] = "automatic"
 
     messages = list(next_info.get("messages", []))
     now = current_timestamp()
@@ -443,14 +478,18 @@ async def analyse_chat_for_topic(
             return
 
         info = dict(chat_session.info or {})
-        pending_topic = info.get("pending_topic")
+        queued_topics = pending_topic_queue(info)
         replaced_generic_topic = False
-        if isinstance(pending_topic, dict) and pending_topic.get("status") == "pending":
-            if is_generic_topic(pending_topic.get("topic")):
-                info.pop("pending_topic", None)
-                replaced_generic_topic = True
-            else:
-                return
+        if queued_topics:
+            return
+        raw_pending_topic = info.get("pending_topic")
+        raw_pending_topics = info.get("pending_topics")
+        if (
+            isinstance(raw_pending_topic, dict)
+            and raw_pending_topic.get("status") == "pending"
+        ) or isinstance(raw_pending_topics, list):
+            set_pending_topic_queue(info, [])
+            replaced_generic_topic = True
 
         message_count = int(info.get("message_count", 0))
         if (
@@ -496,48 +535,90 @@ async def analyse_chat_for_topic(
             available_topics=available_topics,
         )
         available_topic_ids = {topic.get("id") for topic in available_topics}
-        if topic_result.existing_topic_id not in available_topic_ids:
-            topic_result.existing_topic_id = None
-        if topic_result.parent_topic_id not in available_topic_ids:
-            topic_result.parent_topic_id = None
-
         accepted_topic_names = {
             normalized_topic(topic)
             for topic in info.get("accepted_topic_names", [])
             if topic
         }
-        accepted_topic_hints = {
-            normalized_topic(topic_hint)
-            for topic_hint in info.get("accepted_topic_hints", [])
-            if topic_hint
-        }
-        existing_topic = info.get("pending_topic")
-        if isinstance(existing_topic, dict) and existing_topic.get("status") == "accepted":
-            accepted_topic_names.add(normalized_topic(existing_topic.get("topic")))
-            accepted_topic_hints.add(normalized_topic(existing_topic.get("topic_hint")))
+        pending_topics: list[dict[str, Any]] = []
+        seen_targets: set[tuple[str, str]] = set()
+        for result in [topic_result, *topic_result.additional_topics][:3]:
+            if result.existing_topic_id not in available_topic_ids:
+                result.existing_topic_id = None
+            if result.parent_topic_id not in available_topic_ids:
+                result.parent_topic_id = None
+            if result.existing_topic_id is None:
+                local_existing_topic_id = best_existing_topic_match(
+                    result.topic,
+                    result.description,
+                    available_topics,
+                )
+                if local_existing_topic_id is not None:
+                    result.existing_topic_id = local_existing_topic_id
+                    result.parent_topic_id = None
 
-        if (
-            normalized_topic(topic_result.topic) in accepted_topic_names
-            or normalized_topic(analysis.topic_hint) in accepted_topic_hints
-        ):
+            normalized_name = normalized_topic(result.topic)
+            if not normalized_name or normalized_name in accepted_topic_names:
+                continue
+            if pending_topics and best_existing_topic_match(
+                result.topic,
+                result.description,
+                [
+                    {
+                        "id": suggestion["suggestion_id"],
+                        "title": suggestion["topic"],
+                        "description": suggestion["description"],
+                    }
+                    for suggestion in pending_topics
+                ],
+            ):
+                continue
+            target_key = (
+                ("existing", result.existing_topic_id)
+                if result.existing_topic_id
+                else ("new", normalized_name)
+            )
+            if target_key in seen_targets or is_generic_topic(result.topic):
+                continue
+            seen_targets.add(target_key)
+            pending_topics.append(
+                {
+                    "suggestion_id": uuid4().hex,
+                    "chat_id": chat_id,
+                    "topic": result.topic,
+                    "description": result.description,
+                    "confidence": analysis.confidence,
+                    "matched_patterns": analysis.matched_patterns,
+                    "topic_hint": analysis.topic_hint,
+                    "existing_topic_id": result.existing_topic_id,
+                    "parent_topic_id": result.parent_topic_id,
+                    "status": "pending",
+                    "created_at": current_timestamp(),
+                }
+            )
+
+        if not pending_topics:
             info["analysis_status"] = "idle"
             chat_session.info = info
             db.commit()
             return
 
-        info["pending_topic"] = {
-            "chat_id": chat_id,
-            "topic": topic_result.topic,
-            "description": topic_result.description,
-            "confidence": analysis.confidence,
-            "matched_patterns": analysis.matched_patterns,
-            "topic_hint": analysis.topic_hint,
-            "existing_topic_id": topic_result.existing_topic_id,
-            "parent_topic_id": topic_result.parent_topic_id,
-            "status": "pending",
-            "created_at": current_timestamp(),
-        }
-        info["analysis_status"] = "topic_ready"
+        if not info.get("initial_topic_title_set"):
+            # Keep deliberately supplied and already-established chat names stable.
+            # For a new automatic chat, the first strong topic is a better title
+            # than the opening message excerpt. Later analyses must not rename it.
+            can_use_initial_topic = (
+                info.get("title_source") != "provided"
+                and not info.get("accepted_topic_names")
+            )
+            if can_use_initial_topic:
+                initial_topic_title = str(pending_topics[0].get("topic") or "").strip()
+                if initial_topic_title:
+                    info["title"] = initial_topic_title[:80]
+                    info["title_source"] = "initial_topic"
+            info["initial_topic_title_set"] = True
+
+        set_pending_topic_queue(info, pending_topics)
         chat_session.info = info
         db.commit()
     except Exception as exc:  # pragma: no cover - defensive for background jobs
@@ -636,12 +717,12 @@ def read_topic_suggestion(
     chat_session = get_chat_session(db, current_user, chat_id)
     if chat_session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")
-    pending_topic = (chat_session.info or {}).get("pending_topic")
-    if not isinstance(pending_topic, dict) or pending_topic.get("status") != "pending":
-        return TopicSuggestionResponse(suggestion=None)
-    if is_generic_topic(pending_topic.get("topic")):
-        return TopicSuggestionResponse(suggestion=None)
-    return TopicSuggestionResponse(suggestion=pending_topic)
+    suggestions = pending_topic_queue(chat_session.info or {})
+    return TopicSuggestionResponse(
+        suggestion=suggestions[0] if suggestions else None,
+        suggestions=suggestions,
+        chat_title=str((chat_session.info or {}).get("title") or "New chat"),
+    )
 
 
 @router.post("/message", response_model=LLMResponse)
@@ -889,11 +970,9 @@ def confirm_topic(
 
     profile_data = dict(profile.data or {})
     chat_info = dict(chat_session.info or {})
-    pending_topic = dict(chat_info.get("pending_topic") or {})
+    queued_topics = pending_topic_queue(chat_info)
 
     if payload.accepted:
-        pending_topic["status"] = "accepted"
-        chat_info["title"] = payload.topic.strip()[:80]
         accepted_topic_name = payload.topic
         if premium_access:
             if payload.existing_topic_space_id:
@@ -936,10 +1015,20 @@ def confirm_topic(
             profile_data["last_confirmed_topic"] = topic_entry
             accepted_topic_name = topic_space["title"]
             profile.data = profile_data
-            pending_topic["topic_space_id"] = topic_space["id"]
-            chat_info["topic_space_id"] = topic_space["id"]
+            linked_topic_ids = list(chat_info.get("topic_space_ids", []))
+            legacy_topic_id = chat_info.get("topic_space_id")
+            if legacy_topic_id and legacy_topic_id not in linked_topic_ids:
+                linked_topic_ids.append(legacy_topic_id)
+            if topic_space["id"] not in linked_topic_ids:
+                linked_topic_ids.append(topic_space["id"])
+            chat_info["topic_space_ids"] = linked_topic_ids
+            if not chat_info.get("topic_space_id"):
+                chat_info["topic_space_id"] = topic_space["id"]
             pending_map_suggestion = chat_info.get("pending_map_suggestion")
-            if isinstance(pending_map_suggestion, dict):
+            if (
+                isinstance(pending_map_suggestion, dict)
+                and not pending_map_suggestion.get("topic_space_id")
+            ):
                 pending_map_suggestion["topic_space_id"] = topic_space["id"]
                 pending_map_suggestion["topic_title"] = topic_space["title"]
                 chat_info["pending_map_suggestion"] = pending_map_suggestion
@@ -947,16 +1036,10 @@ def confirm_topic(
         if accepted_topic_name not in accepted_topic_names:
             accepted_topic_names.append(accepted_topic_name)
         chat_info["accepted_topic_names"] = accepted_topic_names
-
-        topic_hint = pending_topic.get("topic_hint")
-        accepted_topic_hints = list(chat_info.get("accepted_topic_hints", []))
-        if topic_hint and topic_hint not in accepted_topic_hints:
-            accepted_topic_hints.append(topic_hint)
-        chat_info["accepted_topic_hints"] = accepted_topic_hints
+    if queued_topics:
+        set_pending_topic_queue(chat_info, queued_topics[1:])
     else:
-        pending_topic["status"] = "dismissed"
-
-    chat_info["pending_topic"] = pending_topic
+        set_pending_topic_queue(chat_info, [])
     chat_info["updated_at"] = current_timestamp()
     chat_session.info = chat_info
     db.commit()
