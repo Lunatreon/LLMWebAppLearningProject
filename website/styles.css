@@ -866,7 +866,7 @@ textarea:focus {
 }
 
 .conversation-header .eyebrow {
-  color: var(--mint);
+  color: var(--lavender);
 }
 
 .messages {
@@ -1157,7 +1157,7 @@ textarea:focus {
 }
 
 .map-suggestion-card .eyebrow {
-  color: var(--mint);
+  color: var(--lavender);
 }
 
 .suggestion-category {
@@ -1266,7 +1266,7 @@ textarea:focus {
   border: 1px solid rgba(130, 183, 168, 0.38);
   border-radius: 999px;
   background: rgba(130, 183, 168, 0.12);
-  color: var(--mint);
+  color: var(--lavender);
   padding: 4px 8px;
   font-size: 9px;
   font-weight: 800;
@@ -1582,7 +1582,7 @@ textarea {
 
 .journal-sidebar-heading .eyebrow {
   margin-bottom: 4px;
-  color: var(--mint);
+  color: var(--lavender);
 }
 
 .journal-sidebar-heading h2 {
@@ -1592,9 +1592,9 @@ textarea {
 }
 
 .journal-private-mark {
-  color: var(--mint);
+  color: var(--lavender);
   font-size: 9px;
-  filter: drop-shadow(0 0 5px rgba(130, 183, 168, 0.55));
+  filter: drop-shadow(0 0 5px rgba(197, 181, 255, 0.55));
 }
 
 .journal-sidebar-access {
@@ -1842,7 +1842,7 @@ textarea {
 }
 
 .journal-header .eyebrow {
-  color: var(--mint);
+  color: var(--lavender);
 }
 
 .journal-header h2 {

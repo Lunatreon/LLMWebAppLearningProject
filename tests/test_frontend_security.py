@@ -149,7 +149,7 @@ def test_overall_map_thread_is_permanent_and_available_as_a_destination():
     assert "const nodes = [\n    overallMapNode(map)," in javascript
     assert "unassigned.textContent = OVERALL_MAP_TITLE;" in javascript
     assert ".map-node.overall" in stylesheet
-    assert 'href="styles.css?v=20260902-7"' in html
+    assert 'href="styles.css?v=20260904-1"' in html
 
 
 def test_dark_and_pink_light_appearance_can_be_switched_and_saved():
@@ -180,7 +180,7 @@ def test_sidebar_lists_scroll_without_scrolling_the_page():
     stylesheet = (CHAT_HTML.parent / "styles.css").read_text(encoding="utf-8")
 
     assert 'src="app.js?v=20260902-6"' in html
-    assert 'href="styles.css?v=20260902-7"' in html
+    assert 'href="styles.css?v=20260904-1"' in html
     assert "function syncViewportHeight()" in javascript
     assert 'style.setProperty("--app-height"' in javascript
     assert "window.visualViewport?.addEventListener(\"resize\", syncViewportHeight);" in javascript
@@ -211,3 +211,18 @@ def test_workspace_headers_use_consistent_compact_titles():
     assert "max-height: 76px;" in header_rule
     assert "font-size: 19px;" in title_rule
     assert "white-space: nowrap;" in title_rule
+
+
+def test_dark_theme_uses_violet_instead_of_green_text_accents():
+    stylesheet = (CHAT_HTML.parent / "styles.css").read_text(encoding="utf-8")
+
+    assert "\n  color: var(--mint);" not in stylesheet
+    for selector in (
+        ".conversation-header .eyebrow",
+        ".map-suggestion-card .eyebrow",
+        ".journal-sidebar-heading .eyebrow",
+        ".journal-private-mark",
+        ".journal-header .eyebrow",
+    ):
+        rule = stylesheet.split(f"{selector} {{", 1)[1].split("}", 1)[0]
+        assert "color: var(--lavender);" in rule

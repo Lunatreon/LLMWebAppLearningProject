@@ -27,6 +27,7 @@ per-user LLM requests, and persistent user profiles.
 
 - [Stripe subscription setup](docs/stripe-setup.md)
 - [Administration and editable prompts](docs/admin.md)
+- [Bright-theme design guide](docs/BRIGHT_DESIGN.md)
 
 See [docs/CODE_GUIDE.md](docs/CODE_GUIDE.md) for a walkthrough of how the code
 works and how to expand the backend with new endpoints, database models, LLM
