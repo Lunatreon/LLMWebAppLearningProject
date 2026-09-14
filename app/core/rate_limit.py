@@ -14,6 +14,8 @@ class SlidingWindowRateLimiter:
     def __init__(self) -> None:
         self._events: dict[str, deque[float]] = defaultdict(deque)
         self._lock = Lock()
+        self._expires: dict[str, float] = {}
+        self._next_cleanup = 0.0
 
     def check(self, key: str, max_attempts: int, window_seconds: int) -> tuple[bool, float]:
         if max_attempts <= 0 or window_seconds <= 0:
@@ -22,7 +24,15 @@ class SlidingWindowRateLimiter:
         now = monotonic()
         cutoff = now - window_seconds
         with self._lock:
+            if now >= self._next_cleanup:
+                for expired_key in [key for key, expires in self._expires.items() if expires <= now]:
+                    self._events.pop(expired_key, None)
+                    self._expires.pop(expired_key, None)
+                self._next_cleanup = now + 60
+            if key not in self._events and len(self._events) >= 10_000:
+                return False, 60.0
             events = self._events[key]
+            self._expires[key] = now + window_seconds
             while events and events[0] <= cutoff:
                 events.popleft()
 
@@ -36,28 +46,23 @@ class SlidingWindowRateLimiter:
     def reset(self) -> None:
         with self._lock:
             self._events.clear()
+            self._expires.clear()
+            self._next_cleanup = 0.0
 
 
 rate_limiter = SlidingWindowRateLimiter()
 
 
 def client_ip(request: Request) -> str:
-    if settings.trust_proxy_headers:
-        forwarded_for = request.headers.get("x-forwarded-for")
-        if forwarded_for:
-            return forwarded_for.split(",", 1)[0].strip() or "unknown"
-        real_ip = request.headers.get("x-real-ip")
-        if real_ip:
-            return real_ip.strip()
-
+    # Uvicorn resolves forwarded headers only from explicitly trusted proxies.
+    # Never reinterpret client-controlled headers at the application layer.
     if request.client and request.client.host:
         return request.client.host
     return "unknown"
 
 
 def client_fingerprint(request: Request) -> str:
-    user_agent = request.headers.get("user-agent", "unknown")[:120]
-    return f"{client_ip(request)}:{user_agent}"
+    return client_ip(request)
 
 
 def enforce_rate_limit(

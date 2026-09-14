@@ -3525,6 +3525,12 @@ textarea {
   height: 10px;
 }
 
+.delete-account-password-field {
+  display: grid;
+  gap: 8px;
+  font-size: 14px;
+}
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }

@@ -15,6 +15,8 @@ if str(ROOT_DIR) not in sys.path:
 os.environ["LLM_PROVIDER"] = "mock"
 os.environ["CHAT_LLM_PROVIDER"] = "mock"
 os.environ["TOPIC_LLM_PROVIDER"] = "mock"
+os.environ["JOURNAL_LLM_PROVIDER"] = "mock"
+os.environ["SECRET_KEY"] = "isolated-tests-only-signing-key-not-for-deployment"
 
 from app.api.dependencies import get_db
 from app.core.config import settings

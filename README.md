@@ -1,5 +1,10 @@
 # FeelY Backend
 
+FeelY helps people reflect on their experiences and understand themselves over
+time. My Map connects the observations, values, relationships, and changes they
+choose to save into an evolving map of themselves and their journey. Reflection
+is valuable in its own right; practices and next steps are optional.
+
 Python API backend for a website or app with user management, JWT authentication,
 per-user LLM requests, and persistent user profiles.
 
@@ -50,7 +55,35 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 Copy-Item .env.example .env
+.\.venv\Scripts\python.exe scripts\setup_secret.py
 ```
+
+### One-click Windows start
+
+After first-time setup, double-click `start-feely.bat` in the repository root.
+It starts the backend (8000), website (5500), and your existing Cloudflare tunnel
+using `scripts/cloudflared-public.yml`, then opens the local website.
+Cloudflared must be on PATH or installed in `C:\Program Files\cloudflared`,
+with the credentials file referenced by the tunnel config already present.
+
+Keep the launcher window open and press **Ctrl+C** to stop all three services.
+Live logs from all three services appear in the launcher window, labeled
+`[backend]`, `[website]`, and `[tunnel]`.
+Logs are also written to `logs/backend.log`, `logs/website.log`, and `logs/tunnel.log`
+and preserved between starts. If either local port is busy, stop the existing
+server first. The launcher runs without auto-reload; restart it after code changes.
+The public development hostname returns 404; the tunnel exposes only the API
+and the approved website files. See [server security](docs/SECURITY.md).
+
+To check prerequisites without launching anything, run `.\start-feely.bat --check`
+from PowerShell.
+
+### Manual start
+
+In VS Code, use **Terminal > Run Task > FeelY: Start all** to start everything
+in the integrated terminal with colored service labels and backend logs.
+Press **Ctrl+C** in that terminal to stop the services. Alternatively, run
+`.\start-feely.bat --color` in the VS Code terminal. Saved log files remain plain text.
 
 Daily start, terminal 1:
 
@@ -61,14 +94,15 @@ Daily start, terminal 1:
 Daily start, terminal 2:
 
 ```powershell
-.\.venv\Scripts\python.exe -m http.server 5500 --directory website
+.\.venv\Scripts\python.exe -m uvicorn app.website:app --host 127.0.0.1 --port 5500 --proxy-headers --forwarded-allow-ips 127.0.0.1 --no-server-header
 ```
 
 Then open `http://127.0.0.1:5500`; the root page redirects directly to
 `http://127.0.0.1:5500/chat.html`.
 
 The API runs at `http://127.0.0.1:8000`.
-Interactive API docs are at `http://127.0.0.1:8000/docs`.
+API documentation is disabled by default. For local development with the public
+tunnel stopped, set `API_DOCS_ENABLED=true` and restart to use `/docs`.
 
 ### Administrator login
 
@@ -237,22 +271,22 @@ OLLAMA_JOURNAL_MAX_TOKENS=768
 OLLAMA_CHAT_NUM_GPU=0
 OLLAMA_TOPIC_NUM_GPU=999
 OLLAMA_JOURNAL_NUM_GPU=999
-OLLAMA_KEEP_ALIVE=-1
-OLLAMA_PREWARM=true
+OLLAMA_KEEP_ALIVE=300
+OLLAMA_PREWARM=false
 ```
 
 No API key is needed. The pattern analyser decides when topic analysis is useful;
 the 2B Topic-LLM then creates the topic and description. `OLLAMA_CHAT_NUM_GPU=0`
 forces the 4B chat model onto CPU, while the topic and journal GPU settings let
-Ollama offload every possible layer of the 2B model to GPU. `OLLAMA_KEEP_ALIVE=-1`
-keeps the models resident until Ollama stops, and startup prewarm loads each
-distinct configured model. Role-specific model settings fall back to
+Ollama offload every possible layer of the 2B model to GPU. `OLLAMA_KEEP_ALIVE=300`
+releases models after five idle minutes. `OLLAMA_PREWARM=false` avoids loading
+models during server startup, reducing startup resource use. Role-specific model settings fall back to
 `OLLAMA_MODEL` when empty.
 The website uses the streaming message endpoint to show connection and elapsed
 status first, then renders the assistant message as Ollama generates it. The
 profile and map fields in Ollama's structured response remain server-side.
 `OLLAMA_KEEP_ALIVE` keeps the models in memory between messages to avoid repeated
-cold starts. `OLLAMA_PREWARM` loads them in the background when FastAPI starts, so
+cold starts. Opting into `OLLAMA_PREWARM=true` loads them in the background when FastAPI starts, so
 the first user is less likely to pay the model-load delay. Smaller context and
 output limits can further reduce local latency.
 

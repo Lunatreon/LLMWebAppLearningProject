@@ -1,10 +1,12 @@
 import base64
 import json
 import logging
+import math
 from collections.abc import Awaitable, Callable
 from typing import Any
 
 from app.core.config import settings
+from app.core.rate_limit import rate_limiter
 
 
 logger = logging.getLogger(__name__)
@@ -54,8 +56,12 @@ class RequestSizeLimitMiddleware:
         if content_length is not None:
             try:
                 body_size = int(content_length.decode("ascii"))
-            except ValueError:
-                body_size = 0
+            except (ValueError, UnicodeDecodeError):
+                await send_json_error(send, status_code=400, detail="Invalid Content-Length.")
+                return
+            if body_size < 0:
+                await send_json_error(send, status_code=400, detail="Invalid Content-Length.")
+                return
             if body_size > self.max_body_bytes:
                 await send_json_error(
                     send,
@@ -64,6 +70,51 @@ class RequestSizeLimitMiddleware:
                 )
                 return
 
+        # Buffer at most the limit before dispatch, including chunked requests
+        # and clients that misreport Content-Length. Responses still stream.
+        body = bytearray()
+        while True:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                return
+            chunk = message.get("body", b"")
+            if len(body) + len(chunk) > self.max_body_bytes:
+                await send_json_error(send, status_code=413, detail="Request body is too large.")
+                return
+            body.extend(chunk)
+            if not message.get("more_body", False):
+                break
+        delivered = False
+
+        async def replay_body():
+            nonlocal delivered
+            if not delivered:
+                delivered = True
+                return {"type": "http.request", "body": bytes(body), "more_body": False}
+            return await receive()
+
+        await self.app(scope, replay_body, send)
+
+
+class HttpRateLimitMiddleware:
+    """Limit every HTTP path, including 404 probes and CORS preflights."""
+
+    def __init__(self, app: Callable[..., Awaitable[None]]) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and settings.rate_limit_enabled:
+            peer = scope.get("client") or ("unknown", 0)
+            allowed, retry = rate_limiter.check(
+                f"http:{peer[0]}", settings.rate_limit_http_per_minute, 60
+            )
+            if not allowed:
+                async def with_retry(message):
+                    if message["type"] == "http.response.start":
+                        message["headers"].append((b"retry-after", str(math.ceil(retry)).encode()))
+                    await send(message)
+                await send_json_error(with_retry, status_code=429, detail="Too many requests. Try again later.")
+                return
         await self.app(scope, receive, send)
 
 
@@ -81,6 +132,7 @@ class SecurityHeadersMiddleware:
                 headers = list(message.get("headers") or [])
                 existing = {name.lower() for name, _ in headers}
                 security_headers = {
+                    b"cache-control": b"no-store",
                     b"x-content-type-options": b"nosniff",
                     b"x-frame-options": b"DENY",
                     b"referrer-policy": b"same-origin",

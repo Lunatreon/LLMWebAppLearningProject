@@ -8,6 +8,7 @@ from app.api.router import api_router
 from app.core.config import settings
 from app.core.middleware import (
     BasicAuthMiddleware,
+    HttpRateLimitMiddleware,
     RejectedCorsPreflightLoggingMiddleware,
     RequestSizeLimitMiddleware,
     SecurityHeadersMiddleware,
@@ -39,9 +40,11 @@ def create_app(init_database: bool = True) -> FastAPI:
         async with lifespan(app, init_database=init_database):
             yield
 
-    app = FastAPI(title=settings.app_name, lifespan=app_lifespan)
+    app = FastAPI(title=settings.app_name, lifespan=app_lifespan,
+                  openapi_url="/openapi.json" if settings.api_docs_enabled else None,
+                  docs_url="/docs" if settings.api_docs_enabled else None,
+                  redoc_url=None)
 
-    app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(BasicAuthMiddleware)
     app.add_middleware(
         RequestSizeLimitMiddleware,
@@ -63,6 +66,8 @@ def create_app(init_database: bool = True) -> FastAPI:
         allow_headers=["*"],
     )
     app.add_middleware(RejectedCorsPreflightLoggingMiddleware)
+    app.add_middleware(HttpRateLimitMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware)
 
     app.include_router(api_router, prefix=settings.api_v1_prefix)
     return app

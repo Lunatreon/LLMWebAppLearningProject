@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     )
     trust_proxy_headers: bool = False
     max_request_body_bytes: int = 128_000
+    api_docs_enabled: bool = False
+    rate_limit_http_per_minute: int = 300
     basic_auth_enabled: bool = False
     basic_auth_username: str | None = None
     basic_auth_password: str | None = None
@@ -120,8 +122,8 @@ class Settings(BaseSettings):
     ollama_chat_num_gpu: int = 0
     ollama_topic_num_gpu: int = 999
     ollama_journal_num_gpu: int | None = None
-    ollama_keep_alive: int = -1
-    ollama_prewarm: bool = True
+    ollama_keep_alive: int = 300
+    ollama_prewarm: bool = False
     prompt_directory: str = "prompts"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
@@ -131,6 +133,8 @@ class Settings(BaseSettings):
         return self.environment.lower() in {"local", "development", "dev", "test"}
 
     def validate_runtime_security(self) -> None:
+        if self.secret_key == "change-this-secret-before-deploying" or len(self.secret_key) < 32:
+            raise RuntimeError("SECRET_KEY must be a unique random value of at least 32 characters.")
         if self.is_local_environment:
             return
 

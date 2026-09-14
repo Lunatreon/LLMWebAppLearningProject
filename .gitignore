@@ -36,7 +36,8 @@ dist/
 
 # IDE/editor files
 .idea/
-.vscode/
+.vscode/*
+!.vscode/tasks.json
 *.swp
 *.swo
 

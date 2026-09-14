@@ -1,10 +1,35 @@
 # Self-Authorship Architecture
 
-FeelY uses chat to help a user notice recurring patterns and turn useful insight
-into choices they can revisit. The feature deliberately separates model output
-from user-confirmed profile data.
+FeelY's primary purpose is to help people reflect on their experiences and
+understand themselves. My Map is an evolving map of the self and the person's
+journey: what matters, what repeats, what supports them, and what changes over
+time. Insight is worthwhile without an action plan or a new map entry.
+Practices are optional. The feature deliberately separates model output from
+user-confirmed profile data.
 
 ## Core Concepts
+
+### Purpose checks during a tryout
+
+These are qualitative checks for real conversations, not claims established by
+the automated tests:
+
+- Say "I just want to understand this, not make a plan." Chat should explore
+  the experience without assigning a practice or forcing a map suggestion.
+- Reflect on a moment of joy or belonging. It should be as welcome as a
+  difficulty; save an insight only if it feels meaningful to keep.
+- Revisit a chat connected to a topic with saved observations. A relevant
+  observation may help reflection, but it must not override today's account.
+- Describe how your view has changed. The existing topic should usually remain
+  useful, with a proposed new observation rather than a silently rewritten past
+  or a duplicate topic. No improvement or setback should be assumed.
+- Dismiss a suggestion or correct an interpretation. Continue reflecting
+  without treating that choice as failure or making the map less valid.
+
+Success means the person finds the reflection useful and recognizes themselves
+in what they choose to save. More topics, entries, or completed practices are
+not success measures. The current map connects dated source material and saved
+observations; it is not an automatic chronological life narrative.
 
 ### Chat
 
@@ -19,6 +44,19 @@ Chat responds to the newest message first. Its conversational arc is:
 
 The Chat-LLM chooses only the part of the arc that fits the current moment. It
 can also use three optional lenses: data, body, and imagination.
+
+The arc is not a required sequence or a measure of progress. Reflection may
+stay with an unresolved experience, a strength, joy, or a changing perspective.
+An inherited script is relevant only when grounded in the user's own words.
+
+For chats connected to map topics, the model receives a read-only selection of
+confirmed observations: up to two recently updated topics and three recent
+entries per topic, including practice reflections. Text is shortened to keep
+local model context small. This is partial memory, not a complete life history.
+Saved timestamps do not establish when an experience occurred. New input and
+corrections take priority; the model cannot overwrite confirmed entries. Chats
+without connected topics do not receive map memories, and existing Premium
+access filtering applies before this context is built.
 
 ### Topic Space
 

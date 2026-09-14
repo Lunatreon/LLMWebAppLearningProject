@@ -242,6 +242,11 @@ const currentPasswordField = document.querySelector("#current-password-field");
 const accountCurrentPassword = document.querySelector("#account-current-password");
 const accountNewPassword = document.querySelector("#account-new-password");
 const deleteAccountButton = document.querySelector("#delete-account-button");
+const deleteAccountDialog = document.querySelector("#delete-account-dialog");
+const deleteAccountForm = document.querySelector("#delete-account-form");
+const deleteAccountPassword = document.querySelector("#delete-account-password");
+const deleteAccountStatus = document.querySelector("#delete-account-status");
+let accountDeletionPending = false;
 const billingPlan = document.querySelector("#billing-plan");
 const billingStatus = document.querySelector("#billing-status");
 const billingSubscribeActions = document.querySelector("#billing-subscribe-actions");
@@ -1187,20 +1192,42 @@ async function updateAccountPassword(event) {
   accountStatus.textContent = "Password updated.";
 }
 
-async function deleteAccount() {
-  if (!window.confirm("Delete your account and all conversations? This cannot be undone.")) return;
-  const password = state.account?.has_password
-    ? window.prompt("Enter your password to delete this account.")
-    : "";
-  if (state.account?.has_password && !password) return;
+function openDeleteAccountDialog() {
+  deleteAccountForm.reset();
+  deleteAccountStatus.textContent = "";
+  document.querySelector("#delete-account-password-field").classList.toggle("hidden", !state.account?.has_password);
+  deleteAccountDialog.showModal();
+}
 
-  await api("/users/me/account", {
-    method: "DELETE",
-    headers: authHeaders(),
-    body: JSON.stringify({ password }),
-  });
-  accountDialog.close();
-  logout();
+async function deleteAccount(event) {
+  event.preventDefault();
+  if (accountDeletionPending) return;
+  const password = state.account?.has_password ? deleteAccountPassword.value : "";
+  if (state.account?.has_password && !password) {
+    deleteAccountStatus.textContent = "Enter your password to delete this account.";
+    deleteAccountPassword.focus();
+    return;
+  }
+
+  accountDeletionPending = true;
+  deleteAccountDialog.querySelectorAll("button").forEach((button) => { button.disabled = true; });
+  deleteAccountStatus.textContent = "Deleting account...";
+  try {
+    await api("/users/me/account", {
+      method: "DELETE",
+      headers: authHeaders(),
+      body: JSON.stringify({ password }),
+    });
+    deleteAccountDialog.close();
+    accountDialog.close();
+    logout();
+  } catch (error) {
+    deleteAccountStatus.textContent = error instanceof Error ? error.message : String(error);
+  } finally {
+    accountDeletionPending = false;
+    deleteAccountPassword.value = "";
+    deleteAccountDialog.querySelectorAll("button").forEach((button) => { button.disabled = false; });
+  }
 }
 
 async function confirmEmailVerificationFromUrl() {
@@ -3336,13 +3363,13 @@ function renderMapPaywall() {
 
   const copy = document.createElement("p");
   copy.textContent =
-    "My Map connects the topics, observations, values, and practices you choose to keep.";
+    "My Map connects the reflections you choose to keep into a map of yourself and your journey.";
 
   const benefits = document.createElement("ul");
   [
     "See recurring themes across conversations",
     "Keep useful insights organized in one visual space",
-    "Turn reflection into practices you can revisit",
+    "Revisit what matters to you and how your perspective changes",
   ].forEach((benefit) => {
     const item = document.createElement("li");
     item.textContent = benefit;
@@ -3613,11 +3640,14 @@ requestVerificationButton.addEventListener("click", () =>
     accountStatus.textContent = error instanceof Error ? error.message : String(error);
   }),
 );
-deleteAccountButton.addEventListener("click", () =>
-  deleteAccount().catch((error) => {
-    accountStatus.textContent = error instanceof Error ? error.message : String(error);
-  }),
-);
+deleteAccountButton.addEventListener("click", openDeleteAccountDialog);
+deleteAccountForm.addEventListener("submit", deleteAccount);
+deleteAccountDialog.addEventListener("cancel", (event) => {
+  if (accountDeletionPending) event.preventDefault();
+});
+deleteAccountDialog.addEventListener("close", () => {
+  deleteAccountPassword.value = "";
+});
 subscribeMonthlyButton.addEventListener("click", () =>
   startSubscriptionCheckout("monthly").catch((error) => {
     billingStatus.textContent = error instanceof Error ? error.message : String(error);

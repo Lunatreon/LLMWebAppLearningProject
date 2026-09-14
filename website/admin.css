@@ -1,4 +1,5 @@
-.admin-body { min-height: var(--app-height); background: #f7f3ee; color: var(--ink); }
+html.admin-page { height: auto; max-height: none; overflow-x: hidden; overflow-y: auto; }
+.admin-body { height: auto; max-height: none; min-height: var(--app-height); overflow: visible; background: #f7f3ee; color: var(--ink); }
 .admin-login-view { position: relative; display: grid; min-height: var(--app-height); grid-template-columns: minmax(0, 1fr) minmax(390px, 520px); overflow: hidden; background: linear-gradient(135deg, #100f13 0%, #1b1720 48%, #292132 100%); }
 .admin-login-view::before { position: absolute; z-index: 0; inset: 0; background: radial-gradient(circle at 18% 18%, rgba(169, 136, 232, .2), transparent 34%), radial-gradient(circle at 72% 82%, rgba(130, 183, 168, .1), transparent 32%); content: ""; }
 .admin-login-story, .admin-login-panel { position: relative; z-index: 1; }
