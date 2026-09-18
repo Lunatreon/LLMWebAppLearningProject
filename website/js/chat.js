@@ -183,7 +183,8 @@ function renderChats() {
   });
 }
 
-function renderMessages(items) {
+function renderMessages(items, followLatest = true) {
+  const previousScrollTop = messages.scrollTop;
   messages.replaceChildren();
   if (!items.length) {
     const empty = document.createElement("section");
@@ -230,7 +231,7 @@ function renderMessages(items) {
     bubble.textContent = item.content || "";
     messages.append(bubble);
   });
-  messages.scrollTop = messages.scrollHeight;
+  messages.scrollTop = followLatest ? messages.scrollHeight : previousScrollTop;
 }
 
 function showWaitingMessage() {
@@ -258,6 +259,7 @@ function showWaitingMessage() {
 
 function appendStreamingText(bubble, text) {
   if (!text) return;
+  const followLatest = messages.scrollHeight - messages.scrollTop - messages.clientHeight < 80;
 
   let content = bubble.querySelector(".streaming-content");
   if (!content) {
@@ -274,8 +276,82 @@ function appendStreamingText(bubble, text) {
     bubble.replaceChildren(content, cursor);
   }
 
-  content.append(document.createTextNode(text));
-  messages.scrollTop = messages.scrollHeight;
+  const chunk = document.createElement("span");
+  chunk.className = "streaming-chunk";
+  chunk.textContent = text;
+  content.append(chunk);
+  if (followLatest) messages.scrollTop = messages.scrollHeight;
+}
+
+// Reveal short phrases with breathing room at punctuation. Keep timing
+// across network gaps so the cadence does not depend on packet boundaries.
+function createChatTextPlayer(bubble) {
+  let pending = "";
+  let timer = null;
+  let stopped = false;
+  let finishing = false;
+  let nextRevealAt = 0;
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const sentenceEnd = /[.!?\u3002\uff01\uff1f]["'\u201d\u2019)]*\s*$/u;
+  const clauseEnd = /[,;:\u2014\u3001\uff0c]["'\u201d\u2019)]*\s*$/u;
+  function schedule() {
+    timer = setTimeout(tick, Math.max(24, nextRevealAt - performance.now()));
+  }
+  function tick() {
+    timer = null;
+    if (stopped) return;
+    if (!bubble.isConnected) { cancel(); return; }
+    const instant = reducedMotion || document.hidden;
+    let text = "";
+    if (instant) {
+      text = pending;
+      pending = "";
+    } else {
+      const groupSize = pending.length > 720 ? 4 : 2;
+      for (let index = 0; index < groupSize; index += 1) {
+        // Also recognize sentence boundaries in languages without spaces.
+        const word = pending.match(/^(?:\s+|\S+?(?:\s+|[\u3002\uff01\uff1f]))/u);
+        if (!word) break;
+        text += word[0];
+        pending = pending.slice(word[0].length);
+        if (sentenceEnd.test(text) || clauseEnd.test(text) || /\n\s*\n/.test(text)) break;
+      }
+    }
+    appendStreamingText(bubble, text);
+    if (text && !instant) {
+      const phraseTime = 90 + Math.min(130, Array.from(text.trim()).length * 4);
+      const pause = /\n\s*\n/.test(text) ? 360 : sentenceEnd.test(text) ? 260 : clauseEnd.test(text) ? 130 : 0;
+      nextRevealAt = performance.now() + phraseTime + pause;
+    }
+    if (pending && text) schedule();
+
+  }
+  function cancel() {
+    stopped = true;
+    clearTimeout(timer);
+    pending = "";
+  }
+  return {
+    push(text) {
+      if (stopped || finishing) return;
+      pending += text;
+      if (timer === null) schedule();
+    },
+    finish() {
+      if (stopped || finishing) return Promise.resolve();
+      finishing = true;
+      clearTimeout(timer);
+      timer = null;
+      // The response is complete: never hold its ending behind the animation.
+      if (bubble.isConnected) {
+        appendStreamingText(bubble, pending);
+        bubble.classList?.add("streaming-complete");
+      }
+      pending = "";
+      return Promise.resolve();
+    },
+    cancel,
+  };
 }
 
 function topicContentsLabel(space) {
@@ -292,7 +368,7 @@ function updateTopicRoutePresentation() {
   if (!topic) return;
   const spaces = state.map?.topic_spaces || [];
   const selectedSpace = spaces.find((space) => space.id === topicTarget.value);
-  const isRecommended = selectedSpace?.id === topic.existing_topic_id;
+  const isRecommended = Boolean(selectedSpace && selectedSpace.id === topic.existing_topic_id);
   topicCategory.value = selectedSpace ? topicCategoryOf(selectedSpace) : topic.category || "other";
   topicCategory.syncChoices();
   topicConnections.querySelectorAll("input").forEach((input) => {
@@ -319,6 +395,7 @@ function updateTopicRoutePresentation() {
 
 function renderTopic(topic) {
   state.pendingTopic = topic;
+  updateChatReviewNotice("topic", Boolean(topic), topic ? `Review topic: ${topic.topic || "New topic"}` : "Review topic");
   topicCard.classList.toggle("hidden", !topic);
   if (!topic) {
     topicTitle.value = "";
@@ -383,6 +460,7 @@ function renderTopic(topic) {
 
 function renderMapSuggestion(suggestion) {
   if (!hasMyMapAccess()) suggestion = null;
+  updateChatReviewNotice("map-suggestion", Boolean(suggestion), "Review map note");
   state.pendingMapSuggestion = suggestion;
   mapSuggestionCard.classList.toggle("hidden", !suggestion);
   if (!suggestion) {
@@ -434,6 +512,7 @@ async function sendMessage(event) {
   renderMessages([...existingMessages, { role: "user", content: context }]);
   const waitingMessage = showWaitingMessage();
   const waitingLabel = waitingMessage.querySelector(".waiting-label");
+  const textPlayer = createChatTextPlayer(waitingMessage);
 
   try {
     let response = null;
@@ -450,14 +529,16 @@ async function sendMessage(event) {
         waitingLabel.textContent = `${event.message}${elapsed}`;
         messages.scrollTop = messages.scrollHeight;
       } else if (event.type === "text_delta" && typeof event.text === "string") {
-        appendStreamingText(waitingMessage, event.text);
+        textPlayer.push(event.text);
       } else if (event.type === "result") {
         response = event.data;
+        textPlayer.finish();
       } else if (event.type === "error") {
         throw new ApiError(event.message || "Request failed", event.status || 500);
       }
     });
     if (!response) throw new ApiError("The response stream ended unexpectedly.", 502);
+    await textPlayer.finish();
     const updatedChat = {
       chat_id: response.chat_id,
       title: response.chat_info.title || "New conversation",
@@ -473,7 +554,8 @@ async function sendMessage(event) {
     chatTitle.textContent = updatedChat.title;
     document.title = `${updatedChat.title} | FeelY`;
     renderChats();
-    renderMessages(updatedChat.messages);
+    const followLatest = messages.scrollHeight - messages.scrollTop - messages.clientHeight < 80;
+    renderMessages(updatedChat.messages, followLatest);
     renderMapSuggestion(response.map_suggestion || null);
     renderTopic(updatedChat.pending_topic);
     pollTopicSoon();
@@ -483,6 +565,7 @@ async function sendMessage(event) {
     autoresizeMessageInput();
     renderInlineError(error);
   } finally {
+    textPlayer.cancel();
     waitingMessage.remove();
     sendButton.disabled = false;
     messageInput.focus();
@@ -534,16 +617,17 @@ function renderInlineError(error) {
 
 function pollTopicSoon(attempt = 0) {
   stopPolling();
-  if (attempt >= TOPIC_POLL_DELAYS.length) return;
+  if (!state.activeChatId || !state.token) return;
+  const requestedChatId = state.activeChatId;
   state.pollTimer = setTimeout(async () => {
     state.pollTimer = null;
     try {
       const topicReady = await pollTopicOnce();
-      if (!topicReady) pollTopicSoon(attempt + 1);
+      if (!topicReady && state.activeChatId === requestedChatId) pollTopicSoon(attempt + 1);
     } catch {
-      pollTopicSoon(attempt + 1);
+      if (state.activeChatId === requestedChatId) pollTopicSoon(attempt + 1);
     }
-  }, TOPIC_POLL_DELAYS[attempt]);
+  }, TOPIC_POLL_DELAYS[Math.min(attempt, TOPIC_POLL_DELAYS.length - 1)]);
 }
 
 async function pollTopicOnce() {
@@ -554,6 +638,7 @@ async function pollTopicOnce() {
     { headers: authHeaders() },
   );
   if (state.activeChatId !== requestedChatId) return false;
+  document.querySelector("#map-analysis-retry").classList.toggle("hidden", payload.analysis_status !== "error");
   if (payload.chat_title) {
     const chat = state.chats.find((item) => item.chat_id === requestedChatId);
     if (chat && chat.title !== payload.chat_title) {
@@ -564,13 +649,37 @@ async function pollTopicOnce() {
     document.title = `${payload.chat_title} | FeelY`;
   }
   const suggestion = payload.suggestions?.[0] || payload.suggestion || null;
-  renderTopic(suggestion);
-  return Boolean(suggestion);
+  // Background observations can arrive without a new topic. Avoid resetting
+  // edits in a review dialog on every poll.
+  if (JSON.stringify(state.pendingTopic) !== JSON.stringify(suggestion)) renderTopic(suggestion);
+  const mapSuggestion = payload.map_suggestion || null;
+  if (JSON.stringify(state.pendingMapSuggestion) !== JSON.stringify(mapSuggestion)) renderMapSuggestion(mapSuggestion);
+  const chat = state.chats.find((item) => item.chat_id === requestedChatId);
+  if (chat) { chat.pending_topic = suggestion; chat.pending_map_suggestion = mapSuggestion; }
+  return !["queued", "analysing"].includes(payload.analysis_status);
+
 }
 
 function startPolling() {
-  stopPolling();
-  pollTopicOnce().catch(() => {});
+  document.querySelector("#map-analysis-retry").classList.add("hidden");
+  pollTopicSoon();
+}
+
+async function retryMapAnalysis() {
+  const chatId = state.activeChatId;
+  if (!chatId) return;
+  const button = document.querySelector("#map-analysis-retry");
+  button.disabled = true;
+  try {
+    await api(`/llm/chats/${encodeURIComponent(chatId)}/topic-suggestion/retry`, {
+      method: "POST", headers: authHeaders(),
+    });
+    if (state.activeChatId === chatId) startPolling();
+  } catch {
+    button.textContent = "Could not retry. Try again shortly";
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function stopPolling() {
@@ -641,8 +750,27 @@ async function confirmMapSuggestion(accepted) {
   renderMap();
 }
 
+function updateChatReviewNotice(kind, available, label) {
+  const button = document.querySelector(`#${kind}-review`);
+  const dialog = document.querySelector(`#${kind}-review-dialog`);
+  button.classList.toggle("hidden", !available);
+  button.textContent = label;
+  button.title = label;
+  if (!available && dialog.open) {
+    dialog.close();
+    messageInput.focus({ preventScroll: true });
+  }
+}
+
 function autoresizeMessageInput() {
+  const followLatest = messages.scrollHeight - messages.scrollTop - messages.clientHeight < 80;
+  const viewportHeight = window.visualViewport?.height || window.innerHeight;
+  const maxHeight = Math.max(84, Math.min(240, Math.floor(viewportHeight * 0.3)));
+  messageInput.style.maxHeight = `${maxHeight}px`;
   messageInput.style.height = "auto";
-  messageInput.style.height = `${Math.min(messageInput.scrollHeight, 160)}px`;
+  const contentHeight = messageInput.scrollHeight;
+  messageInput.style.height = `${Math.min(contentHeight, maxHeight)}px`;
+  messageInput.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
+  if (followLatest) messages.scrollTop = messages.scrollHeight;
 }
 

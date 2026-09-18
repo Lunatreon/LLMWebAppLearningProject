@@ -32,6 +32,16 @@
   <div id="messages" class="messages" aria-live="polite"></div>
 
   <footer class="composer-zone">
+    <div class="chat-suggestion-notices" aria-label="Suggestions to review">
+      <button id="map-analysis-retry" class="suggestion-review hidden" type="button">Map suggestions failed. Retry</button>
+      <button id="topic-review" class="suggestion-review hidden" type="button" aria-haspopup="dialog" aria-controls="topic-review-dialog">Review topic</button>
+      <button id="map-suggestion-review" class="suggestion-review hidden" type="button" aria-haspopup="dialog" aria-controls="map-suggestion-review-dialog">Review map note</button>
+    </div>
+    <dialog id="map-suggestion-review-dialog" class="chat-review-dialog" aria-labelledby="map-review-heading">
+      <header class="chat-review-header">
+        <h2 id="map-review-heading" tabindex="-1" autofocus>Keep this in your map?</h2>
+        <button class="secondary-button" type="button" data-close-chat-review>Close</button>
+      </header>
     <section id="map-suggestion-card" class="map-suggestion-card hidden" aria-live="polite">
       <div class="suggestion-heading">
         <div>
@@ -52,6 +62,12 @@
       </div>
     </section>
 
+    </dialog>
+    <dialog id="topic-review-dialog" class="chat-review-dialog" aria-labelledby="topic-review-heading">
+      <header class="chat-review-header">
+        <h2 id="topic-review-heading" tabindex="-1" autofocus>A possible thread</h2>
+        <button class="secondary-button" type="button" data-close-chat-review>Close</button>
+      </header>
     <section id="topic-card" class="topic-card hidden" aria-live="polite">
       <div class="topic-copy">
         <span class="topic-mark" aria-hidden="true">&#10022;</span>
@@ -97,6 +113,8 @@
         <button id="topic-accept" class="primary-button small" type="button">Save topic</button>
       </div>
     </section>
+
+    </dialog>
 
     <section id="lens-panel" class="lens-panel hidden" aria-label="Reflection lenses">
       <button type="button" data-lens="What actually happened, and what evidence do I have?">

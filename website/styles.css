@@ -877,10 +877,12 @@ textarea:focus {
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 34px max(24px, calc((100vw - 1060px) / 2));
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
 }
 
 .message {
+  flex-shrink: 0;
+  overflow-wrap: anywhere;
   position: relative;
   max-width: min(760px, 86%);
   border-radius: 8px;
@@ -959,13 +961,26 @@ textarea:focus {
   animation-delay: 320ms;
 }
 
+.streaming-chunk {
+  animation: streaming-word-reveal 160ms ease-out both;
+}
+
+.streaming-complete .streaming-chunk { animation: none; }
+.streaming-complete .streaming-cursor { display: none; }
+
+@keyframes streaming-word-reveal {
+  from { opacity: 0.25; }
+  to { opacity: 1; }
+}
+
 .streaming-cursor {
   display: inline-block;
-  width: 2px;
-  height: 1em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
   margin-left: 4px;
   background: var(--lavender);
-  vertical-align: -0.12em;
+  vertical-align: 0.12em;
   animation: streaming-cursor-pulse 0.9s ease-in-out infinite;
 }
 
@@ -1000,7 +1015,8 @@ textarea:focus {
     opacity: 0.72;
   }
 
-  .streaming-cursor {
+  .streaming-cursor,
+  .streaming-chunk {
     animation: none;
   }
 
@@ -1073,8 +1089,8 @@ textarea:focus {
 }
 
 .composer-zone {
-  border-top: 1px solid var(--line-dark);
-  background: var(--midnight);
+  border-top: 0;
+  background: var(--night);
   padding: 12px max(20px, calc((100vw - 1060px) / 2)) 14px;
 }
 
@@ -1304,6 +1320,25 @@ textarea:focus {
   border-radius: 8px;
   background: var(--night-raised);
   padding: 5px;
+}
+
+#message-input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  max-height: 240px;
+  height: auto;
+  overflow-y: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The enclosing composer supplies the focus ring; avoid a second box inside. */
+#message-input:focus,
+#message-input:focus-visible {
+  outline: none;
+  border-color: transparent;
 }
 
 .lens-panel {
@@ -4371,6 +4406,10 @@ html[data-theme="light"] .messages {
     #fffbfc;
 }
 
+html[data-theme="light"] .composer-zone {
+  background: #fffbfc;
+}
+
 html[data-theme="light"] .message {
   color: #3d3036;
 }
@@ -4864,5 +4903,124 @@ html[data-theme="light"] .map-feedback { color: #9b342b; }
 #journal-plan-badge { display: none; }
 .map-toolbar-actions:empty { display: none; }
 
+/* Match layoutMobileMap: bounded bubbles with space for two title lines. */
+@media (max-width: 900px) {
+  .map-node,
+  .map-node.overall,
+  .map-node[aria-pressed="true"] {
+    box-sizing: border-box;
+    width: 40%;
+    min-width: 0;
+    max-width: 180px;
+    min-height: 64px;
+    padding: 10px 12px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .map-node strong {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-size: 13px;
+    line-height: 18px;
+  }
+
+  .map-node span,
+  .map-node:hover span,
+  .map-node:focus-visible span,
+  .map-node[aria-pressed="true"] span {
+    min-width: 0;
+    max-width: 100%;
+    max-height: 14px;
+    margin-top: 3px;
+    opacity: 1;
+    font-size: 10px;
+    line-height: 14px;
+  }
+}
+
 .view-load-status { padding: 32px; color: var(--paper-muted); font-size: 14px; line-height: 1.6; }
 .view-load-status button { margin-top: 12px; border: 1px solid var(--line-dark); border-radius: 999px; padding: 8px 16px; background: var(--night-soft); color: var(--paper); }
+
+/* Suggestions stay compact until the user chooses to review them. */
+.conversation, .composer-zone { min-width: 0; }
+.chat-suggestion-notices {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 8px;
+}
+.chat-suggestion-notices:not(:has(button:not(.hidden))) { display: none; }
+.suggestion-review {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--line-dark);
+  border-radius: 14px;
+  padding: 8px 12px;
+  background: var(--night-soft);
+  color: var(--paper);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.suggestion-review:focus-visible { outline: 2px solid var(--lavender); outline-offset: 2px; }
+.chat-review-dialog {
+  box-sizing: border-box;
+  width: min(600px, calc(100% - 24px));
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line-dark);
+  border-radius: 18px;
+  padding: 18px;
+  background: var(--midnight);
+  color: var(--paper);
+}
+.chat-review-header { position: sticky; top: -18px; z-index: 2; background: var(--midnight); padding: 8px 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.chat-review-header h2 { margin: 0; font-size: 19px; }
+.chat-review-header button { min-height: 44px; flex-shrink: 0; color: var(--paper); border-color: var(--line-dark); }
+.chat-review-dialog::backdrop { background: rgba(8, 7, 10, 0.76); }
+.chat-review-header h2:focus { outline: none; }
+.chat-review-dialog .topic-card,
+.chat-review-dialog .map-suggestion-card {
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0;
+  min-width: 0;
+  max-height: none;
+  overflow: visible;
+}
+.chat-review-dialog .topic-routing { border-left: 0; padding-left: 0; }
+.chat-review-dialog .topic-actions { grid-column: 1; flex-wrap: wrap; }
+.chat-review-dialog input:not([type="radio"]):not([type="checkbox"]),
+.chat-review-dialog textarea,
+.chat-review-dialog select { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; font-size: 16px; }
+.chat-review-dialog button { min-height: 44px; }
+.chat-review-dialog .suggestion-heading { flex-wrap: wrap; }
+.chat-review-dialog .suggestion-topic,
+.chat-review-dialog .suggestion-reason { overflow-wrap: anywhere; }
+.chat-review-dialog .topic-field > span,
+.chat-review-dialog .topic-routing label > span,
+.chat-review-dialog .suggestion-target-field > span { color: var(--paper-muted); font-size: 11px; }
+html[data-theme="light"] .chat-review-dialog,
+html[data-theme="light"] .chat-review-header button,
+html[data-theme="light"] .suggestion-review,
+html[data-theme="light"] .chat-review-dialog .topic-field > span,
+html[data-theme="light"] .chat-review-dialog .topic-routing label > span,
+html[data-theme="light"] .chat-review-dialog .suggestion-target-field > span { color: var(--ink); }
+@media (max-width: 600px) {
+  .chat-review-header { top: -12px; }
+  .chat-review-dialog { padding: 12px; max-height: calc(100dvh - 24px); }
+  .chat-review-dialog .topic-copy { gap: 8px; }
+  .chat-review-dialog .topic-mark { display: none; }
+  .chat-review-dialog .topic-card,
+  .chat-review-dialog .map-suggestion-card { padding: 12px; }
+  .chat-review-dialog .suggestion-actions { flex-wrap: wrap; }
+}

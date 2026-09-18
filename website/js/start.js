@@ -77,6 +77,13 @@ topicCategory.addEventListener("change", () => {
   if (state.pendingTopic) state.pendingTopic.category = topicCategory.value;
 });
 topicAccept.addEventListener("click", () => confirmTopic(true).catch(renderInlineError));
+for (const kind of ["topic", "map-suggestion"]) {
+  const review = document.querySelector(`#${kind}-review`);
+  const dialog = document.querySelector(`#${kind}-review-dialog`);
+  review.addEventListener("click", () => dialog.showModal());
+  dialog.querySelector("[data-close-chat-review]").addEventListener("click", () => dialog.close());
+}
+
 topicDismiss.addEventListener("click", () => confirmTopic(false).catch(renderInlineError));
 topicTarget.addEventListener("change", () => {
   updateTopicRoutePresentation();
@@ -165,7 +172,10 @@ window.addEventListener("resize", () => {
   closeChatActionsMenu();
 });
 window.addEventListener("orientationchange", syncViewportHeight);
-window.visualViewport?.addEventListener("resize", syncViewportHeight);
+window.visualViewport?.addEventListener("resize", () => {
+  syncViewportHeight();
+  autoresizeMessageInput();
+});
 window.addEventListener("beforeunload", () => {
   if (state.journalDirty) saveJournalEntry({ keepalive: true });
 });
@@ -196,6 +206,7 @@ document.querySelectorAll("[data-lens]").forEach((button) => {
   });
 });
 messageInput.addEventListener("input", autoresizeMessageInput);
+document.querySelector("#map-analysis-retry").addEventListener("click", retryMapAnalysis);
 messageInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
@@ -271,6 +282,7 @@ document.addEventListener("visibilitychange", () => {
 window.addEventListener("resize", () => {
   clearTimeout(mapResizeTimer);
   mapResizeTimer = setTimeout(() => {
+    autoresizeMessageInput();
     if (!mapView.classList.contains("hidden")) renderMap();
   }, 120);
 });

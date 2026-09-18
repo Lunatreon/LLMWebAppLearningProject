@@ -749,9 +749,11 @@ def test_user_can_confirm_map_suggestion_and_complete_practice(client):
     )
     assert message_response.status_code == 200
     body = message_response.json()
-    suggestion = body["map_suggestion"]
+    assert body["map_suggestion"] is None
+    analysis_response = client.get(f"/api/v1/llm/chats/{body['chat_id']}/topic-suggestion", headers=headers)
+    suggestion = analysis_response.json()["map_suggestion"]
     assert suggestion["category"] == "inherited_script"
-    assert body["chat_info"]["pending_map_suggestion"] == suggestion
+    assert analysis_response.json()["analysis_status"] in {"idle", "topic_ready"}
 
     confirm_response = client.post(
         "/api/v1/llm/map-suggestions/confirm",
@@ -1223,13 +1225,13 @@ def test_topic_payload_can_return_additional_distinct_topics():
     assert result.additional_topics[0].existing_topic_id == "work-topic"
 
 
-def test_map_suggestions_use_hybrid_surface_rule():
+def test_map_suggestions_surface_without_length_gate_but_suppress_duplicates():
     suggestion = {
         "category": "body_signal",
         "text": "My chest tightens when I imagine disappointing her.",
     }
 
-    assert not should_surface_map_suggestion({"message_count": 0}, "that feels scary", suggestion)
+    assert should_surface_map_suggestion({"message_count": 0}, "that feels scary", suggestion)
     assert should_surface_map_suggestion({"message_count": 2}, "still scary", suggestion)
     assert should_surface_map_suggestion(
         {"message_count": 0},
@@ -1248,7 +1250,7 @@ def test_map_suggestions_use_hybrid_surface_rule():
     )
     similar_suggestion = {
         "category": "body_signal",
-        "text": "My chest gets tight whenever I picture disappointing her.",
+        "text": "My chest tightens whenever I imagine disappointing her.",
     }
     assert not should_surface_map_suggestion(
         shown_info,
@@ -1684,7 +1686,8 @@ def test_system_prompts_are_general_and_avoid_over_interpreting():
     assert "Preserve uncertainty, mixed feelings" in chat_system_prompt
     assert "do not repeat them" in chat_system_prompt
     assert "Do not default to breathing" in chat_system_prompt
-    assert "make the suggestion relevant to that topic" in chat_system_prompt
+    assert "Do not generate profile updates, topics, or map suggestions" in chat_system_prompt
+    assert "An observation does not require a new topic" in topic_system_prompt
     assert "Refuse harmful deception" in chat_system_prompt
     assert "many different backgrounds and concerns" in topic_system_prompt
     assert "single passing mood" in topic_system_prompt
@@ -1768,7 +1771,7 @@ def test_anthropic_clients_use_messages_api_and_shared_json_contract():
     chat_request = chat_messages.requests[0]
     assert chat_request["model"] == "claude-sonnet-4-6"
     assert chat_request["max_tokens"] == 4096
-    assert "reflective chat assistant" in chat_request["system"]
+    assert "reflective assistant" in chat_request["system"]
     assert json.loads(chat_request["messages"][0]["content"])["chat_id"] == "chat-1"
 
     topic_messages = RecordingAnthropicMessages(
@@ -1792,7 +1795,7 @@ def test_anthropic_clients_use_messages_api_and_shared_json_contract():
 
     assert topic_result.topic == "Family expectations and autonomy"
     topic_request = topic_messages.requests[0]
-    assert "FeelY Topic-LLM" in topic_request["system"]
+    assert "background map assistant" in topic_request["system"]
     assert json.loads(topic_request["messages"][0]["content"])["topic_hint"] == (
         "family expectations"
     )
@@ -1908,7 +1911,7 @@ def test_ollama_clients_use_local_chat_api_and_structured_json_contract():
     assert chat_body["stream"] is False
     assert chat_body["think"] is False
     assert chat_body["keep_alive"] == settings.ollama_keep_alive
-    assert chat_body["format"]["required"] == ["assistant_message", "map_suggestion"]
+    assert chat_body["format"]["required"] == ["assistant_message"]
     assert chat_body["options"]["num_ctx"] == 8192
     assert chat_body["options"]["num_gpu"] == 0
     assert json.loads(chat_body["messages"][1]["content"])["chat_id"] == (
@@ -1941,6 +1944,7 @@ def test_ollama_clients_use_local_chat_api_and_structured_json_contract():
         "existing_topic_id",
         "parent_topic_id",
         "additional_topics",
+        "map_suggestion",
     ]
     assert topic_body["options"]["temperature"] == 0.2
     assert topic_body["options"]["num_gpu"] == 999
@@ -2031,6 +2035,58 @@ def test_ollama_chat_keeps_streamed_message_when_final_json_is_invalid():
     assert result.assistant_message == assistant_message
     assert result.profile == {}
     assert result.map_suggestion is None
+
+
+@pytest.mark.parametrize("tail", ["and how much", 'a quoted \\"word\\"', "a trailing \\"])
+def test_ollama_does_not_save_unfinished_streamed_reply(tail):
+    from fastapi import HTTPException
+
+    chat_client = make_ollama_client(OllamaChatLLMClient, {})
+    chat_client.client = RecordingOllamaStreamHttpClient([
+        '{"assistant_message": "How much of this is ' + tail,
+    ])
+
+    async def collect_text(chunk):
+        pass
+
+    with pytest.raises(HTTPException, match="cut short"):
+        asyncio.run(chat_client.respond(
+            "I feel overwhelmed.", {}, {"messages": []}, "cut-short",
+            on_text_chunk=collect_text,
+        ))
+
+
+@pytest.mark.parametrize("offer_topic", [False, True])
+def test_background_map_observations_do_not_require_a_new_topic(client, monkeypatch, offer_topic):
+    client.post("/api/v1/auth/register", json={"email": "background@example.com", "username": "background", "password": "secret-pass"})
+    token = client.post("/api/v1/auth/login", json={"email_or_username": "background", "password": "secret-pass"}).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    grant_premium_access(client, "background@example.com")
+    calls = []
+
+    class MapClient:
+        async def create_topic(self, **kwargs):
+            calls.append(kwargs)
+            return TopicLLMResult(
+                topic="Family" if offer_topic else "", description="Your family expectations." if offer_topic else "",
+                map_suggestion={"category": "value", "text": "I value making my own choices.", "reason": "You described this clearly."},
+            )
+
+    monkeypatch.setattr(llm_routes, "get_topic_llm_client", MapClient)
+    monkeypatch.setattr(llm_routes, "ChatAnalyser", lambda: SimpleNamespace(analyse=lambda _: SimpleNamespace(
+        should_create_topic=False, matched_patterns=[], topic_hint=None, confidence=0.8)))
+    first = client.post("/api/v1/llm/message", headers=headers, json={"context": "Making my own choices matters to me."}).json()
+    assert first["map_suggestion"] is None
+    assert calls[0]["chat_info"]["suggest_topics"] is True
+    poll_url = f"/api/v1/llm/chats/{first['chat_id']}/topic-suggestion"
+    result = client.get(poll_url, headers=headers).json()
+    assert result["map_suggestion"]["category"] == "value"
+    assert bool(result["suggestions"]) == offer_topic
+    client.post("/api/v1/llm/message", headers=headers, json={"chat_id": first["chat_id"], "context": "I want to reflect on that."})
+    after = client.get(poll_url, headers=headers).json()
+    assert len(calls) == 2  # Continue analysis even with a pending topic.
+    assert after["suggestions"] == result["suggestions"]
+    assert after["map_suggestion"] == result["map_suggestion"]
 
 
 def test_chat_result_keeps_message_when_optional_map_suggestion_is_malformed():
@@ -2185,3 +2241,47 @@ def test_typed_topic_parsing_is_backward_compatible_and_matching_keeps_people_di
     for schema in [TOPIC_RESPONSE_SCHEMA, TOPIC_RESPONSE_SCHEMA['properties']['additional_topics']['items']]:
         assert len(schema['required']) == len(set(schema['required']))
         assert set(schema['required']) == set(schema['properties'])
+
+@pytest.mark.parametrize('recover', [True, False])
+def test_topic_model_retries_malformed_json_once_with_more_room(monkeypatch, recover):
+    from fastapi import HTTPException
+    budgets = []
+    async def request(self, **kwargs):
+        budgets.append(self.max_tokens)
+        if len(budgets) == 1 or not recover:
+            raise HTTPException(502, 'LLM returned invalid JSON')
+        return {'topic': 'Pressure', 'description': 'You feel pressure to finish.', 'map_suggestion': None}
+    monkeypatch.setattr(OllamaTopicLLMClient, 'request_json', request)
+    model = make_ollama_client(OllamaTopicLLMClient, {})
+    model.max_tokens = 768
+    if recover:
+        result = asyncio.run(model.create_topic({'messages': []}, []))
+        assert result.topic == 'Pressure'
+    else:
+        with pytest.raises(HTTPException):
+            asyncio.run(model.create_topic({'messages': []}, []))
+    assert budgets == [768, 1536]
+    assert model.max_tokens == 768
+
+
+def test_failed_map_analysis_can_be_retried_without_resending_chat(client, monkeypatch):
+    from fastapi import HTTPException
+    client.post('/api/v1/auth/register', json={'email':'retrymap@example.com','username':'retrymap','password':'secret-pass'})
+    token = client.post('/api/v1/auth/login', json={'email_or_username':'retrymap','password':'secret-pass'}).json()['access_token']
+    headers = {'Authorization':f'Bearer {token}'}
+    class Broken:
+        async def create_topic(self, **kwargs):
+            raise HTTPException(502, 'LLM returned invalid JSON')
+    class Working:
+        async def create_topic(self, **kwargs):
+            return TopicLLMResult(topic='Pressure', description='You feel pressure to finish your work.')
+    monkeypatch.setattr(llm_routes,'get_topic_llm_client',Broken)
+    result = client.post('/api/v1/llm/message',headers=headers,json={'context':'I feel pressure to finish my work.'}).json()
+    url = f"/api/v1/llm/chats/{result['chat_id']}/topic-suggestion"
+    assert client.get(url,headers=headers).json()['analysis_status'] == 'error'
+    monkeypatch.setattr(llm_routes,'get_topic_llm_client',Working)
+    assert client.post(url+'/retry',headers=headers).status_code == 202
+    suggestion = client.get(url,headers=headers).json()
+    assert suggestion['analysis_status'] == 'topic_ready'
+    assert suggestion['suggestion']['topic'] == 'Pressure'
+    assert client.post(url+'/retry').status_code == 401

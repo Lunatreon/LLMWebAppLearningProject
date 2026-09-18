@@ -19,6 +19,7 @@ function element() {
     },
     setAttribute() {}, removeAttribute() {}, addEventListener() {}, focus() {},
     append(...nodes) { this.children.push(...nodes); }, after() {}, replaceChildren(...nodes) { this.children = nodes; },
+    querySelector() { return element(); },
     querySelectorAll(selector) { return this.children.flatMap(node => [node, ...(node.querySelectorAll?.(selector) || [])]); },
   };
 }

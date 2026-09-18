@@ -98,3 +98,13 @@ node --test tests/frontend_startup.test.cjs tests/session_expiry.test.cjs
 
 The login landscape is `assets/feely-lake.png`; its generation prompt is recorded
 in `assets/feely-lake.md`. The existing dark overlay keeps the white text readable.
+
+
+### Chat and background map analysis
+
+- `prompts/chat_system.txt`: conversation only. The chat still receives a small read-only selection of confirmed observations from topics linked to the chat.
+- `prompts/topic_system.txt`: background topic and observation proposals. An observation can be suggested without creating a new topic. All map changes still require review.
+- `app/services/llm.py`: model contracts and bounded context; `app/api/routes/llm.py`: scheduling, access checks, suggestion storage and confirmation.
+- `website/js/chat.js`: polls for both kinds of suggestion after a reply and displays the Review buttons.
+
+`OLLAMA_TOPIC_MAX_TOKENS` now defaults to 768 to fit topics plus an observation. Restart the backend after changing environment settings. This split reduces the chat output contract; actual response latency depends on the models and hardware.

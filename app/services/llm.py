@@ -527,6 +527,7 @@ class TopicLLMResult:
     additional_topics: list["TopicLLMResult"] = field(default_factory=list)
     category: str = "other"
     related_topic_ids: list[str] = field(default_factory=list)
+    map_suggestion: dict[str, Any] | None = None
 
 
 @dataclass
@@ -586,7 +587,7 @@ class LocalChatLLMClient:
         return ChatLLMResult(
             assistant_message=assistant_message,
             profile=updated_profile,
-            map_suggestion=self.local_map_suggestion(user_input),
+            map_suggestion=None,
         )
 
     def local_map_suggestion(self, user_input: str) -> dict[str, str] | None:
@@ -825,13 +826,19 @@ class LocalTopicLLMClient:
         available_topics: list[dict[str, Any]] | None = None,
     ) -> TopicLLMResult:
         user_messages = topic_chat_context(chat_info)["user_messages"]
-        topic = topic_hint or infer_local_freeform_topic(user_messages)
+        from app.services.pattern_recognition import ChatAnalyser
+        # The offline fallback has no model to judge evidence; keep its
+        # conservative heuristic without blocking actual LLM suggestions.
+        topic = (topic_hint or infer_local_freeform_topic(user_messages)) if (
+            chat_info.get("suggest_topics", True) and ChatAnalyser().analyse(chat_info).should_create_topic
+        ) else ""
         description = (
             "This chat appears to focus on "
             f"{topic}, based on the user's recent messages: "
             f"{' '.join(user_messages[-2:])[:240]}"
         )
-        return TopicLLMResult(topic=topic[:120], description=description[:1000])
+        return TopicLLMResult(topic=topic[:120], description=description[:1000] if topic else "",
+                              map_suggestion=LocalChatLLMClient().local_map_suggestion(user_messages[-1]) if user_messages else None)
 
 PROMPT_FILENAMES = {
     "chat": "chat_system.txt",
@@ -879,41 +886,27 @@ def write_system_prompt(kind: str, text: str) -> str:
     return cleaned
 
 
+MAP_SUGGESTION_SCHEMA = {'anyOf': [{'type': 'null'},
+           {'type': 'object',
+            'properties': {'category': {'type': 'string',
+                                        'enum': ['inherited_script',
+                                                 'own_perception',
+                                                 'value',
+                                                 'body_signal',
+                                                 'practice',
+                                                 'evidence']},
+                           'text': {'type': 'string'},
+                           'reason': {'type': 'string'}},
+            'required': ['category', 'text', 'reason'],
+            'additionalProperties': False}]}
+
+
 CHAT_RESPONSE_SCHEMA = {
     "type": "object",
-    "properties": {
-        "assistant_message": {"type": "string"},
-        "profile": {"type": "object"},
-        "map_suggestion": {
-            "anyOf": [
-                {"type": "null"},
-                {
-                    "type": "object",
-                    "properties": {
-                        "category": {
-                            "type": "string",
-                            "enum": [
-                                "inherited_script",
-                                "own_perception",
-                                "value",
-                                "body_signal",
-                                "practice",
-                                "evidence",
-                            ],
-                        },
-                        "text": {"type": "string"},
-                        "reason": {"type": "string"},
-                    },
-                    "required": ["category", "text", "reason"],
-                    "additionalProperties": False,
-                },
-            ]
-        },
-    },
-    "required": ["assistant_message", "map_suggestion"],
+    "properties": {"assistant_message": {"type": "string"}},
+    "required": ["assistant_message"],
     "additionalProperties": False,
 }
-
 
 TOPIC_RESPONSE_SCHEMA = {
     "type": "object",
@@ -968,6 +961,10 @@ TOPIC_RESPONSE_SCHEMA = {
     ],
     "additionalProperties": False,
 }
+
+
+TOPIC_RESPONSE_SCHEMA["properties"]["map_suggestion"] = MAP_SUGGESTION_SCHEMA
+TOPIC_RESPONSE_SCHEMA["required"].append("map_suggestion")
 
 
 JOURNAL_RESPONSE_SCHEMA = {
@@ -1037,6 +1034,14 @@ def topic_request_payload(
             "matched_patterns": matched_patterns,
             "topic_hint": topic_hint,
             "available_topics": available_topics or [],
+            "suggest_topics": chat_info.get("suggest_topics", True),
+            "suggest_observations": chat_info.get("suggest_observations", True),
+            "recent_observation_suggestions": {
+                key: chat_info[key] for key in (
+                    "pending_map_suggestion", "last_surface_map_suggestion",
+                    "last_saved_map_suggestion", "last_dismissed_map_suggestion",
+                ) if key in chat_info
+            },
         },
         ensure_ascii=True,
     )
@@ -1142,6 +1147,7 @@ def topic_result_from_payload(payload: dict[str, Any]) -> TopicLLMResult:
         existing_topic_id=existing_topic_id if isinstance(existing_topic_id, str) else None,
         parent_topic_id=parent_topic_id if isinstance(parent_topic_id, str) else None,
         additional_topics=additional_topics,
+        map_suggestion=chat_result_from_payload({"assistant_message": "validation", "map_suggestion": payload.get("map_suggestion")}).map_suggestion,
     )
 
 
@@ -1555,6 +1561,14 @@ class OllamaBaseClient:
 
         if not stream_finished:
             raise_bad_gateway("Ollama ended the response stream unexpectedly")
+        # A decoded prefix is not necessarily a complete reply. Only recover
+        # damaged metadata after the assistant's JSON string has closed.
+        value_start = top_level_json_string_value_start(generated_json, "assistant_message")
+        if value_start is not None:
+            try:
+                json.JSONDecoder().raw_decode(generated_json[value_start - 1 :])
+            except ValueError:
+                raise_bad_gateway("The reply was cut short before it finished. Please try again.")
         logger.info(
             "Ollama model %s completed in %.2fs",
             self.model,
@@ -1624,18 +1638,35 @@ class OllamaTopicLLMClient(OllamaBaseClient):
         topic_hint: str | None = None,
         available_topics: list[dict[str, Any]] | None = None,
     ) -> TopicLLMResult:
-        payload = await self.request_json(
-            system_prompt=read_system_prompt("topic"),
-            user_payload=topic_request_payload(
-                chat_info,
-                matched_patterns,
-                topic_hint,
-                available_topics,
-            ),
-            response_schema=TOPIC_RESPONSE_SCHEMA,
-            temperature=0.2,
-        )
-        return topic_result_from_payload(payload)
+        from copy import copy
+
+        request = {
+            "system_prompt": read_system_prompt("topic"),
+            "user_payload": topic_request_payload(chat_info, matched_patterns, topic_hint, available_topics),
+            "response_schema": TOPIC_RESPONSE_SCHEMA,
+            "temperature": 0.2,
+        }
+        try:
+            return topic_result_from_payload(await self.request_json(**request))
+        except HTTPException as exc:
+            if exc.status_code != 502 or exc.detail not in {
+                "LLM returned invalid JSON", "LLM returned an empty response",
+                "LLM returned a non-object JSON response",
+                "Topic-LLM response did not match the expected schema",
+            }:
+                raise
+            # Retry once with room for the structured envelope. Do not reuse
+            # broken JSON as evidence or alter this client's configured budget.
+            retry = copy(self)
+            retry.max_tokens = max(self.max_tokens, min(3072, max(1536, self.max_tokens * 2)))
+            request["system_prompt"] += (
+                "\nReturn a complete compact JSON object. At most one primary topic, "
+                "additional_topics must be [], and at most one brief observation. "
+                "Finish all required fields. Do not repeat text."
+            )
+            request["temperature"] = 0.0
+            logger.warning("Retrying malformed map analysis with a %s-token budget", retry.max_tokens)
+            return topic_result_from_payload(await retry.request_json(**request))
 
 def ollama_error_detail(response: httpx.Response) -> str:
     try:

@@ -59,9 +59,6 @@ GENERIC_TOPIC_TITLES = {
     "mood",
     "feelings",
 }
-MAP_SUGGESTION_LONG_MESSAGE_CHARS = 140
-MAP_SUGGESTION_LONG_MESSAGE_WORDS = 35
-MAP_SUGGESTION_SMALL_MESSAGE_TURNS = 3
 MAP_SUGGESTION_REPEAT_COOLDOWN_TURNS = 5
 MAP_SUGGESTION_HISTORY_KEYS = (
     "last_surface_map_suggestion",
@@ -303,18 +300,10 @@ def should_surface_map_suggestion(
         if map_suggestions_are_similar(suggestion, map_suggestion_from_marker(marker)):
             return False
 
-    stripped_input = user_input.strip()
-    if (
-        len(stripped_input) >= MAP_SUGGESTION_LONG_MESSAGE_CHARS
-        or len(stripped_input.split()) >= MAP_SUGGESTION_LONG_MESSAGE_WORDS
-    ):
-        return True
+    # The map model assesses whether the content supports a useful proposal.
+    # Short, explicit insights should not require extra turns to become visible.
+    return bool(user_input.strip() and str(suggestion.get("text") or "").strip())
 
-    last_surface = (chat_info or {}).get("last_surface_map_suggestion")
-    last_surface_count = (
-        int(last_surface.get("message_count", 0)) if isinstance(last_surface, dict) else 0
-    )
-    return next_message_count - last_surface_count >= MAP_SUGGESTION_SMALL_MESSAGE_TURNS
 
 
 def remember_map_suggestion_event(
@@ -449,12 +438,7 @@ def append_chat_exchange(
     next_info["last_user_message"] = user_input
     next_info["last_assistant_message"] = assistant_message
     next_info["updated_at"] = now
-    pending_topic = next_info.get("pending_topic")
-    next_info["analysis_status"] = (
-        "topic_ready"
-        if isinstance(pending_topic, dict) and pending_topic.get("status") == "pending"
-        else "queued"
-    )
+    next_info["analysis_status"] = "queued"
     if map_suggestion:
         next_info["pending_map_suggestion"] = map_suggestion
     else:
@@ -481,14 +465,12 @@ async def analyse_chat_for_topic(
         info = dict(chat_session.info or {})
         queued_topics = pending_topic_queue(info)
         replaced_generic_topic = False
-        if queued_topics:
-            return
         raw_pending_topic = info.get("pending_topic")
         raw_pending_topics = info.get("pending_topics")
-        if (
+        if not queued_topics and ((
             isinstance(raw_pending_topic, dict)
             and raw_pending_topic.get("status") == "pending"
-        ) or isinstance(raw_pending_topics, list):
+        ) or isinstance(raw_pending_topics, list)):
             set_pending_topic_queue(info, [])
             replaced_generic_topic = True
 
@@ -500,6 +482,7 @@ async def analyse_chat_for_topic(
             return
 
         info["analysis_status"] = "analysing"
+        info.pop("analysis_error", None)
         chat_session.info = info
         db.commit()
 
@@ -507,13 +490,8 @@ async def analyse_chat_for_topic(
         info = dict(chat_session.info or {})
         info["analysed_message_count"] = message_count
 
-        if not analysis.should_create_topic:
-            info["analysis_status"] = "idle"
-            chat_session.info = info
-            db.commit()
-            return
-
         user = db.get(User, user_id)
+        premium_access = user is not None and has_premium_feature_access(db, user)
         profile = db.scalar(select(UserProfile).where(UserProfile.user_id == user_id))
         visible_map = (
             read_map(profile.data if profile else {})
@@ -527,15 +505,40 @@ async def analyse_chat_for_topic(
                 "category": space.get("category", "other"),
                 "description": space.get("description", ""),
                 "parent_topic_id": space.get("parent_topic_id"),
+                "observations": [{"category": entry.get("category"), "text": str(entry.get("text") or "")[:240]} for entry in space.get("entries", [])[-5:]],
             }
             for space in visible_map.get("topic_spaces", [])[:40]
         ]
         topic_result = await get_topic_llm_client().create_topic(
-            chat_info=info,
+            chat_info={**info, "suggest_topics": not queued_topics,
+                       "suggest_observations": premium_access and not info.get("pending_map_suggestion")},
             matched_patterns=analysis.matched_patterns,
             topic_hint=analysis.topic_hint,
             available_topics=available_topics,
         )
+        # A newer exchange or review may have arrived during generation.
+        db.refresh(chat_session)
+        info = dict(chat_session.info or {})
+        if int(info.get("message_count", 0)) != message_count:
+            return
+        info["analysed_message_count"] = message_count
+        queued_topics = pending_topic_queue(info)
+        if premium_access and topic_result.map_suggestion and not info.get("pending_map_suggestion"):
+            newest_input = next((str(m.get("content") or "") for m in reversed(info.get("messages", [])) if m.get("role") == "user"), "")
+            suggestion = dict(topic_result.map_suggestion)
+            target = next((space for space in visible_map.get("topic_spaces", []) if space.get("id") == topic_result.existing_topic_id), None)
+            if target is None:
+                target = find_topic_space_for_chat(profile.data if profile else {}, chat_id)
+            suggestion.update(source_chat_id=chat_id, topic_space_id=target.get("id") if target else None, topic_title=target.get("title") if target else None)
+            policy_info = {**info, "message_count": message_count - 1}
+            if should_surface_map_suggestion(policy_info, newest_input, suggestion):
+                info["pending_map_suggestion"] = suggestion
+                info = remember_map_suggestion_event(info, "last_surface_map_suggestion", suggestion)
+        if queued_topics:
+            info["analysis_status"] = "topic_ready" if queued_topics else "idle"
+            chat_session.info = info
+            db.commit()
+            return
         available_topic_ids = {topic.get("id") for topic in available_topics}
         accepted_topic_names = {
             normalized_topic(topic)
@@ -732,7 +735,33 @@ def read_topic_suggestion(
         suggestion=suggestions[0] if suggestions else None,
         suggestions=suggestions,
         chat_title=str((chat_session.info or {}).get("title") or "New chat"),
+        map_suggestion=(chat_session.info or {}).get("pending_map_suggestion") if has_premium_feature_access(db, current_user) else None,
+        analysis_status=str((chat_session.info or {}).get("analysis_status") or "idle"),
     )
+
+
+@router.post("/chats/{chat_id}/topic-suggestion/retry", status_code=202)
+def retry_topic_suggestion(
+    chat_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, str]:
+    chat_session = get_chat_session(db, current_user, chat_id)
+    if chat_session is None:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    info = dict(chat_session.info or {})
+    if info.get("analysis_status") != "error":
+        return {"analysis_status": str(info.get("analysis_status") or "idle")}
+    enforce_rate_limit(f"map-retry:{current_user.id}", max_attempts=3, window_seconds=60)
+    info["analysis_status"] = "queued"
+    info.pop("analysed_message_count", None)
+    info.pop("analysis_error", None)
+    chat_session.info = info
+    db.commit()
+    factory = sessionmaker(autocommit=False, autoflush=False, bind=db.get_bind())
+    background_tasks.add_task(maintain_chat_insights, current_user.id, chat_id, factory)
+    return {"analysis_status": "queued"}
 
 
 @router.post("/message", response_model=LLMResponse)
@@ -809,22 +838,8 @@ async def process_llm_message(
         chat_id=chat_session.chat_id,
     )
 
-    raw_map_suggestion = None
-    if premium_access and chat_result.map_suggestion:
-        topic_space = find_topic_space_for_chat(profile.data, chat_session.chat_id)
-        raw_map_suggestion = {
-            **chat_result.map_suggestion,
-            "source_chat_id": chat_session.chat_id,
-            "topic_space_id": topic_space.get("id") if topic_space else None,
-            "topic_title": topic_space.get("title") if topic_space else None,
-        }
-
     base_chat_info = chat_session.info or {}
-    map_suggestion = (
-        raw_map_suggestion
-        if should_surface_map_suggestion(base_chat_info, payload.input_text, raw_map_suggestion)
-        else None
-    )
+    map_suggestion = base_chat_info.get("pending_map_suggestion") if premium_access else None
     next_chat_info = append_chat_exchange(
         chat_session.info or {},
         user_id=current_user.id,
@@ -834,12 +849,6 @@ async def process_llm_message(
         map_suggestion=map_suggestion,
     )
     next_chat_info = update_conversation_summary(next_chat_info)
-    if map_suggestion:
-        next_chat_info = remember_map_suggestion_event(
-            next_chat_info,
-            "last_surface_map_suggestion",
-            map_suggestion,
-        )
     chat_session.info = next_chat_info
     db.commit()
     db.refresh(profile)
@@ -933,7 +942,7 @@ async def stream_message_to_llm(
                     yield json.dumps(
                         {
                             "type": "status",
-                            "message": "Ollama is generating locally",
+                            "message": "Thinking",
                             "elapsed_seconds": elapsed,
                         }
                     ) + "\n"

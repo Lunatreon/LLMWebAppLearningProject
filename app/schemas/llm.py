@@ -62,6 +62,8 @@ class LLMResponse(BaseModel):
 
 
 class TopicSuggestionResponse(BaseModel):
+    map_suggestion: dict[str, Any] | None = None
+    analysis_status: str = "idle"
     suggestion: TopicSuggestion | None = None
     suggestions: list[TopicSuggestion] = Field(default_factory=list)
     chat_title: str | None = None

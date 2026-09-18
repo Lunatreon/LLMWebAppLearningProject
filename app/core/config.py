@@ -116,8 +116,8 @@ class Settings(BaseSettings):
     ollama_journal_model: str | None = None
     ollama_timeout_seconds: float = 180.0
     ollama_context_window: int = 2048
-    ollama_chat_max_tokens: int = 160
-    ollama_topic_max_tokens: int = 256
+    ollama_chat_max_tokens: int = 768
+    ollama_topic_max_tokens: int = 768
     ollama_journal_max_tokens: int = 768
     ollama_chat_num_gpu: int = 0
     ollama_topic_num_gpu: int = 999

@@ -260,6 +260,25 @@ function mapNodePosition(index) {
   };
 }
 
+// Mobile has room for two bubbles across. Grow the canvas instead of
+// squeezing additional topics into the same positions.
+function layoutMobileMap(nodes) {
+  const hasOverall = nodes[0]?.id === OVERALL_MAP_NODE_ID;
+  const positions = nodes.map((node, index) => {
+    if (hasOverall && index === 0) return { x: 50, y: 64 };
+    const slot = index - (hasOverall ? 1 : 0);
+    return {
+      x: slot % 2 ? 74 : 26,
+      y: (hasOverall ? 184 : 64) + Math.floor(slot / 2) * 120 + (slot % 2) * 28,
+    };
+  });
+  const height = Math.max(430, ...positions.map((position) => position.y + 76));
+  nodes.forEach((node, index) => {
+    node.position = { x: positions[index].x, y: positions[index].y / height * 100 };
+  });
+  return height;
+}
+
 function createConceptNode(node, index) {
   const button = document.createElement("button");
   button.type = "button";
@@ -1549,6 +1568,11 @@ function renderMap() {
   const board = document.createElement("div");
   board.className = "map-concept-board";
   board.setAttribute("aria-label", "Interactive concept map");
+  if (typeof window !== "undefined" && window.matchMedia("(max-width: 900px)").matches) {
+    const height = layoutMobileMap(visibleNodes);
+    board.style.height = `${height}px`;
+    board.style.minHeight = `${height}px`;
+  }
   board.append(createMapConnectionLayer(visibleNodes));
   visibleNodes.forEach((node, index) => board.append(createConceptNode(node, index)));
   if (!visibleNodes.length) {

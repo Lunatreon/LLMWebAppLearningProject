@@ -904,10 +904,12 @@ textarea:focus {
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 34px max(24px, calc((100vw - 1060px) / 2));
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
 }
 
 .message {
+  flex-shrink: 0;
+  overflow-wrap: anywhere;
   position: relative;
   max-width: min(760px, 86%);
   border-radius: 8px;
@@ -986,13 +988,26 @@ textarea:focus {
   animation-delay: 320ms;
 }
 
+.streaming-chunk {
+  animation: streaming-word-reveal 160ms ease-out both;
+}
+
+.streaming-complete .streaming-chunk { animation: none; }
+.streaming-complete .streaming-cursor { display: none; }
+
+@keyframes streaming-word-reveal {
+  from { opacity: 0.25; }
+  to { opacity: 1; }
+}
+
 .streaming-cursor {
   display: inline-block;
-  width: 2px;
-  height: 1em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
   margin-left: 4px;
   background: var(--lavender);
-  vertical-align: -0.12em;
+  vertical-align: 0.12em;
   animation: streaming-cursor-pulse 0.9s ease-in-out infinite;
 }
 
@@ -1027,7 +1042,8 @@ textarea:focus {
     opacity: 0.72;
   }
 
-  .streaming-cursor {
+  .streaming-cursor,
+  .streaming-chunk {
     animation: none;
   }
 
@@ -1100,8 +1116,8 @@ textarea:focus {
 }
 
 .composer-zone {
-  border-top: 1px solid var(--line-dark);
-  background: var(--midnight);
+  border-top: 0;
+  background: var(--night);
   padding: 12px max(20px, calc((100vw - 1060px) / 2)) 14px;
 }
 
@@ -1331,6 +1347,25 @@ textarea:focus {
   border-radius: 8px;
   background: var(--night-raised);
   padding: 5px;
+}
+
+#message-input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  max-height: 240px;
+  height: auto;
+  overflow-y: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The enclosing composer supplies the focus ring; avoid a second box inside. */
+#message-input:focus,
+#message-input:focus-visible {
+  outline: none;
+  border-color: transparent;
 }
 
 .lens-panel {
@@ -4398,6 +4433,10 @@ html[data-theme="light"] .messages {
     #fffbfc;
 }
 
+html[data-theme="light"] .composer-zone {
+  background: #fffbfc;
+}
+
 html[data-theme="light"] .message {
   color: #3d3036;
 }
@@ -4891,8 +4930,127 @@ html[data-theme="light"] .map-feedback { color: #9b342b; }
 #journal-plan-badge { display: none; }
 .map-toolbar-actions:empty { display: none; }
 
+/* Match layoutMobileMap: bounded bubbles with space for two title lines. */
+@media (max-width: 900px) {
+  .map-node,
+  .map-node.overall,
+  .map-node[aria-pressed="true"] {
+    box-sizing: border-box;
+    width: 40%;
+    min-width: 0;
+    max-width: 180px;
+    min-height: 64px;
+    padding: 10px 12px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .map-node strong {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-size: 13px;
+    line-height: 18px;
+  }
+
+  .map-node span,
+  .map-node:hover span,
+  .map-node:focus-visible span,
+  .map-node[aria-pressed="true"] span {
+    min-width: 0;
+    max-width: 100%;
+    max-height: 14px;
+    margin-top: 3px;
+    opacity: 1;
+    font-size: 10px;
+    line-height: 14px;
+  }
+}
+
 .view-load-status { padding: 32px; color: var(--paper-muted); font-size: 14px; line-height: 1.6; }
 .view-load-status button { margin-top: 12px; border: 1px solid var(--line-dark); border-radius: 999px; padding: 8px 16px; background: var(--night-soft); color: var(--paper); }
+
+/* Suggestions stay compact until the user chooses to review them. */
+.conversation, .composer-zone { min-width: 0; }
+.chat-suggestion-notices {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 8px;
+}
+.chat-suggestion-notices:not(:has(button:not(.hidden))) { display: none; }
+.suggestion-review {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--line-dark);
+  border-radius: 14px;
+  padding: 8px 12px;
+  background: var(--night-soft);
+  color: var(--paper);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.suggestion-review:focus-visible { outline: 2px solid var(--lavender); outline-offset: 2px; }
+.chat-review-dialog {
+  box-sizing: border-box;
+  width: min(600px, calc(100% - 24px));
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line-dark);
+  border-radius: 18px;
+  padding: 18px;
+  background: var(--midnight);
+  color: var(--paper);
+}
+.chat-review-header { position: sticky; top: -18px; z-index: 2; background: var(--midnight); padding: 8px 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.chat-review-header h2 { margin: 0; font-size: 19px; }
+.chat-review-header button { min-height: 44px; flex-shrink: 0; color: var(--paper); border-color: var(--line-dark); }
+.chat-review-dialog::backdrop { background: rgba(8, 7, 10, 0.76); }
+.chat-review-header h2:focus { outline: none; }
+.chat-review-dialog .topic-card,
+.chat-review-dialog .map-suggestion-card {
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0;
+  min-width: 0;
+  max-height: none;
+  overflow: visible;
+}
+.chat-review-dialog .topic-routing { border-left: 0; padding-left: 0; }
+.chat-review-dialog .topic-actions { grid-column: 1; flex-wrap: wrap; }
+.chat-review-dialog input:not([type="radio"]):not([type="checkbox"]),
+.chat-review-dialog textarea,
+.chat-review-dialog select { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; font-size: 16px; }
+.chat-review-dialog button { min-height: 44px; }
+.chat-review-dialog .suggestion-heading { flex-wrap: wrap; }
+.chat-review-dialog .suggestion-topic,
+.chat-review-dialog .suggestion-reason { overflow-wrap: anywhere; }
+.chat-review-dialog .topic-field > span,
+.chat-review-dialog .topic-routing label > span,
+.chat-review-dialog .suggestion-target-field > span { color: var(--paper-muted); font-size: 11px; }
+html[data-theme="light"] .chat-review-dialog,
+html[data-theme="light"] .chat-review-header button,
+html[data-theme="light"] .suggestion-review,
+html[data-theme="light"] .chat-review-dialog .topic-field > span,
+html[data-theme="light"] .chat-review-dialog .topic-routing label > span,
+html[data-theme="light"] .chat-review-dialog .suggestion-target-field > span { color: var(--ink); }
+@media (max-width: 600px) {
+  .chat-review-header { top: -12px; }
+  .chat-review-dialog { padding: 12px; max-height: calc(100dvh - 24px); }
+  .chat-review-dialog .topic-copy { gap: 8px; }
+  .chat-review-dialog .topic-mark { display: none; }
+  .chat-review-dialog .topic-card,
+  .chat-review-dialog .map-suggestion-card { padding: 12px; }
+  .chat-review-dialog .suggestion-actions { flex-wrap: wrap; }
+}
 
 </style>
   </head>
@@ -5210,6 +5368,16 @@ html[data-theme="light"] .map-feedback { color: #9b342b; }
   <div id="messages" class="messages" aria-live="polite"></div>
 
   <footer class="composer-zone">
+    <div class="chat-suggestion-notices" aria-label="Suggestions to review">
+      <button id="map-analysis-retry" class="suggestion-review hidden" type="button">Map suggestions failed. Retry</button>
+      <button id="topic-review" class="suggestion-review hidden" type="button" aria-haspopup="dialog" aria-controls="topic-review-dialog">Review topic</button>
+      <button id="map-suggestion-review" class="suggestion-review hidden" type="button" aria-haspopup="dialog" aria-controls="map-suggestion-review-dialog">Review map note</button>
+    </div>
+    <dialog id="map-suggestion-review-dialog" class="chat-review-dialog" aria-labelledby="map-review-heading">
+      <header class="chat-review-header">
+        <h2 id="map-review-heading" tabindex="-1" autofocus>Keep this in your map?</h2>
+        <button class="secondary-button" type="button" data-close-chat-review>Close</button>
+      </header>
     <section id="map-suggestion-card" class="map-suggestion-card hidden" aria-live="polite">
       <div class="suggestion-heading">
         <div>
@@ -5230,6 +5398,12 @@ html[data-theme="light"] .map-feedback { color: #9b342b; }
       </div>
     </section>
 
+    </dialog>
+    <dialog id="topic-review-dialog" class="chat-review-dialog" aria-labelledby="topic-review-heading">
+      <header class="chat-review-header">
+        <h2 id="topic-review-heading" tabindex="-1" autofocus>A possible thread</h2>
+        <button class="secondary-button" type="button" data-close-chat-review>Close</button>
+      </header>
     <section id="topic-card" class="topic-card hidden" aria-live="polite">
       <div class="topic-copy">
         <span class="topic-mark" aria-hidden="true">&#10022;</span>
@@ -5275,6 +5449,8 @@ html[data-theme="light"] .map-feedback { color: #9b342b; }
         <button id="topic-accept" class="primary-button small" type="button">Save topic</button>
       </div>
     </section>
+
+    </dialog>
 
     <section id="lens-panel" class="lens-panel hidden" aria-label="Reflection lenses">
       <button type="button" data-lens="What actually happened, and what evidence do I have?">
@@ -7232,7 +7408,8 @@ function renderChats() {
   });
 }
 
-function renderMessages(items) {
+function renderMessages(items, followLatest = true) {
+  const previousScrollTop = messages.scrollTop;
   messages.replaceChildren();
   if (!items.length) {
     const empty = document.createElement("section");
@@ -7279,7 +7456,7 @@ function renderMessages(items) {
     bubble.textContent = item.content || "";
     messages.append(bubble);
   });
-  messages.scrollTop = messages.scrollHeight;
+  messages.scrollTop = followLatest ? messages.scrollHeight : previousScrollTop;
 }
 
 function showWaitingMessage() {
@@ -7307,6 +7484,7 @@ function showWaitingMessage() {
 
 function appendStreamingText(bubble, text) {
   if (!text) return;
+  const followLatest = messages.scrollHeight - messages.scrollTop - messages.clientHeight < 80;
 
   let content = bubble.querySelector(".streaming-content");
   if (!content) {
@@ -7323,8 +7501,82 @@ function appendStreamingText(bubble, text) {
     bubble.replaceChildren(content, cursor);
   }
 
-  content.append(document.createTextNode(text));
-  messages.scrollTop = messages.scrollHeight;
+  const chunk = document.createElement("span");
+  chunk.className = "streaming-chunk";
+  chunk.textContent = text;
+  content.append(chunk);
+  if (followLatest) messages.scrollTop = messages.scrollHeight;
+}
+
+// Reveal short phrases with breathing room at punctuation. Keep timing
+// across network gaps so the cadence does not depend on packet boundaries.
+function createChatTextPlayer(bubble) {
+  let pending = "";
+  let timer = null;
+  let stopped = false;
+  let finishing = false;
+  let nextRevealAt = 0;
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const sentenceEnd = /[.!?\u3002\uff01\uff1f]["'\u201d\u2019)]*\s*$/u;
+  const clauseEnd = /[,;:\u2014\u3001\uff0c]["'\u201d\u2019)]*\s*$/u;
+  function schedule() {
+    timer = setTimeout(tick, Math.max(24, nextRevealAt - performance.now()));
+  }
+  function tick() {
+    timer = null;
+    if (stopped) return;
+    if (!bubble.isConnected) { cancel(); return; }
+    const instant = reducedMotion || document.hidden;
+    let text = "";
+    if (instant) {
+      text = pending;
+      pending = "";
+    } else {
+      const groupSize = pending.length > 720 ? 4 : 2;
+      for (let index = 0; index < groupSize; index += 1) {
+        // Also recognize sentence boundaries in languages without spaces.
+        const word = pending.match(/^(?:\s+|\S+?(?:\s+|[\u3002\uff01\uff1f]))/u);
+        if (!word) break;
+        text += word[0];
+        pending = pending.slice(word[0].length);
+        if (sentenceEnd.test(text) || clauseEnd.test(text) || /\n\s*\n/.test(text)) break;
+      }
+    }
+    appendStreamingText(bubble, text);
+    if (text && !instant) {
+      const phraseTime = 90 + Math.min(130, Array.from(text.trim()).length * 4);
+      const pause = /\n\s*\n/.test(text) ? 360 : sentenceEnd.test(text) ? 260 : clauseEnd.test(text) ? 130 : 0;
+      nextRevealAt = performance.now() + phraseTime + pause;
+    }
+    if (pending && text) schedule();
+
+  }
+  function cancel() {
+    stopped = true;
+    clearTimeout(timer);
+    pending = "";
+  }
+  return {
+    push(text) {
+      if (stopped || finishing) return;
+      pending += text;
+      if (timer === null) schedule();
+    },
+    finish() {
+      if (stopped || finishing) return Promise.resolve();
+      finishing = true;
+      clearTimeout(timer);
+      timer = null;
+      // The response is complete: never hold its ending behind the animation.
+      if (bubble.isConnected) {
+        appendStreamingText(bubble, pending);
+        bubble.classList?.add("streaming-complete");
+      }
+      pending = "";
+      return Promise.resolve();
+    },
+    cancel,
+  };
 }
 
 function topicContentsLabel(space) {
@@ -7341,7 +7593,7 @@ function updateTopicRoutePresentation() {
   if (!topic) return;
   const spaces = state.map?.topic_spaces || [];
   const selectedSpace = spaces.find((space) => space.id === topicTarget.value);
-  const isRecommended = selectedSpace?.id === topic.existing_topic_id;
+  const isRecommended = Boolean(selectedSpace && selectedSpace.id === topic.existing_topic_id);
   topicCategory.value = selectedSpace ? topicCategoryOf(selectedSpace) : topic.category || "other";
   topicCategory.syncChoices();
   topicConnections.querySelectorAll("input").forEach((input) => {
@@ -7368,6 +7620,7 @@ function updateTopicRoutePresentation() {
 
 function renderTopic(topic) {
   state.pendingTopic = topic;
+  updateChatReviewNotice("topic", Boolean(topic), topic ? `Review topic: ${topic.topic || "New topic"}` : "Review topic");
   topicCard.classList.toggle("hidden", !topic);
   if (!topic) {
     topicTitle.value = "";
@@ -7432,6 +7685,7 @@ function renderTopic(topic) {
 
 function renderMapSuggestion(suggestion) {
   if (!hasMyMapAccess()) suggestion = null;
+  updateChatReviewNotice("map-suggestion", Boolean(suggestion), "Review map note");
   state.pendingMapSuggestion = suggestion;
   mapSuggestionCard.classList.toggle("hidden", !suggestion);
   if (!suggestion) {
@@ -7483,6 +7737,7 @@ async function sendMessage(event) {
   renderMessages([...existingMessages, { role: "user", content: context }]);
   const waitingMessage = showWaitingMessage();
   const waitingLabel = waitingMessage.querySelector(".waiting-label");
+  const textPlayer = createChatTextPlayer(waitingMessage);
 
   try {
     let response = null;
@@ -7499,14 +7754,16 @@ async function sendMessage(event) {
         waitingLabel.textContent = `${event.message}${elapsed}`;
         messages.scrollTop = messages.scrollHeight;
       } else if (event.type === "text_delta" && typeof event.text === "string") {
-        appendStreamingText(waitingMessage, event.text);
+        textPlayer.push(event.text);
       } else if (event.type === "result") {
         response = event.data;
+        textPlayer.finish();
       } else if (event.type === "error") {
         throw new ApiError(event.message || "Request failed", event.status || 500);
       }
     });
     if (!response) throw new ApiError("The response stream ended unexpectedly.", 502);
+    await textPlayer.finish();
     const updatedChat = {
       chat_id: response.chat_id,
       title: response.chat_info.title || "New conversation",
@@ -7522,7 +7779,8 @@ async function sendMessage(event) {
     chatTitle.textContent = updatedChat.title;
     document.title = `${updatedChat.title} | FeelY`;
     renderChats();
-    renderMessages(updatedChat.messages);
+    const followLatest = messages.scrollHeight - messages.scrollTop - messages.clientHeight < 80;
+    renderMessages(updatedChat.messages, followLatest);
     renderMapSuggestion(response.map_suggestion || null);
     renderTopic(updatedChat.pending_topic);
     pollTopicSoon();
@@ -7532,6 +7790,7 @@ async function sendMessage(event) {
     autoresizeMessageInput();
     renderInlineError(error);
   } finally {
+    textPlayer.cancel();
     waitingMessage.remove();
     sendButton.disabled = false;
     messageInput.focus();
@@ -7583,16 +7842,17 @@ function renderInlineError(error) {
 
 function pollTopicSoon(attempt = 0) {
   stopPolling();
-  if (attempt >= TOPIC_POLL_DELAYS.length) return;
+  if (!state.activeChatId || !state.token) return;
+  const requestedChatId = state.activeChatId;
   state.pollTimer = setTimeout(async () => {
     state.pollTimer = null;
     try {
       const topicReady = await pollTopicOnce();
-      if (!topicReady) pollTopicSoon(attempt + 1);
+      if (!topicReady && state.activeChatId === requestedChatId) pollTopicSoon(attempt + 1);
     } catch {
-      pollTopicSoon(attempt + 1);
+      if (state.activeChatId === requestedChatId) pollTopicSoon(attempt + 1);
     }
-  }, TOPIC_POLL_DELAYS[attempt]);
+  }, TOPIC_POLL_DELAYS[Math.min(attempt, TOPIC_POLL_DELAYS.length - 1)]);
 }
 
 async function pollTopicOnce() {
@@ -7603,6 +7863,7 @@ async function pollTopicOnce() {
     { headers: authHeaders() },
   );
   if (state.activeChatId !== requestedChatId) return false;
+  document.querySelector("#map-analysis-retry").classList.toggle("hidden", payload.analysis_status !== "error");
   if (payload.chat_title) {
     const chat = state.chats.find((item) => item.chat_id === requestedChatId);
     if (chat && chat.title !== payload.chat_title) {
@@ -7613,13 +7874,37 @@ async function pollTopicOnce() {
     document.title = `${payload.chat_title} | FeelY`;
   }
   const suggestion = payload.suggestions?.[0] || payload.suggestion || null;
-  renderTopic(suggestion);
-  return Boolean(suggestion);
+  // Background observations can arrive without a new topic. Avoid resetting
+  // edits in a review dialog on every poll.
+  if (JSON.stringify(state.pendingTopic) !== JSON.stringify(suggestion)) renderTopic(suggestion);
+  const mapSuggestion = payload.map_suggestion || null;
+  if (JSON.stringify(state.pendingMapSuggestion) !== JSON.stringify(mapSuggestion)) renderMapSuggestion(mapSuggestion);
+  const chat = state.chats.find((item) => item.chat_id === requestedChatId);
+  if (chat) { chat.pending_topic = suggestion; chat.pending_map_suggestion = mapSuggestion; }
+  return !["queued", "analysing"].includes(payload.analysis_status);
+
 }
 
 function startPolling() {
-  stopPolling();
-  pollTopicOnce().catch(() => {});
+  document.querySelector("#map-analysis-retry").classList.add("hidden");
+  pollTopicSoon();
+}
+
+async function retryMapAnalysis() {
+  const chatId = state.activeChatId;
+  if (!chatId) return;
+  const button = document.querySelector("#map-analysis-retry");
+  button.disabled = true;
+  try {
+    await api(`/llm/chats/${encodeURIComponent(chatId)}/topic-suggestion/retry`, {
+      method: "POST", headers: authHeaders(),
+    });
+    if (state.activeChatId === chatId) startPolling();
+  } catch {
+    button.textContent = "Could not retry. Try again shortly";
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function stopPolling() {
@@ -7690,9 +7975,28 @@ async function confirmMapSuggestion(accepted) {
   renderMap();
 }
 
+function updateChatReviewNotice(kind, available, label) {
+  const button = document.querySelector(`#${kind}-review`);
+  const dialog = document.querySelector(`#${kind}-review-dialog`);
+  button.classList.toggle("hidden", !available);
+  button.textContent = label;
+  button.title = label;
+  if (!available && dialog.open) {
+    dialog.close();
+    messageInput.focus({ preventScroll: true });
+  }
+}
+
 function autoresizeMessageInput() {
+  const followLatest = messages.scrollHeight - messages.scrollTop - messages.clientHeight < 80;
+  const viewportHeight = window.visualViewport?.height || window.innerHeight;
+  const maxHeight = Math.max(84, Math.min(240, Math.floor(viewportHeight * 0.3)));
+  messageInput.style.maxHeight = `${maxHeight}px`;
   messageInput.style.height = "auto";
-  messageInput.style.height = `${Math.min(messageInput.scrollHeight, 160)}px`;
+  const contentHeight = messageInput.scrollHeight;
+  messageInput.style.height = `${Math.min(contentHeight, maxHeight)}px`;
+  messageInput.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
+  if (followLatest) messages.scrollTop = messages.scrollHeight;
 }
 
 
@@ -8313,6 +8617,25 @@ function mapNodePosition(index) {
     x: Math.min(88, Math.max(12, x + lap * 4)),
     y: Math.min(84, Math.max(16, y + (lap % 2 ? -6 : 6))),
   };
+}
+
+// Mobile has room for two bubbles across. Grow the canvas instead of
+// squeezing additional topics into the same positions.
+function layoutMobileMap(nodes) {
+  const hasOverall = nodes[0]?.id === OVERALL_MAP_NODE_ID;
+  const positions = nodes.map((node, index) => {
+    if (hasOverall && index === 0) return { x: 50, y: 64 };
+    const slot = index - (hasOverall ? 1 : 0);
+    return {
+      x: slot % 2 ? 74 : 26,
+      y: (hasOverall ? 184 : 64) + Math.floor(slot / 2) * 120 + (slot % 2) * 28,
+    };
+  });
+  const height = Math.max(430, ...positions.map((position) => position.y + 76));
+  nodes.forEach((node, index) => {
+    node.position = { x: positions[index].x, y: positions[index].y / height * 100 };
+  });
+  return height;
 }
 
 function createConceptNode(node, index) {
@@ -9604,6 +9927,11 @@ function renderMap() {
   const board = document.createElement("div");
   board.className = "map-concept-board";
   board.setAttribute("aria-label", "Interactive concept map");
+  if (typeof window !== "undefined" && window.matchMedia("(max-width: 900px)").matches) {
+    const height = layoutMobileMap(visibleNodes);
+    board.style.height = `${height}px`;
+    board.style.minHeight = `${height}px`;
+  }
   board.append(createMapConnectionLayer(visibleNodes));
   visibleNodes.forEach((node, index) => board.append(createConceptNode(node, index)));
   if (!visibleNodes.length) {
@@ -9842,6 +10170,13 @@ topicCategory.addEventListener("change", () => {
   if (state.pendingTopic) state.pendingTopic.category = topicCategory.value;
 });
 topicAccept.addEventListener("click", () => confirmTopic(true).catch(renderInlineError));
+for (const kind of ["topic", "map-suggestion"]) {
+  const review = document.querySelector(`#${kind}-review`);
+  const dialog = document.querySelector(`#${kind}-review-dialog`);
+  review.addEventListener("click", () => dialog.showModal());
+  dialog.querySelector("[data-close-chat-review]").addEventListener("click", () => dialog.close());
+}
+
 topicDismiss.addEventListener("click", () => confirmTopic(false).catch(renderInlineError));
 topicTarget.addEventListener("change", () => {
   updateTopicRoutePresentation();
@@ -9930,7 +10265,10 @@ window.addEventListener("resize", () => {
   closeChatActionsMenu();
 });
 window.addEventListener("orientationchange", syncViewportHeight);
-window.visualViewport?.addEventListener("resize", syncViewportHeight);
+window.visualViewport?.addEventListener("resize", () => {
+  syncViewportHeight();
+  autoresizeMessageInput();
+});
 window.addEventListener("beforeunload", () => {
   if (state.journalDirty) saveJournalEntry({ keepalive: true });
 });
@@ -9961,6 +10299,7 @@ document.querySelectorAll("[data-lens]").forEach((button) => {
   });
 });
 messageInput.addEventListener("input", autoresizeMessageInput);
+document.querySelector("#map-analysis-retry").addEventListener("click", retryMapAnalysis);
 messageInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
@@ -10036,6 +10375,7 @@ document.addEventListener("visibilitychange", () => {
 window.addEventListener("resize", () => {
   clearTimeout(mapResizeTimer);
   mapResizeTimer = setTimeout(() => {
+    autoresizeMessageInput();
     if (!mapView.classList.contains("hidden")) renderMap();
   }, 120);
 });
