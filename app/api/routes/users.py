@@ -3,11 +3,14 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_current_premium_user, get_current_user, get_db
+from app.api.dependencies import get_current_map_debug_user, get_current_premium_user, get_current_user, get_db
 from app.core.config import settings
 from app.core.security import hash_password, verify_password
 from app.models.user import User, UserProfile
 from app.schemas.profile import (
+    MapRefreshApply,
+    MapRefreshResult,
+    TopicRefreshPreview,
     MapEntryCreate,
     MapEntryCreateResponse,
     MapEntryDeleteResponse,
@@ -32,9 +35,11 @@ from app.schemas.user import (
     UserRead,
 )
 from app.services.billing import has_premium_feature_access
+from app.services.map_refresh import apply_topic_refresh, map_revision, suggest_topic_refresh
 from app.services.self_authorship import (
     add_map_entry,
     create_topic_space,
+    find_topic_space,
     delete_map_entry,
     delete_topic_space,
     merge_topic_spaces,
@@ -64,6 +69,7 @@ def account_read(user: User) -> UserAccountRead:
         avatar_url=user.avatar_url,
         is_email_verified=user.is_email_verified,
         is_active=user.is_active,
+        role=user.role,
         created_at=user.created_at,
         auth_provider=user.auth_provider,
         google_connected=bool(user.google_sub),
@@ -234,6 +240,41 @@ def read_self_authorship_map(
     return SelfAuthorshipMapRead(**read_map(profile_data))
 
 
+@router.post("/me/map/topics/{topic_space_id}/refresh-preview", response_model=TopicRefreshPreview)
+async def preview_map_topic_refresh(
+    topic_space_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_map_debug_user),
+) -> TopicRefreshPreview:
+    profile = get_or_create_profile(db, current_user)
+    try:
+        topic = find_topic_space(read_map(profile.data), topic_space_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    revision = map_revision(profile.data)
+    suggested = await suggest_topic_refresh(topic)
+    return TopicRefreshPreview(
+        revision=revision,
+        original={key: topic.get(key, "") for key in ("id", "title", "description", "category")},
+        suggested={"id": topic_space_id, **suggested},
+    )
+
+
+@router.post("/me/map/refresh/apply", response_model=MapRefreshResult)
+def apply_map_refresh(
+    payload: MapRefreshApply,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_map_debug_user),
+) -> MapRefreshResult:
+    profile = get_or_create_profile(db, current_user)
+    profile.data = apply_topic_refresh(
+        profile.data, payload.revision, [topic.model_dump() for topic in payload.topics],
+    )
+    db.commit()
+    db.refresh(profile)
+    return MapRefreshResult(revision=map_revision(profile.data), map=read_map(profile.data))
+
+
 @router.post("/me/map/topics", response_model=TopicSpaceResponse)
 def create_map_topic(
     payload: TopicSpaceCreate,
@@ -245,12 +286,13 @@ def create_map_topic(
         profile_data, topic = create_topic_space(
             profile.data,
             title=payload.title,
+            category=payload.category if "category" in payload.model_fields_set else None,
             description=payload.description,
             chat_id=payload.chat_id,
             parent_topic_id=payload.parent_topic_id,
             related_topic_ids=payload.related_topic_ids,
         )
-    except ValueError as exc:
+    except (LookupError, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     profile.data = profile_data
@@ -272,6 +314,7 @@ def change_map_topic(
             profile.data,
             topic_space_id=topic_space_id,
             title=payload.title,
+            category=payload.category,
             description=payload.description,
             parent_topic_id=payload.parent_topic_id,
             update_parent="parent_topic_id" in payload.model_fields_set,

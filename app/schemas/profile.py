@@ -59,17 +59,22 @@ class MapEntryDeleteResponse(BaseModel):
     map: SelfAuthorshipMapRead
 
 
+TopicCategory = Literal["person", "trait", "experience", "other"]
+
+
 class TopicSpaceCreate(BaseModel):
+    category: TopicCategory = "other"
     title: str = Field(min_length=1, max_length=120)
-    description: str = Field(default="", max_length=1000)
+    description: str = Field(default="", max_length=2000)
     chat_id: str | None = Field(default=None, max_length=120)
     parent_topic_id: str | None = Field(default=None, max_length=64)
     related_topic_ids: list[str] = Field(default_factory=list, max_length=24)
 
 
 class TopicSpaceUpdate(BaseModel):
+    category: TopicCategory | None = None
     title: str | None = Field(default=None, min_length=1, max_length=120)
-    description: str | None = Field(default=None, max_length=1000)
+    description: str | None = Field(default=None, max_length=2000)
     parent_topic_id: str | None = Field(default=None, max_length=64)
     related_topic_ids: list[str] | None = Field(default=None, max_length=24)
 
@@ -96,4 +101,27 @@ class PracticeUpdate(BaseModel):
 
 class PracticeUpdateResponse(BaseModel):
     practice: dict[str, Any]
+    map: SelfAuthorshipMapRead
+
+
+class TopicRefreshUpdate(BaseModel):
+    id: str = Field(min_length=1, max_length=64)
+    title: str = Field(min_length=1, max_length=120)
+    description: str = Field(max_length=2000)
+    category: TopicCategory
+
+
+class MapRefreshApply(BaseModel):
+    revision: str = Field(min_length=64, max_length=64)
+    topics: list[TopicRefreshUpdate] = Field(min_length=1, max_length=200)
+
+
+class TopicRefreshPreview(BaseModel):
+    revision: str
+    original: TopicRefreshUpdate
+    suggested: TopicRefreshUpdate
+
+
+class MapRefreshResult(BaseModel):
+    revision: str
     map: SelfAuthorshipMapRead

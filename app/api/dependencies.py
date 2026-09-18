@@ -87,28 +87,37 @@ def get_current_premium_user(
     return current_user
 
 
+def get_current_map_debug_user(
+    current_user: User = Depends(get_current_premium_user),
+) -> User:
+    if current_user.role not in ("admin", "test"):
+        raise HTTPException(status_code=403, detail="Map debug tools require an admin or test account.")
+    return current_user
+
+
 def get_current_admin(
     token: str = Depends(admin_oauth2_scheme),
+    db: Session = Depends(get_db),
 ) -> str:
     credentials_error = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate administrator credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    configured_username = (settings.admin_username or "").strip()
-    if not configured_username or not settings.admin_password_hash:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Administrator login is not configured.",
-        )
     try:
         payload = decode_access_token(token)
-        subject = str(payload.get("sub") or "")
-        if payload.get("token_type") != "admin" or not hmac.compare_digest(
-            subject,
-            configured_username,
-        ):
+        if payload.get("token_type") != "admin":
             raise credentials_error
-    except InvalidTokenError:
+        if "admin_user_id" in payload:
+            user = db.get(User, int(payload["admin_user_id"]))
+            if user is None or not user.is_active or user.role != "admin":
+                raise credentials_error
+            return user.username
+        configured_username = (settings.admin_username or "").strip()
+        if not configured_username or not settings.admin_password_hash:
+            raise credentials_error
+        if not hmac.compare_digest(str(payload.get("sub") or ""), configured_username):
+            raise credentials_error
+    except (InvalidTokenError, ValueError, TypeError):
         raise credentials_error from None
     return configured_username

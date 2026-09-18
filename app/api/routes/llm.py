@@ -45,6 +45,7 @@ from app.services.self_authorship import (
     profile_data_for_access,
     read_map,
     record_conversation_memory,
+    update_topic_space,
 )
 
 router = APIRouter()
@@ -523,6 +524,7 @@ async def analyse_chat_for_topic(
             {
                 "id": space.get("id"),
                 "title": space.get("title"),
+                "category": space.get("category", "other"),
                 "description": space.get("description", ""),
                 "parent_topic_id": space.get("parent_topic_id"),
             }
@@ -552,6 +554,7 @@ async def analyse_chat_for_topic(
                     result.topic,
                     result.description,
                     available_topics,
+                    category=result.category,
                 )
                 if local_existing_topic_id is not None:
                     result.existing_topic_id = local_existing_topic_id
@@ -567,10 +570,12 @@ async def analyse_chat_for_topic(
                     {
                         "id": suggestion["suggestion_id"],
                         "title": suggestion["topic"],
+                        "category": suggestion["category"],
                         "description": suggestion["description"],
                     }
                     for suggestion in pending_topics
                 ],
+                category=result.category,
             ):
                 continue
             target_key = (
@@ -587,6 +592,11 @@ async def analyse_chat_for_topic(
                     "chat_id": chat_id,
                     "topic": result.topic,
                     "description": result.description,
+                    "category": result.category,
+                    "related_topic_ids": [
+                        topic_id for topic_id in result.related_topic_ids
+                        if topic_id in available_topic_ids and topic_id != result.existing_topic_id
+                    ],
                     "confidence": analysis.confidence,
                     "matched_patterns": analysis.matched_patterns,
                     "topic_hint": analysis.topic_hint,
@@ -993,6 +1003,8 @@ def confirm_topic(
                         profile_data,
                         title=payload.topic,
                         description=payload.description,
+                        category=payload.category,
+                        related_topic_ids=payload.related_topic_ids,
                         chat_id=payload.chat_id,
                         parent_topic_id=payload.parent_topic_space_id,
                     )
@@ -1001,6 +1013,20 @@ def confirm_topic(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail=str(exc),
                     ) from exc
+
+            if payload.existing_topic_space_id and (
+                payload.related_topic_ids or "category" in payload.model_fields_set
+            ):
+                try:
+                    profile_data, topic_space = update_topic_space(
+                        profile_data, topic_space_id=topic_space["id"],
+                        category=payload.category if "category" in payload.model_fields_set else None,
+                        related_topic_ids=list(dict.fromkeys([
+                            *topic_space.get("related_topic_ids", []), *payload.related_topic_ids,
+                        ])), update_related=True,
+                    )
+                except (LookupError, ValueError) as exc:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
             topics = list(profile_data.get("topics", []))
             topic_entry = {

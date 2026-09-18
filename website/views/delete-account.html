@@ -1,0 +1,17 @@
+<dialog id="delete-account-dialog" class="app-dialog confirm-dialog" aria-labelledby="delete-account-title" aria-describedby="delete-account-copy">
+  <form id="delete-account-form" method="dialog" novalidate>
+    <button class="dialog-close" type="button" data-close-dialog="delete-account-dialog" aria-label="Close">&times;</button>
+    <p class="eyebrow">Delete account</p>
+    <h2 id="delete-account-title">Delete your account?</h2>
+    <p id="delete-account-copy">Your account and all conversations will be permanently deleted. This cannot be undone.</p>
+    <label id="delete-account-password-field" class="delete-account-password-field">
+      Enter your password to confirm
+      <input id="delete-account-password" type="password" autocomplete="current-password" />
+    </label>
+    <p id="delete-account-status" class="form-error" role="alert"></p>
+    <div class="confirm-dialog-actions">
+      <button class="secondary-button" type="button" data-close-dialog="delete-account-dialog" autofocus>Keep account</button>
+      <button id="confirm-delete-account" class="primary-button danger-button" type="submit">Delete account permanently</button>
+    </div>
+  </form>
+</dialog>

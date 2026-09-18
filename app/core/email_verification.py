@@ -42,7 +42,7 @@ def email_verification_is_expired(sent_at: datetime | None) -> bool:
 
 def email_verification_link(token: str) -> str:
     app_url = settings.public_app_url.rstrip("/")
-    return f"{app_url}/chat.html?verify_email_token={quote(token)}"
+    return f"{app_url}/?verify_email_token={quote(token)}"
 
 
 def send_email_verification_message(user: User, token: str) -> None:

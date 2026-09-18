@@ -132,12 +132,13 @@ def test_daily_journal_is_premium_autosave_ready_and_user_confirmed(client):
     saved_topic = client.post(
         f"/api/v1/journal/entries/2026-08-31/suggestions/{topic['id']}",
         headers=headers,
-        json={"accepted": True},
+        json={"accepted": True, "topic_category": "experience"},
     )
     assert saved_topic.status_code == 200
     topic_id = saved_topic.json()["suggestion"]["saved_item_id"]
     created_topic = saved_topic.json()["map"]["topic_spaces"][0]
     assert created_topic["journal_dates"] == ["2026-08-31"]
+    assert created_topic["category"] == "experience"
 
     map_entry = next(suggestion for suggestion in suggestions if suggestion["kind"] == "map_entry")
     saved_entry = client.post(

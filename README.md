@@ -98,7 +98,7 @@ Daily start, terminal 2:
 ```
 
 Then open `http://127.0.0.1:5500`; the root page redirects directly to
-`http://127.0.0.1:5500/chat.html`.
+`http://127.0.0.1:5500/`.
 
 The API runs at `http://127.0.0.1:8000`.
 API documentation is disabled by default. For local development with the public
@@ -106,8 +106,9 @@ tunnel stopped, set `API_DOCS_ENABLED=true` and restart to use `/docs`.
 
 ### Administrator login
 
-The administration page uses its own credentials and is not connected to a
-FeelY user account. After creating `.env`, configure or change the administrator
+The administration page accepts configured administrator credentials or a FeelY
+account with the Admin role. Its login token remains separate from normal user
+tokens. After creating `.env`, configure the initial administrator
 password from the repository root:
 
 ```powershell
@@ -124,6 +125,20 @@ Restart Uvicorn after running the command. Then open
 `http://127.0.0.1:5500/admin.html` locally, or
 `https://app.feel-y.com/admin.html` in production, and sign in using the chosen
 username and the original password (not the hash).
+
+In the admin page, create accounts or change their role to Member, Test, or Admin.
+Test and Admin accounts can use the map debug preview; only Admin accounts can
+manage users and prompts. Premium access remains separate from roles.
+
+### Editing the frontend
+
+See [the frontend editing guide](website/EDITING.md) for the HTML and JavaScript
+file for each feature. Edit `website/views/chat.html`, `website/views/map.html`,
+or `website/views/journal.html`. The small `website/shell.html` defines the shared
+layout. The FeelY website server assembles all views, styles, and scripts into
+one response. For a basic static server, run
+`.venv\Scripts\python.exe scripts/build_frontend.py` after edits to update the
+standalone `website/index.html`. The launcher runs this automatically.
 
 ### Important
 
@@ -431,7 +446,7 @@ PUBLIC_APP_URL="https://app.feel-y.com"
 
 Restart FastAPI after editing `.env`. The login page's **Forgot password?**
 action always gives the same response whether an address exists or not. For a
-matching active account, it emails a one-time link back to `chat.html`; the link
+matching active account, it emails a one-time link back to the website root; the link
 expires after the configured number of minutes. Keep
 `PASSWORD_RESET_ENABLED=false` until SMTP delivery has been tested.
 
@@ -515,6 +530,13 @@ When an authenticated user calls `POST /api/v1/llm/message`, the backend:
 11. Optionally proposes one editable My Map entry from the newest user message.
 12. Writes that entry only after explicit user confirmation.
 
+Map topics have an editable type: Person, Trait, Experience, or Other. My Map uses
+its existing floating topic bubbles and filters for these types, with short descriptions in the selected
+topic's detail card. Existing topics without a type appear under Other until edited.
+Chat and journal prompts favor simple 1-4 word names and brief descriptions grounded
+in the user's account. Chat suggestions can propose connections to existing topics;
+the user can review those connections before saving, or use Edit & connect later.
+
 Patterns are an analysis trigger, not a fixed topic taxonomy. The Topic-LLM can
 create its own free-form topic from the compact conversation memory. Longer chats
 that do not match a predefined category can also enter open-topic analysis.
@@ -537,7 +559,7 @@ The frontend lives in `website/` and calls the API at
 `http://127.0.0.1:8000/api/v1` by default.
 
 Login, registration, account management, billing, conversations, and My Map live
-in `website/chat.html`. The standalone marketing pages were moved out of this
+in `website/index.html`. The standalone marketing pages were moved out of this
 backend repository; embed or copy this app page from the repository that owns the
 public website.
 

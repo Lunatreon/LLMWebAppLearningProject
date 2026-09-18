@@ -1936,6 +1936,8 @@ def test_ollama_clients_use_local_chat_api_and_structured_json_contract():
     assert topic_body["format"]["required"] == [
         "topic",
         "description",
+        "category",
+        "related_topic_ids",
         "existing_topic_id",
         "parent_topic_id",
         "additional_topics",
@@ -2070,3 +2072,116 @@ def test_json_parser_accepts_markdown_fenced_provider_output():
     assert parse_json_response('```json\n{"topic": "Autonomy"}\n```') == {
         "topic": "Autonomy"
     }
+
+
+def test_topic_categories_and_connections_survive_suggestion_confirmation(monkeypatch, client):
+    client.post('/api/v1/auth/register', json={
+        'email': 'typed-map@example.com', 'username': 'typed_map', 'password': 'super-secret',
+    })
+    token = client.post('/api/v1/auth/login', json={
+        'email_or_username': 'typed_map', 'password': 'super-secret',
+    }).json()['access_token']
+    headers = {'Authorization': f'Bearer {token}'}
+    grant_premium_access(client, 'typed-map@example.com')
+    healing = client.post('/api/v1/users/me/map/topics', headers=headers, json={
+        'title': 'Healing', 'category': 'experience', 'description': 'You are finding your footing again.',
+    }).json()['topic']
+
+    class PersonalTopicClient:
+        async def create_topic(self, **kwargs):
+            assert kwargs['available_topics'][0]['category'] == 'experience'
+            return TopicLLMResult(
+                topic='Girlfriend', category='person',
+                description='You feel supported by her as you find your footing again.',
+                related_topic_ids=[healing['id'], 'invented-id'],
+                additional_topics=[TopicLLMResult(
+                    topic='Steady', category='trait', description='You describe staying calm when things change.',
+                )],
+            )
+
+    monkeypatch.setattr(llm_routes, 'get_topic_llm_client', PersonalTopicClient)
+    monkeypatch.setattr(llm_routes, 'ChatAnalyser', lambda: SimpleNamespace(
+        analyse=lambda _: SimpleNamespace(should_create_topic=True, matched_patterns=['support'],
+                                         topic_hint='support', confidence=0.9),
+    ))
+    message = client.post('/api/v1/llm/message', headers=headers, json={
+        'context': 'My girlfriend supports me as I heal. I also stay calm when things change.',
+    }).json()
+    chat_id = message['chat_id']
+    suggestions = client.get(f'/api/v1/llm/chats/{chat_id}/topic-suggestion', headers=headers).json()['suggestions']
+    assert [s['category'] for s in suggestions] == ['person', 'trait']
+    assert suggestions[0]['related_topic_ids'] == [healing['id']]
+    for suggestion in suggestions:
+        response = client.post('/api/v1/llm/topics/confirm', headers=headers, json={
+            'chat_id': chat_id, 'topic': suggestion['topic'], 'description': suggestion['description'],
+            'category': suggestion['category'], 'related_topic_ids': suggestion['related_topic_ids'],
+        })
+        assert response.status_code == 200
+    saved = client.get('/api/v1/users/me/map', headers=headers).json()['topic_spaces']
+    by_title = {topic['title']: topic for topic in saved}
+    girlfriend = by_title['Girlfriend']
+    assert girlfriend['category'] == 'person'
+    assert by_title['Steady']['category'] == 'trait'
+    assert girlfriend['related_topic_ids'] == [healing['id']]
+    assert by_title['Healing']['related_topic_ids'] == [girlfriend['id']]
+    # Editing a description must preserve its type and links.
+    url = f"/api/v1/users/me/map/topics/{girlfriend['id']}"
+    edited = client.patch(url, headers=headers, json={'description': 'You feel heard by her.'}).json()['topic']
+    assert edited['category'] == 'person'
+    assert edited['related_topic_ids'] == [healing['id']]
+    assert client.patch(url, headers=headers, json={'category': 'invalid'}).status_code == 422
+    assert client.patch(url, headers=headers, json={'category': 'other'}).json()['topic']['category'] == 'other'
+    # Choosing a type while connecting to an existing topic must save it too.
+    connected = client.post('/api/v1/llm/topics/confirm', headers=headers, json={
+        'chat_id': chat_id, 'topic': 'A detected aspect', 'description': 'A suggestion.',
+        'existing_topic_space_id': girlfriend['id'], 'category': 'person',
+    })
+    assert connected.status_code == 200
+    saved = client.get('/api/v1/users/me/map', headers=headers).json()['topic_spaces']
+    restored = next(topic for topic in saved if topic['id'] == girlfriend['id'])
+    assert restored['category'] == 'person'
+    assert restored['title'] == 'Girlfriend'
+    assert restored['description'] == 'You feel heard by her.'
+    assert restored['related_topic_ids'] == [healing['id']]
+    # Older clients that omit category must not reset a saved type to Other.
+    connected = client.post('/api/v1/llm/topics/confirm', headers=headers, json={
+        'chat_id': chat_id, 'topic': 'Another aspect', 'description': 'A suggestion.',
+        'existing_topic_space_id': girlfriend['id'], 'related_topic_ids': [healing['id']],
+    })
+    assert connected.status_code == 200
+    saved = client.get('/api/v1/users/me/map', headers=headers).json()['topic_spaces']
+    assert next(topic for topic in saved if topic['id'] == girlfriend['id'])['category'] == 'person'
+    # A bad connection cannot partially save a new topic.
+    invalid = client.post('/api/v1/llm/topics/confirm', headers=headers, json={
+        'chat_id': chat_id, 'topic': 'New topic', 'description': 'A description.',
+        'related_topic_ids': ['missing'],
+    })
+    assert invalid.status_code == 400
+    assert len(client.get('/api/v1/users/me/map', headers=headers).json()['topic_spaces']) == 3
+
+
+def test_typed_topic_parsing_is_backward_compatible_and_matching_keeps_people_distinct():
+    from app.services.llm import TOPIC_RESPONSE_SCHEMA
+    from app.services.self_authorship import read_map
+
+    legacy = topic_result_from_payload({'topic': 'Music', 'description': 'You enjoy playing.'})
+    assert legacy.category == 'other'
+    assert legacy.related_topic_ids == []
+    parsed = topic_result_from_payload({
+        'topic': 'Dad', 'description': 'You feel close.', 'category': 'person',
+        'related_topic_ids': ['one', 'one', None, 12],
+        'additional_topics': [{'topic': 'Curious', 'description': 'You enjoy exploring.', 'category': 'trait'}],
+    })
+    assert parsed.category == 'person'
+    assert parsed.related_topic_ids == ['one']
+    assert parsed.additional_topics[0].category == 'trait'
+    assert topic_result_from_payload({'topic': 'Music', 'description': 'You enjoy it.', 'category': []}).category == 'other'
+    profile = {'self_authorship_map': {'topic_spaces': [{'id': 'legacy', 'title': 'Music'}]}}
+    assert read_map(profile)['topic_spaces'][0]['category'] == 'other'
+    assert 'category' not in profile['self_authorship_map']['topic_spaces'][0]
+    assert best_existing_topic_match('Slow to trust', 'Trust comes slowly.', [{
+        'id': 'person', 'title': 'Slow to trust', 'description': 'Trust comes slowly.', 'category': 'person',
+    }], category='trait') is None
+    for schema in [TOPIC_RESPONSE_SCHEMA, TOPIC_RESPONSE_SCHEMA['properties']['additional_topics']['items']]:
+        assert len(schema['required']) == len(set(schema['required']))
+        assert set(schema['required']) == set(schema['properties'])

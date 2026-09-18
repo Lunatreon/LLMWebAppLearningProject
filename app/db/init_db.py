@@ -13,6 +13,7 @@ def ensure_sqlite_user_columns() -> None:
         return
 
     column_definitions = {
+        "role": "VARCHAR(16) NOT NULL DEFAULT 'member'",
         "display_name": "VARCHAR(120)",
         "bio": "VARCHAR(500)",
         "avatar_url": "VARCHAR(500)",

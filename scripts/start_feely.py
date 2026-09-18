@@ -66,6 +66,7 @@ def main():
         for port in (8000, 5500):
             if port_open(port):
                 raise RuntimeError(f"Port {port} is already in use. Stop the existing server before starting FeelY.")
+        subprocess.run([sys.executable, str(ROOT / "scripts" / "build_frontend.py")], check=True, cwd=ROOT)
         if args.check:
             print("Startup checks passed. No services were started.")
             return 0

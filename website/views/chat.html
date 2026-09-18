@@ -1,0 +1,141 @@
+<section id="conversation-view" class="conversation">
+  <header class="conversation-header workspace-header">
+    <div class="conversation-heading">
+      <button
+        id="sidebar-toggle"
+        class="icon-button sidebar-toggle"
+        type="button"
+        title="Open conversations"
+        aria-label="Open conversations"
+      >
+        <span aria-hidden="true">&#9776;</span>
+      </button>
+      <div>
+        <p class="eyebrow">Current reflection</p>
+        <h2 id="chat-title">New conversation</h2>
+      </div>
+    </div>
+    <button
+      class="theme-toggle header-theme-toggle"
+      type="button"
+      role="switch"
+      aria-checked="false"
+      aria-label="Use light appearance"
+      title="Use light appearance"
+      data-theme-toggle
+    >
+      <span aria-hidden="true">&#9790;</span>
+      <span aria-hidden="true">&#9728;</span>
+    </button>
+  </header>
+
+  <div id="messages" class="messages" aria-live="polite"></div>
+
+  <footer class="composer-zone">
+    <section id="map-suggestion-card" class="map-suggestion-card hidden" aria-live="polite">
+      <div class="suggestion-heading">
+        <div>
+          <p class="eyebrow">Add to My Map?</p>
+          <span id="map-suggestion-category" class="suggestion-category"></span>
+        </div>
+        <span id="map-suggestion-topic" class="suggestion-topic"></span>
+      </div>
+      <label id="map-suggestion-target-field" class="suggestion-target-field hidden">
+        <span>Save under</span>
+        <select id="map-suggestion-target" aria-label="Topic for this map suggestion"></select>
+      </label>
+      <textarea id="map-suggestion-text" rows="2" aria-label="Edit map suggestion"></textarea>
+      <p id="map-suggestion-reason" class="suggestion-reason"></p>
+      <div class="suggestion-actions">
+        <button id="map-suggestion-dismiss" class="secondary-button" type="button">Not now</button>
+        <button id="map-suggestion-accept" class="primary-button small" type="button">Save to map</button>
+      </div>
+    </section>
+
+    <section id="topic-card" class="topic-card hidden" aria-live="polite">
+      <div class="topic-copy">
+        <span class="topic-mark" aria-hidden="true">&#10022;</span>
+        <div class="topic-proposal">
+          <div class="topic-eyebrow-row">
+            <p class="eyebrow">A possible thread</p>
+            <span id="topic-queue-status" class="topic-queue-status hidden"></span>
+          </div>
+          <label class="topic-field">
+            <span id="topic-name-label">New topic name</span>
+            <input id="topic-title" type="text" maxlength="120" />
+          </label>
+          <div class="topic-field">
+            <span>Topic type</span>
+            <select id="topic-category">
+              <option value="person">Person</option>
+              <option value="trait">Trait</option>
+              <option value="experience">Experience</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <label class="topic-field">
+            <span>Description</span>
+            <textarea id="topic-description" rows="2" maxlength="2000"></textarea>
+          </label>
+        </div>
+      </div>
+      <div id="topic-routing" class="topic-routing hidden">
+        <label>
+          <span>Connect this part of the chat to</span>
+          <select id="topic-target" aria-label="Connect this chat to a topic"></select>
+        </label>
+        <span id="topic-match-badge" class="topic-match-badge hidden">Recommended match</span>
+        <p id="topic-route-hint" class="topic-route-hint"></p>
+        <label id="topic-parent-field">
+          <span>Optional broader topic</span>
+          <select id="topic-parent" aria-label="Parent topic"></select>
+        </label>
+      </div>
+      <div id="topic-connections"></div>
+      <div class="topic-actions">
+        <button id="topic-dismiss" class="secondary-button" type="button">Not this</button>
+        <button id="topic-accept" class="primary-button small" type="button">Save topic</button>
+      </div>
+    </section>
+
+    <section id="lens-panel" class="lens-panel hidden" aria-label="Reflection lenses">
+      <button type="button" data-lens="What actually happened, and what evidence do I have?">
+        <strong>Data</strong><span>What happened?</span>
+      </button>
+      <button type="button" data-lens="What do I notice in my body as I think about this?">
+        <strong>Body</strong><span>What do I sense?</span>
+      </button>
+      <button type="button" data-lens="If I trusted my own perception, what response becomes possible?">
+        <strong>Imagination</strong><span>What else is possible?</span>
+      </button>
+    </section>
+
+    <form id="message-form" class="message-form" method="post">
+      <textarea
+        id="message-input"
+        rows="1"
+        placeholder="Write what is on your mind..."
+        aria-label="Message FeelY"
+      ></textarea>
+      <button
+        id="send-button"
+        class="send-button"
+        type="submit"
+        title="Send message"
+        aria-label="Send message"
+      >
+        <span aria-hidden="true">&#8593;</span>
+      </button>
+    </form>
+    <div class="composer-meta">
+      <button id="lens-toggle" class="lens-toggle" type="button" aria-expanded="false">Three lenses</button>
+      <span id="chat-plan-note" class="chat-plan-note">
+        <span id="chat-plan-copy">Free plan - 10 messages per day.</span>
+        <button id="chat-plan-upgrade" class="chat-plan-upgrade" type="button">
+          Want more? Click here.
+        </button>
+      </span>
+      <p class="composer-note">FeelY can help you reflect, but it is not emergency or medical care.</p>
+    </div>
+  </footer>
+</section>

@@ -42,7 +42,7 @@ def password_reset_is_expired(sent_at: datetime | None) -> bool:
 
 def password_reset_link(token: str) -> str:
     app_url = settings.public_app_url.rstrip("/")
-    return f"{app_url}/chat.html?reset_password_token={quote(token)}"
+    return f"{app_url}/?reset_password_token={quote(token)}"
 
 
 def send_password_reset_message(user: User, token: str) -> None:

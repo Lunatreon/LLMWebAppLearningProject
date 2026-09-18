@@ -247,6 +247,7 @@ def decide_journal_suggestion(
                         profile.data,
                         title=title,
                         description=description,
+                        category=payload.topic_category or suggestion.get("topic_category"),
                         journal_date=normalized_date,
                     )
             except LookupError as exc:
@@ -270,6 +271,8 @@ def decide_journal_suggestion(
         profile.data = profile_data
         suggestion["status"] = "saved"
         suggestion["saved_item_id"] = saved_item["id"]
+        if suggestion.get("kind") == "topic":
+            suggestion["topic_category"] = saved_item.get("category", "other")
 
     analysis["suggestions"] = suggestions
     entry.analysis = analysis

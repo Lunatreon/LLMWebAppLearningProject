@@ -24,6 +24,7 @@ class UserRead(BaseModel):
     bio: str | None = None
     avatar_url: str | None = None
     is_email_verified: bool = False
+    role: str = "member"
     is_active: bool
     created_at: datetime
 

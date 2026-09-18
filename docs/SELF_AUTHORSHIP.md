@@ -178,5 +178,5 @@ content.
 8. `PATCH /api/v1/users/me/map/practices/{entry_id}` changes a practice state
    and optionally records a reflection.
 
-The frontend implementation is in `website/chat.html`, `website/app.js`, and
+The frontend implementation is in `website/index.html`, `website/app.js`, and
 `website/styles.css`.

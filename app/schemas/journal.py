@@ -3,12 +3,15 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.profile import TopicCategory
+
 
 JournalSuggestionKind = Literal["topic", "map_entry"]
 JournalSuggestionStatus = Literal["pending", "saved", "dismissed"]
 
 
 class JournalSuggestion(BaseModel):
+    topic_category: TopicCategory = "other"
     id: str
     kind: JournalSuggestionKind
     category: str
@@ -50,6 +53,7 @@ class JournalAnalysisResponse(BaseModel):
 
 
 class JournalSuggestionDecision(BaseModel):
+    topic_category: TopicCategory | None = None
     accepted: bool = True
     category: str | None = Field(default=None, max_length=40)
     title: str | None = Field(default=None, max_length=120)

@@ -14,7 +14,7 @@ import httpx
 from fastapi import HTTPException, status
 
 from app.core.config import settings
-from app.services.self_authorship import LLM_PROTECTED_PROFILE_FIELDS
+from app.services.self_authorship import LLM_PROTECTED_PROFILE_FIELDS, normalize_topic_category
 
 logger = logging.getLogger(__name__)
 ollama_generation_lock = asyncio.Lock()
@@ -458,6 +458,7 @@ def best_existing_topic_match(
     topic: str,
     description: str,
     available_topics: list[dict[str, Any]] | None,
+    category: str = "other",
 ) -> str | None:
     """Find a clear existing home for a differently named but similar topic.
 
@@ -472,6 +473,9 @@ def best_existing_topic_match(
     best_score = 0.0
 
     for candidate in available_topics or []:
+        candidate_category = normalize_topic_category(candidate.get("category"))
+        if category != "other" and candidate_category not in (category, "other"):
+            continue
         candidate_id = candidate.get("id")
         if not isinstance(candidate_id, str) or not candidate_id:
             continue
@@ -521,6 +525,8 @@ class TopicLLMResult:
     existing_topic_id: str | None = None
     parent_topic_id: str | None = None
     additional_topics: list["TopicLLMResult"] = field(default_factory=list)
+    category: str = "other"
+    related_topic_ids: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -830,6 +836,7 @@ class LocalTopicLLMClient:
 PROMPT_FILENAMES = {
     "chat": "chat_system.txt",
     "topic": "topic_system.txt",
+    "map_refresh": "map_refresh_system.txt",
     "journal": "journal_system.txt",
 }
 
@@ -913,6 +920,8 @@ TOPIC_RESPONSE_SCHEMA = {
     "properties": {
         "topic": {"type": "string"},
         "description": {"type": "string"},
+        "category": {"type": "string", "enum": ["person", "trait", "experience", "other"]},
+        "related_topic_ids": {"type": "array", "items": {"type": "string"}, "maxItems": 24},
         "existing_topic_id": {
             "anyOf": [{"type": "string"}, {"type": "null"}],
         },
@@ -927,6 +936,8 @@ TOPIC_RESPONSE_SCHEMA = {
                 "properties": {
                     "topic": {"type": "string"},
                     "description": {"type": "string"},
+                    "category": {"type": "string", "enum": ["person", "trait", "experience", "other"]},
+                    "related_topic_ids": {"type": "array", "items": {"type": "string"}, "maxItems": 24},
                     "existing_topic_id": {
                         "anyOf": [{"type": "string"}, {"type": "null"}],
                     },
@@ -937,6 +948,8 @@ TOPIC_RESPONSE_SCHEMA = {
                 "required": [
                     "topic",
                     "description",
+                    "category",
+                    "related_topic_ids",
                     "existing_topic_id",
                     "parent_topic_id",
                 ],
@@ -947,6 +960,8 @@ TOPIC_RESPONSE_SCHEMA = {
     "required": [
         "topic",
         "description",
+        "category",
+        "related_topic_ids",
         "existing_topic_id",
         "parent_topic_id",
         "additional_topics",
@@ -977,11 +992,12 @@ JOURNAL_RESPONSE_SCHEMA = {
                             "evidence",
                         ],
                     },
+                    "topic_category": {"type": "string", "enum": ["person", "trait", "experience", "other"]},
                     "title": {"type": "string"},
                     "text": {"type": "string"},
                     "reason": {"type": "string"},
                 },
-                "required": ["kind", "category", "title", "text", "reason"],
+                "required": ["kind", "category", "topic_category", "title", "text", "reason"],
                 "additionalProperties": False,
             },
         }
@@ -1069,6 +1085,13 @@ def chat_result_from_payload(payload: dict[str, Any]) -> ChatLLMResult:
     )
 
 
+def topic_related_ids(payload: dict[str, Any]) -> list[str]:
+    ids = payload.get("related_topic_ids")
+    if not isinstance(ids, list):
+        return []
+    return list(dict.fromkeys(value for value in ids if isinstance(value, str) and value))[:24]
+
+
 def topic_result_from_payload(payload: dict[str, Any]) -> TopicLLMResult:
     topic = payload.get("topic")
     description = payload.get("description")
@@ -1097,6 +1120,8 @@ def topic_result_from_payload(payload: dict[str, Any]) -> TopicLLMResult:
                 TopicLLMResult(
                     topic=additional_topic[:120],
                     description=additional_description[:2000],
+                    category=normalize_topic_category(raw_topic.get("category")),
+                    related_topic_ids=topic_related_ids(raw_topic),
                     existing_topic_id=(
                         additional_existing_topic_id
                         if isinstance(additional_existing_topic_id, str)
@@ -1112,6 +1137,8 @@ def topic_result_from_payload(payload: dict[str, Any]) -> TopicLLMResult:
     return TopicLLMResult(
         topic=topic[:120],
         description=description[:2000],
+        category=normalize_topic_category(payload.get("category")),
+        related_topic_ids=topic_related_ids(payload),
         existing_topic_id=existing_topic_id if isinstance(existing_topic_id, str) else None,
         parent_topic_id=parent_topic_id if isinstance(parent_topic_id, str) else None,
         additional_topics=additional_topics,
@@ -1147,6 +1174,7 @@ def journal_result_from_payload(payload: dict[str, Any]) -> JournalLLMResult:
                 {
                     "kind": "topic",
                     "category": "topic",
+                    "topic_category": normalize_topic_category(raw.get("topic_category")),
                     "title": title.strip()[:120],
                     "text": text.strip()[:1000],
                     "reason": reason.strip()[:1000],

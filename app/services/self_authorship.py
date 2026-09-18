@@ -4,6 +4,13 @@ from typing import Any
 from uuid import uuid4
 
 MAP_KEY = "self_authorship_map"
+TOPIC_CATEGORIES = {"person", "trait", "experience", "other"}
+
+
+def normalize_topic_category(value: Any) -> str:
+    return value if isinstance(value, str) and value in TOPIC_CATEGORIES else "other"
+
+
 ENTRY_CATEGORIES = {
     "inherited_script",
     "merged_topic",
@@ -59,6 +66,7 @@ def read_map(profile_data: dict[str, Any] | None) -> dict[str, Any]:
     for space in result["topic_spaces"]:
         if not isinstance(space, dict):
             continue
+        space["category"] = normalize_topic_category(space.get("category"))
         space_id = str(space.get("id") or "")
         parent_id = space.get("parent_topic_id")
         space["parent_topic_id"] = (
@@ -221,6 +229,8 @@ def create_or_link_topic_space(
     title: str,
     description: str,
     chat_id: str,
+    category: str = "other",
+    related_topic_ids: list[str] | None = None,
     parent_topic_id: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     map_data = read_map(profile_data)
@@ -234,6 +244,11 @@ def create_or_link_topic_space(
         if chat_id not in chat_ids:
             chat_ids.append(chat_id)
         space["chat_ids"] = chat_ids
+        if related_topic_ids:
+            set_related_topics(
+                map_data, topic_space=space,
+                related_topic_ids=list(dict.fromkeys([*space["related_topic_ids"], *related_topic_ids])),
+            )
         if description.strip() and not space.get("description"):
             space["description"] = description.strip()
         if parent_topic_id is not None:
@@ -251,6 +266,7 @@ def create_or_link_topic_space(
         "title": title.strip(),
         "description": description.strip(),
         "chat_ids": [chat_id],
+        "category": normalize_topic_category(category),
         "entries": [],
         "parent_topic_id": parent_topic_id,
         "related_topic_ids": [],
@@ -263,6 +279,8 @@ def create_or_link_topic_space(
         parent_topic_id=parent_topic_id,
     )
     map_data["topic_spaces"].append(space)
+    if related_topic_ids:
+        set_related_topics(map_data, topic_space=space, related_topic_ids=related_topic_ids)
     return write_map(profile_data, map_data), space
 
 
@@ -271,6 +289,7 @@ def create_topic_space(
     *,
     title: str,
     description: str = "",
+    category: str | None = None,
     chat_id: str | None = None,
     journal_date: str | None = None,
     parent_topic_id: str | None = None,
@@ -298,6 +317,8 @@ def create_topic_space(
             space["journal_dates"] = journal_dates
         if description.strip():
             space["description"] = description.strip()
+        if category is not None:
+            space["category"] = normalize_topic_category(category)
         if parent_topic_id is not None:
             validate_parent_topic(
                 map_data,
@@ -319,6 +340,7 @@ def create_topic_space(
         "title": title.strip(),
         "description": description.strip(),
         "chat_ids": [chat_id] if chat_id else [],
+        "category": normalize_topic_category(category),
         "journal_dates": [journal_date] if journal_date else [],
         "entries": [],
         "parent_topic_id": parent_topic_id,
@@ -379,6 +401,7 @@ def update_topic_space(
     topic_space_id: str,
     title: str | None = None,
     description: str | None = None,
+    category: str | None = None,
     parent_topic_id: str | None = None,
     update_parent: bool = False,
     related_topic_ids: list[str] | None = None,
@@ -396,6 +419,8 @@ def update_topic_space(
             space["title"] = cleaned_title
         if description is not None:
             space["description"] = description.strip()
+        if category is not None:
+            space["category"] = normalize_topic_category(category)
         if update_parent:
             validate_parent_topic(
                 map_data,

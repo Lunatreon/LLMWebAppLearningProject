@@ -1,0 +1,148 @@
+<dialog id="account-dialog" class="app-dialog account-dialog">
+  <button
+    class="dialog-close account-dialog-close"
+    type="button"
+    data-close-dialog="account-dialog"
+    aria-label="Close"
+  >
+    &times;
+  </button>
+  <header class="account-dialog-header">
+    <span id="account-dialog-avatar" class="account-dialog-avatar" aria-hidden="true">Y</span>
+    <div>
+      <p class="eyebrow eyebrow-light">Account settings</p>
+      <h2>Your FeelY space</h2>
+      <p>Manage your profile, security, and subscription in one place.</p>
+    </div>
+  </header>
+
+  <div class="account-dialog-body">
+    <form id="account-form" class="account-section" method="dialog">
+      <div class="account-section-heading">
+        <div>
+          <p class="eyebrow">Profile</p>
+          <h3>Personal details</h3>
+        </div>
+        <p>Choose how you appear in your private space.</p>
+      </div>
+      <p id="account-status" class="form-error" role="status"></p>
+      <div class="account-form-grid">
+        <label>
+          <span>Display name</span>
+          <input id="account-display-name" type="text" maxlength="120" />
+        </label>
+        <label>
+          <span>Username</span>
+          <input id="account-username" type="text" minlength="3" maxlength="80" required />
+        </label>
+        <label class="account-field-wide">
+          <span>Email</span>
+          <input id="account-email" type="email" required />
+        </label>
+        <label class="account-field-wide">
+          <span>Avatar URL</span>
+          <input id="account-avatar-url" type="url" maxlength="500" placeholder="https://..." />
+        </label>
+        <label class="account-field-wide">
+          <span>Bio</span>
+          <textarea id="account-bio" rows="3" maxlength="500"></textarea>
+        </label>
+      </div>
+      <div class="account-section-footer">
+        <div class="account-row">
+          <span id="account-email-status">Email status unknown</span>
+          <button id="request-verification-button" class="secondary-button" type="button">
+            Verify email
+          </button>
+        </div>
+        <button class="primary-button" type="submit">Save profile</button>
+      </div>
+    </form>
+
+    <form id="password-form" class="account-section" method="dialog">
+      <div class="account-section-heading">
+        <div>
+          <p class="eyebrow">Security</p>
+          <h3>Change password</h3>
+        </div>
+        <p>Use at least eight characters and avoid reused passwords.</p>
+      </div>
+      <div class="account-form-grid">
+        <label id="current-password-field">
+          <span>Current password</span>
+          <input id="account-current-password" type="password" autocomplete="current-password" />
+        </label>
+        <label>
+          <span>New password</span>
+          <input id="account-new-password" type="password" minlength="8" autocomplete="new-password" />
+        </label>
+      </div>
+      <div class="account-section-footer account-section-footer-end">
+        <button class="secondary-button" type="submit">Update password</button>
+      </div>
+    </form>
+
+    <section class="account-section account-billing" aria-labelledby="billing-heading">
+      <div class="account-section-heading">
+        <div>
+          <p class="eyebrow">Subscription</p>
+          <h3 id="billing-heading">Current plan: <span id="billing-plan">Free</span></h3>
+        </div>
+        <p>Stripe securely handles payment details and cancellation.</p>
+      </div>
+      <p id="billing-status" class="billing-status" role="status">
+        Premium subscriptions are not available yet.
+      </p>
+      <ul class="premium-benefits">
+        <li>Extended daily chat access</li>
+        <li>Reflection informed by your saved insights</li>
+        <li>Full access to My Map, topics, and practices</li>
+      </ul>
+      <dl class="billing-details">
+        <div class="billing-detail">
+          <dt>Status</dt>
+          <dd id="billing-subscription-status">No subscription</dd>
+        </div>
+        <div id="billing-period-row" class="billing-detail" hidden>
+          <dt id="billing-period-label">Current period ends</dt>
+          <dd id="billing-period-end">&mdash;</dd>
+        </div>
+      </dl>
+      <div id="billing-subscribe-actions" class="billing-actions" hidden>
+        <button id="subscribe-monthly-button" class="primary-button" type="button">
+          Subscribe monthly
+        </button>
+        <button id="subscribe-yearly-button" class="secondary-button" type="button">
+          Subscribe yearly
+        </button>
+      </div>
+      <div class="billing-actions">
+        <button id="resume-subscription-button" class="secondary-button success" type="button" hidden>
+          Keep subscription active
+        </button>
+        <button id="manage-subscription-button" class="secondary-button" type="button" hidden>
+          Manage billing in Stripe
+        </button>
+        <button id="cancel-subscription-button" class="secondary-button danger" type="button" hidden>
+          Cancel subscription
+        </button>
+      </div>
+      <p id="billing-management-note" class="billing-management-note" hidden>
+        Subscription changes and cancellation are completed securely in Stripe.
+      </p>
+    </section>
+
+    <section class="account-section account-danger">
+      <div class="account-section-heading">
+        <div>
+          <p class="eyebrow">Danger zone</p>
+          <h3>Delete account</h3>
+        </div>
+        <p>Permanently remove your account and private FeelY data.</p>
+      </div>
+      <button id="delete-account-button" class="secondary-button danger" type="button">
+        Delete account
+      </button>
+    </section>
+  </div>
+</dialog>

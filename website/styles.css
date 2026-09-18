@@ -202,7 +202,7 @@ h3 {
   min-height: var(--app-height);
   grid-template-columns: minmax(0, 1fr) minmax(380px, 520px);
   overflow: hidden;
-  background-image: url("assets/feely-landscape.jpg");
+  background-image: url("assets/feely-lake.png");
   background-position: center;
   background-size: cover;
 }
@@ -477,7 +477,7 @@ textarea:focus {
 
 .workspace-switch {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 3px;
   margin-top: 22px;
   border: 1px solid rgba(255, 253, 249, 0.08);
@@ -4683,3 +4683,186 @@ html[data-theme="light"] .account-dialog-avatar {
     transition-duration: 0.01ms !important;
   }
 }
+/* Topic filters extend the existing map theme and floating topic bubbles. */
+.map-content:has(.map-toolbar) {
+  overflow-y: auto;
+}
+.map-concept-layout:has(.map-toolbar) {
+  grid-template-rows: auto minmax(430px, 1fr);
+  gap: 0;
+}
+.map-toolbar {
+  min-width: 0;
+  padding: 18px 24px 10px;
+}
+.map-topic-summary {
+  margin: 0 0 12px;
+  color: var(--paper-muted);
+  font-size: 12px;
+}
+.map-topic-filters {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line-dark);
+  border-radius: 10px;
+  background: var(--night);
+}
+.map-topic-filters button {
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--paper-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.map-topic-filters button:hover,
+.map-topic-filters button:focus-visible {
+  background: var(--night-soft);
+  color: var(--paper);
+}
+.map-topic-filters button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--lavender) 35%, transparent);
+  background: color-mix(in srgb, var(--lavender) 16%, transparent);
+  color: var(--lavender);
+}
+.map-filter-empty {
+  max-width: 340px;
+  margin: 90px auto;
+  padding: 0 16px;
+  color: var(--paper-muted);
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.map-node-description { overflow-wrap: anywhere; }
+.topic-field select {
+  width: 100%;
+  border: 1px solid var(--line-light);
+  border-radius: 6px;
+  background: var(--white);
+  color: var(--ink);
+  padding: 8px;
+}
+#topic-connections { min-width: 0; }
+#topic-connections .map-related-picker { max-height: 160px; overflow-y: auto; }
+html[data-theme="light"] .map-topic-filters button:hover,
+html[data-theme="light"] .map-topic-filters button:focus-visible { color: var(--ink); }
+@media (min-width: 901px) {
+  .map-concept-layout:has(.map-toolbar) .map-detail-drawer { top: 112px; }
+}
+@media (max-width: 600px) {
+  .map-toolbar { padding: 0 0 14px; }
+  .map-topic-filters { gap: 2px; }
+  .map-topic-filters button { padding: 6px 8px; font-size: 11px; }
+}
+
+/* Map forms keep feedback visible and preserve edits until saving succeeds. */
+.map-toolbar-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.map-toolbar-button {
+  min-height: 40px; border: 1px solid var(--line-dark); border-radius: 8px;
+  padding: 8px 12px; background: var(--night); color: var(--paper-muted);
+  font-size: 12px; font-weight: 700;
+}
+.map-toolbar-button:hover { border-color: var(--lavender); color: var(--lavender); }
+.map-form-error { color: #9b342b; font-size: 14px; line-height: 1.5; margin: 8px 0; }
+.map-feedback { color: var(--danger); font-size: 14px; line-height: 1.5; }
+html[data-theme="light"] .map-feedback { color: #9b342b; }
+.map-refresh-popup { width: min(680px, 100%); }
+.map-refresh-popup > p { color: #5f5863; font-size: 14px; line-height: 1.6; }
+.map-refresh-popup h3 { padding-right: 26px; }
+.map-refresh-status { margin: 0; color: #514456; font-size: 14px; line-height: 1.5; }
+.map-refresh-rows { display: grid; gap: 18px; }
+.map-refresh-row { min-width: 0; display: grid; gap: 12px; margin: 0; padding: 16px; border: 1px solid var(--line-light); border-radius: 10px; }
+.map-refresh-row legend { max-width: 100%; overflow-wrap: anywhere; padding: 0 6px; font-size: 14px; font-weight: 700; }
+.map-refresh-row label { display: grid; gap: 6px; font-size: 13px; color: #554b58; }
+.map-refresh-row .map-refresh-include { display: flex; align-items: center; gap: 8px; }
+.map-refresh-row input[type="checkbox"] { width: 20px; height: 20px; accent-color: #78649d; }
+.map-refresh-row details { font-size: 13px; color: #62596a; overflow-wrap: anywhere; }
+.map-refresh-row details p { max-height: 150px; overflow-y: auto; white-space: pre-wrap; }
+.map-refresh-row summary { cursor: pointer; }
+.map-action-form button:disabled { opacity: 0.6; cursor: wait; }
+.map-action-form [hidden] { display: none; }
+
+/* Keep the original map surfaces, typography, and floating bubble layout. */
+.map-view { grid-template-columns: minmax(0, 1fr); }
+.map-header, .map-content, .map-concept-layout { min-width: 0; }
+.map-concept-layout { grid-template-columns: minmax(0, 1fr); }
+
+/* Topic type choices use the same soft pills as the existing map controls. */
+.topic-type-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  color-scheme: light;
+}
+.topic-type-choices label {
+  position: relative;
+  display: block;
+  cursor: pointer;
+}
+.topic-type-choices input[type="radio"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  padding: 0;
+  margin: 0;
+}
+.topic-type-choices span {
+  display: flex;
+  align-items: center;
+  min-height: 38px;
+  border: 1px solid rgba(120, 100, 157, 0.18);
+  border-radius: 999px;
+  padding: 7px 12px;
+  background: rgba(255, 253, 249, 0.72);
+  color: #665a76;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+.topic-type-choices label:hover span { border-color: #a393bb; }
+.topic-type-choices input:checked + span {
+  border-color: #a393bb;
+  background: #eee6f7;
+  color: #514362;
+}
+.topic-type-choices input:focus-visible + span {
+  outline: 2px solid #79669f;
+  outline-offset: 3px;
+}
+.topic-type-choices input:disabled + span { opacity: 0.5; cursor: default; }
+#topic-category[hidden] { display: none; }
+
+/* Journal is an optional companion, below the main workspace navigation. */
+.sidebar-journal-link {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--paper-muted);
+  font-size: 12px;
+}
+.sidebar-journal-link:hover, .sidebar-journal-link.active {
+  background: var(--night-soft);
+  color: var(--paper);
+}
+.sidebar-journal-link:focus-visible { outline: 2px solid var(--lavender); outline-offset: 2px; }
+#journal-plan-badge { display: none; }
+.map-toolbar-actions:empty { display: none; }
+
+.view-load-status { padding: 32px; color: var(--paper-muted); font-size: 14px; line-height: 1.6; }
+.view-load-status button { margin-top: 12px; border: 1px solid var(--line-dark); border-radius: 999px; padding: 8px 16px; background: var(--night-soft); color: var(--paper); }

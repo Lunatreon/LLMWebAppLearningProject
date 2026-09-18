@@ -1,0 +1,107 @@
+<section id="auth-view" class="auth-view">
+  <div class="auth-story">
+    <a class="brand-lockup brand-lockup-light" href="./" aria-label="FeelY chat">
+      <span class="brand-symbol" aria-hidden="true">F</span>
+      <span>FeelY</span>
+    </a>
+    <div class="auth-story-copy">
+      <p class="eyebrow eyebrow-light">Your private reflection space</p>
+      <h1>Become your own creation.</h1>
+      <p>
+        Slow down, name what is happening, and find the next honest step through
+        conversation.
+      </p>
+    </div>
+    <p class="image-credit">A quieter place to hear yourself.</p>
+  </div>
+
+  <div class="auth-panel" aria-labelledby="auth-heading">
+    <button
+      class="theme-toggle auth-theme-toggle"
+      type="button"
+      role="switch"
+      aria-checked="false"
+      aria-label="Use light appearance"
+      title="Use light appearance"
+      data-theme-toggle
+    >
+      <span aria-hidden="true">&#9790;</span>
+      <span aria-hidden="true">&#9728;</span>
+    </button>
+    <div class="auth-panel-brand">
+      <a class="brand-lockup" href="./" aria-label="FeelY chat">
+        <span class="brand-symbol" aria-hidden="true">F</span>
+        <span>FeelY</span>
+      </a>
+      <p>Mythic self-authorship, grounded in real conversation.</p>
+    </div>
+
+    <div class="auth-heading">
+      <p class="eyebrow">Welcome</p>
+      <h2 id="auth-heading">Return to your space</h2>
+    </div>
+
+    <div class="auth-tabs" role="tablist" aria-label="Account access">
+      <button id="login-tab" class="tab active" type="button" role="tab">Login</button>
+      <button id="register-tab" class="tab" type="button" role="tab">Register</button>
+    </div>
+
+    <form id="auth-form" class="auth-form" method="post">
+      <div id="google-auth-field" class="google-auth-field hidden">
+        <div id="google-button"></div>
+        <div class="auth-divider"><span>or</span></div>
+      </div>
+      <label>
+        <span>Email</span>
+        <input
+          id="email"
+          type="email"
+          autocomplete="email"
+          placeholder="you@example.com"
+          required
+        />
+      </label>
+      <label id="username-field" class="hidden">
+        <span>Username</span>
+        <input
+          id="username"
+          autocomplete="username"
+          minlength="3"
+          placeholder="How should FeelY call you?"
+        />
+      </label>
+      <label>
+        <span>Password</span>
+        <input
+          id="password"
+          type="password"
+          autocomplete="current-password"
+          minlength="8"
+          placeholder="At least 8 characters"
+          required
+        />
+      </label>
+      <button id="forgot-password-button" class="auth-link-button" type="button">
+        Forgot your password?
+      </button>
+      <label class="bot-field" aria-hidden="true">
+        <span>Website</span>
+        <input
+          id="website"
+          type="text"
+          autocomplete="off"
+          tabindex="-1"
+        />
+      </label>
+      <div id="captcha-field" class="captcha-field hidden">
+        <div id="captcha-widget"></div>
+        <p id="captcha-status" class="captcha-status" role="status"></p>
+      </div>
+      <button id="auth-submit" class="primary-button" type="submit">Login</button>
+      <p id="auth-error" class="form-error" role="alert"></p>
+    </form>
+
+    <p id="auth-status" class="auth-status" role="status"></p>
+    <p class="privacy-note">Your conversations remain connected to your private account.</p>
+  </div>
+</section>

@@ -1,6 +1,8 @@
 from datetime import datetime
 from typing import Literal
 
+from app.schemas.user import UserCreate
+
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
@@ -11,7 +13,7 @@ class AdminStatus(BaseModel):
 
 class AdminLoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=120)
-    password: str = Field(min_length=12, max_length=256)
+    password: str = Field(min_length=8, max_length=256)
 
 
 class AdminToken(BaseModel):
@@ -20,6 +22,7 @@ class AdminToken(BaseModel):
 
 
 class AdminUserRead(BaseModel):
+    role: Literal["member", "test", "admin"] = "member"
     id: int
     email: EmailStr
     username: str
@@ -36,6 +39,7 @@ class AdminUserRead(BaseModel):
 
 
 class AdminUserUpdate(BaseModel):
+    role: Literal["member", "test", "admin"] | None = None
     email: EmailStr | None = None
     username: str | None = Field(
         default=None,
@@ -54,6 +58,11 @@ class AdminUserUpdate(BaseModel):
             return None
         cleaned = str(value).strip()
         return cleaned or None
+
+
+class AdminUserCreate(UserCreate):
+    role: Literal["member", "test", "admin"] = "member"
+    display_name: str | None = Field(default=None, max_length=120)
 
 
 class AdminPasswordReset(BaseModel):

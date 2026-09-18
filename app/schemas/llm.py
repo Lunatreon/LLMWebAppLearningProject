@@ -2,6 +2,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.schemas.profile import TopicCategory
+
 
 class LLMRequest(BaseModel):
     message: str | None = Field(default=None, min_length=1, max_length=8000)
@@ -35,6 +37,8 @@ class ChatRead(BaseModel):
 
 
 class TopicSuggestion(BaseModel):
+    category: TopicCategory = "other"
+    related_topic_ids: list[str] = Field(default_factory=list)
     chat_id: str
     topic: str
     description: str
@@ -64,6 +68,8 @@ class TopicSuggestionResponse(BaseModel):
 
 
 class TopicConfirmationRequest(BaseModel):
+    category: TopicCategory = "other"
+    related_topic_ids: list[str] = Field(default_factory=list, max_length=24)
     chat_id: str = Field(min_length=1, max_length=120)
     topic: str = Field(min_length=1, max_length=120)
     description: str = Field(min_length=1, max_length=2000)

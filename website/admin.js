@@ -23,6 +23,7 @@ const userEmail = document.querySelector("#admin-user-email");
 const userUsername = document.querySelector("#admin-user-username");
 const userDisplayName = document.querySelector("#admin-user-display-name");
 const userActive = document.querySelector("#admin-user-active");
+const userRole = document.querySelector("#admin-user-role");
 const userVerified = document.querySelector("#admin-user-verified");
 const passwordForm = document.querySelector("#admin-password-form");
 const newPassword = document.querySelector("#admin-new-password");
@@ -48,6 +49,9 @@ function renderUsers() {
     button.className = `admin-user-card${user.id === state.selectedUserId ? " active" : ""}`;
     const premium = user.premium ? `<i>${user.subscription_plan}</i>` : "<i>free</i>";
     button.innerHTML = `<strong></strong><span></span><div class="admin-user-badges">${premium}<i>${user.is_active ? "active" : "disabled"}</i></div>`;
+    const roleBadge = document.createElement("i");
+    roleBadge.textContent = user.role || "member";
+    button.querySelector(".admin-user-badges").append(roleBadge);
     button.querySelector("strong").textContent = user.display_name || user.username;
     button.querySelector("span").textContent = user.email;
     button.addEventListener("click", () => selectUser(user.id));
@@ -65,6 +69,7 @@ function selectUser(userId) {
   userUsername.value = user.username;
   userDisplayName.value = user.display_name || "";
   userActive.checked = user.is_active;
+  userRole.value = user.role || "member";
   userVerified.checked = user.is_email_verified;
   subscriptionState.textContent = `${user.subscription_plan} · ${user.subscription_status}${user.stripe_subscription ? " · linked to Stripe" : ""}`;
   removeSubscription.disabled = !user.stripe_subscription && !user.premium;
@@ -85,11 +90,32 @@ async function loadPrompts() {
   });
 }
 
+document.querySelector("#admin-create-user-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const submit = form.querySelector("button[type='submit']");
+  submit.disabled = true;
+  try {
+    const created = await api("/admin/users", {
+      method: "POST", headers: authHeaders(),
+      body: JSON.stringify(Object.fromEntries(new FormData(form))),
+    });
+    form.reset();
+    await loadUsers();
+    selectUser(created.id);
+    setStatus(`Account created with ${created.role} access.`);
+  } catch (error) {
+    setStatus(error.message, true);
+  } finally {
+    submit.disabled = false;
+  }
+});
+
 userForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const updated = await api(`/admin/users/${state.selectedUserId}`, {
     method: "PATCH", headers: authHeaders(),
-    body: JSON.stringify({ email: userEmail.value, username: userUsername.value, display_name: userDisplayName.value || null, is_active: userActive.checked, is_email_verified: userVerified.checked }),
+    body: JSON.stringify({ email: userEmail.value, username: userUsername.value, display_name: userDisplayName.value || null, is_active: userActive.checked, is_email_verified: userVerified.checked, role: userRole.value }),
   });
   state.users = state.users.map((user) => user.id === updated.id ? updated : user);
   selectUser(updated.id); setStatus("User saved.");

@@ -1,17 +1,20 @@
+from frontend_helpers import assembled_chat_html, application_scripts
+import re
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-CHAT_HTML = ROOT_DIR / "website" / "chat.html"
-APP_JS = ROOT_DIR / "website" / "app.js"
+CHAT_HTML = ROOT_DIR / "website" / "index.html"
+def read_frontend_javascript():
+    html = assembled_chat_html()
+    sources = application_scripts(html)
+    return "\n".join((ROOT_DIR / "website" / name).read_text(encoding="utf-8") for name in sources)
 
 
-def test_website_root_redirects_to_chat_without_an_external_target():
+def test_website_root_is_the_shell():
     index_html = (ROOT_DIR / "website" / "index.html").read_text(encoding="utf-8")
-
-    assert 'content="0; url=chat.html"' in index_html
-    assert 'window.location.replace(`chat.html${window.location.search}${window.location.hash}`)' in index_html
-    assert "http://" not in index_html
-    assert "https://" not in index_html
+    assert 'id="conversation-view"' in index_html
+    assert 'data-view=' not in index_html
+    assert 'window.location.replace' not in index_html
 
 
 def test_feely_favicon_is_used_by_every_browser_tab():
@@ -24,13 +27,13 @@ def test_feely_favicon_is_used_by_every_browser_tab():
     assert favicon.is_file()
     assert favicon.stat().st_size > 0
     assert favicon.read_bytes()[25] == 6  # PNG RGBA color type, including transparency.
-    for page_name in ("index.html", "chat.html", "admin.html"):
+    for page_name in ("index.html", "admin.html"):
         page = (ROOT_DIR / "website" / page_name).read_text(encoding="utf-8")
         assert favicon_reference in page
 
 
 def test_auth_form_cannot_fall_back_to_credentials_in_query_string():
-    html = CHAT_HTML.read_text(encoding="utf-8")
+    html = assembled_chat_html()
 
     assert '<form id="auth-form" class="auth-form" method="post">' in html
     assert 'name="email"' not in html
@@ -40,7 +43,7 @@ def test_auth_form_cannot_fall_back_to_credentials_in_query_string():
 
 
 def test_sensitive_auth_query_parameters_are_scrubbed_on_load():
-    javascript = APP_JS.read_text(encoding="utf-8")
+    javascript = read_frontend_javascript()
 
     assert "scrubSensitiveAuthParams();" in javascript
     for name in ("email", "email_or_username", "username", "password", "current_password"):
@@ -48,8 +51,8 @@ def test_sensitive_auth_query_parameters_are_scrubbed_on_load():
 
 
 def test_stripe_portal_returns_to_account_and_supports_resuming():
-    html = CHAT_HTML.read_text(encoding="utf-8")
-    javascript = APP_JS.read_text(encoding="utf-8")
+    html = assembled_chat_html()
+    javascript = read_frontend_javascript()
 
     assert 'id="resume-subscription-button"' in html
     assert 'returnUrl.searchParams.set("view", "account")' in javascript
@@ -59,27 +62,27 @@ def test_stripe_portal_returns_to_account_and_supports_resuming():
 
 
 def test_temporary_api_failures_do_not_clear_the_saved_session():
-    javascript = APP_JS.read_text(encoding="utf-8")
+    javascript = read_frontend_javascript()
 
     assert "[401, 403].includes(error.status)" in javascript
 
 
 def test_new_chat_is_only_listed_after_its_first_saved_message():
-    javascript = APP_JS.read_text(encoding="utf-8")
+    javascript = read_frontend_javascript()
 
     assert "function startNewChat()" in javascript
     assert "state.activeChatId = null;" in javascript
     assert "async function showChat({ startFreshChat = false } = {})" in javascript
     assert javascript.count("await showChat({ startFreshChat: true });") == 3
-    assert 'src="app.js?v=20260914-1"' in CHAT_HTML.read_text(encoding="utf-8")
+    assert 'data-app-source="app.js"' in assembled_chat_html()
     assert "await createChat();" not in javascript
     assert "chat_id: state.activeChatId" in javascript
     assert "upsertChat(updatedChat);" in javascript
 
 
 def test_admin_page_is_server_authorized_and_prompts_use_admin_api():
-    html = CHAT_HTML.read_text(encoding="utf-8")
-    javascript = APP_JS.read_text(encoding="utf-8")
+    html = assembled_chat_html()
+    javascript = read_frontend_javascript()
     admin_html = (CHAT_HTML.parent / "admin.html").read_text(encoding="utf-8")
     admin_javascript = (CHAT_HTML.parent / "admin.js").read_text(encoding="utf-8")
 
@@ -97,8 +100,8 @@ def test_admin_page_is_server_authorized_and_prompts_use_admin_api():
 
 
 def test_my_map_is_visible_but_guarded_by_the_premium_entitlement():
-    html = CHAT_HTML.read_text(encoding="utf-8")
-    javascript = APP_JS.read_text(encoding="utf-8")
+    html = assembled_chat_html()
+    javascript = read_frontend_javascript()
 
     assert 'id="map-workspace-button"' in html
     assert 'id="map-plan-badge"' in html
@@ -110,15 +113,15 @@ def test_my_map_is_visible_but_guarded_by_the_premium_entitlement():
 
 
 def test_topic_suggestions_are_not_hidden_by_the_map_paywall():
-    javascript = APP_JS.read_text(encoding="utf-8")
+    javascript = read_frontend_javascript()
 
     assert "function renderTopic(topic) {\n  state.pendingTopic = topic;" in javascript
     assert "if (hasMyMapAccess()) await loadMap();" in javascript
 
 
 def test_topic_confirmation_can_edit_and_reuse_a_recommended_thread():
-    html = CHAT_HTML.read_text(encoding="utf-8")
-    javascript = APP_JS.read_text(encoding="utf-8")
+    html = assembled_chat_html()
+    javascript = read_frontend_javascript()
 
     assert 'id="topic-title" type="text"' in html
     assert 'id="topic-description"' in html
@@ -139,8 +142,8 @@ def test_topic_confirmation_can_edit_and_reuse_a_recommended_thread():
 
 
 def test_overall_map_thread_is_permanent_and_available_as_a_destination():
-    html = CHAT_HTML.read_text(encoding="utf-8")
-    javascript = APP_JS.read_text(encoding="utf-8")
+    html = assembled_chat_html()
+    javascript = read_frontend_javascript()
     stylesheet = (CHAT_HTML.parent / "styles.css").read_text(encoding="utf-8")
 
     assert 'const OVERALL_MAP_TITLE = "Overall";' in javascript
@@ -149,15 +152,15 @@ def test_overall_map_thread_is_permanent_and_available_as_a_destination():
     assert "const nodes = [\n    overallMapNode(map)," in javascript
     assert "unassigned.textContent = OVERALL_MAP_TITLE;" in javascript
     assert ".map-node.overall" in stylesheet
-    assert 'href="styles.css?v=20260914-1"' in html
+    assert '<style data-source="styles.css">' in html
 
 
 def test_dark_and_pink_light_appearance_can_be_switched_and_saved():
-    html = CHAT_HTML.read_text(encoding="utf-8")
-    javascript = APP_JS.read_text(encoding="utf-8")
+    html = assembled_chat_html()
+    javascript = read_frontend_javascript()
     stylesheet = (CHAT_HTML.parent / "styles.css").read_text(encoding="utf-8")
 
-    assert html.count("data-theme-toggle") == 4
+    assert len(re.findall(r"<button\b[^>]*\bdata-theme-toggle\b", html)) == 4
     assert html.count('class="workspace-header-actions"') == 2
     assert 'role="switch"' in html
     assert 'class="theme-toggle header-theme-toggle"' in html
@@ -175,12 +178,12 @@ def test_dark_and_pink_light_appearance_can_be_switched_and_saved():
 
 
 def test_sidebar_lists_scroll_without_scrolling_the_page():
-    html = CHAT_HTML.read_text(encoding="utf-8")
-    javascript = APP_JS.read_text(encoding="utf-8")
+    html = assembled_chat_html()
+    javascript = read_frontend_javascript()
     stylesheet = (CHAT_HTML.parent / "styles.css").read_text(encoding="utf-8")
 
-    assert 'src="app.js?v=20260914-1"' in html
-    assert 'href="styles.css?v=20260914-1"' in html
+    assert 'data-app-source="app.js"' in html
+    assert '<style data-source="styles.css">' in html
     assert "function syncViewportHeight()" in javascript
     assert 'style.setProperty("--app-height"' in javascript
     assert "window.visualViewport?.addEventListener(\"resize\", syncViewportHeight);" in javascript
@@ -195,8 +198,8 @@ def test_sidebar_lists_scroll_without_scrolling_the_page():
 
 
 def test_workspace_headers_use_consistent_compact_titles():
-    html = CHAT_HTML.read_text(encoding="utf-8")
-    javascript = APP_JS.read_text(encoding="utf-8")
+    html = assembled_chat_html()
+    javascript = read_frontend_javascript()
     stylesheet = (CHAT_HTML.parent / "styles.css").read_text(encoding="utf-8")
 
     assert '<p class="eyebrow">Private journal</p>' in html

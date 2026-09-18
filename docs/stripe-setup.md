@@ -83,9 +83,9 @@ Checkout return URLs should identify the result so the frontend can show immedia
 the webhook confirms access. For local development, use:
 
 ```env
-STRIPE_CHECKOUT_SUCCESS_URL="http://127.0.0.1:5500/chat.html?checkout=success&session_id={CHECKOUT_SESSION_ID}"
-STRIPE_CHECKOUT_CANCEL_URL="http://127.0.0.1:5500/chat.html?checkout=cancelled"
-STRIPE_PORTAL_RETURN_URL="http://127.0.0.1:5500/chat.html"
+STRIPE_CHECKOUT_SUCCESS_URL="http://127.0.0.1:5500/?checkout=success&session_id={CHECKOUT_SESSION_ID}"
+STRIPE_CHECKOUT_CANCEL_URL="http://127.0.0.1:5500/?checkout=cancelled"
+STRIPE_PORTAL_RETURN_URL="http://127.0.0.1:5500/"
 ```
 
 `{CHECKOUT_SESSION_ID}` must remain literal; Stripe replaces it after Checkout. FeelY appends the

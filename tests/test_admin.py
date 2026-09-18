@@ -29,6 +29,87 @@ def configure_and_login_admin(monkeypatch, client, username: str = "site-admin")
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
 
+def test_admin_creates_roles_and_revokes_database_admin_access(monkeypatch, client):
+    root = configure_and_login_admin(monkeypatch, client)
+    accounts = {}
+    for role in ("member", "test", "admin"):
+        response = client.post("/api/v1/admin/users", headers=root, json={
+            "email": f"{role}@example.com", "username": f"role_{role}",
+            "password": "account-password", "role": role,
+        })
+        assert response.status_code == 201
+        accounts[role] = response.json()
+        assert accounts[role]["role"] == role
+        login = client.post("/api/v1/admin/login", json={
+            "username": f"{role}@example.com", "password": "account-password",
+        })
+        assert login.status_code == (200 if role == "admin" else 401)
+        if role == "admin":
+            database_admin = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    assert client.get("/api/v1/admin/users", headers=database_admin).status_code == 200
+    assert client.get("/api/v1/users/me", headers=database_admin).status_code == 401
+    assert client.patch(f"/api/v1/admin/users/{accounts['admin']['id']}", headers=root,
+                        json={"role": "test"}).status_code == 200
+    assert client.get("/api/v1/admin/users", headers=database_admin).status_code == 401
+    assert client.post("/api/v1/admin/users", headers=root, json={
+        "email": "new@example.com", "username": "ROLE_TEST", "password": "account-password",
+    }).status_code == 409
+    assert client.patch(f"/api/v1/admin/users/{accounts['test']['id']}", headers=root,
+                        json={"role": "invalid"}).status_code == 422
+
+
+def test_regular_accounts_cannot_grant_roles_or_use_debug(monkeypatch, client):
+    from test_auth_and_llm import grant_premium_access
+
+    root = configure_and_login_admin(monkeypatch, client)
+    client.post("/api/v1/auth/register", json={
+        "email": "ordinary@example.com", "username": "ordinary", "password": "account-password",
+        "role": "admin",
+    })
+    token = client.post("/api/v1/auth/login", json={
+        "email_or_username": "ordinary", "password": "account-password",
+    }).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    member = client.get("/api/v1/users/me/account", headers=headers).json()
+    assert member["role"] == "member"
+    client.patch("/api/v1/users/me/account", headers=headers, json={"role": "admin"})
+    assert client.get("/api/v1/users/me/account", headers=headers).json()["role"] == "member"
+    assert client.patch(f"/api/v1/admin/users/{member['id']}", headers=headers,
+                        json={"role": "admin"}).status_code == 401
+    assert client.post("/api/v1/admin/users", headers=headers, json={
+        "email": "blocked@example.com", "username": "blocked", "password": "account-password",
+        "role": "admin",
+    }).status_code == 401
+    grant_premium_access(client, member["email"])
+    assert client.post("/api/v1/users/me/map/topics/missing/refresh-preview", headers=headers).status_code == 403
+    assert client.post("/api/v1/users/me/map/refresh/apply", headers=headers, json={
+        "revision": "0" * 64, "topics": [{"id": "missing", "title": "Name", "category": "other", "description": ""}],
+    }).status_code == 403
+    for role in ("test", "admin"):
+        client.patch(f"/api/v1/admin/users/{member['id']}", headers=root, json={"role": role})
+        assert client.get("/api/v1/users/me/account", headers=headers).json()["role"] == role
+        # Authorization passed, but this account does not have that topic.
+        assert client.post("/api/v1/users/me/map/topics/missing/refresh-preview", headers=headers).status_code == 404
+    client.patch(f"/api/v1/admin/users/{member['id']}", headers=root, json={"role": "member"})
+    assert client.post("/api/v1/users/me/map/topics/missing/refresh-preview", headers=headers).status_code == 403
+
+
+def test_legacy_sqlite_role_migration_is_safe_to_repeat(monkeypatch):
+    from sqlalchemy import create_engine, text
+    from app.db import init_db
+
+    engine = create_engine("sqlite://")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT)"))
+        connection.execute(text("INSERT INTO users (username) VALUES ('existing')"))
+    monkeypatch.setattr(init_db, "engine", engine)
+    init_db.ensure_sqlite_user_columns()
+    init_db.ensure_sqlite_user_columns()
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT role FROM users")).scalar_one() == "member"
+    engine.dispose()
+
+
 def test_admin_routes_are_allowlisted_and_manage_users(monkeypatch, client):
     admin_headers = configure_and_login_admin(monkeypatch, client)
     user_headers = register_and_login(client, "member@example.com", "member-user")

@@ -22,6 +22,7 @@ from app.schemas.admin import (
     AdminToken,
     AdminUserRead,
     AdminUserUpdate,
+    AdminUserCreate,
 )
 from app.services.billing import (
     BillingNotConfiguredError,
@@ -37,23 +38,27 @@ logger = logging.getLogger(__name__)
 
 
 @router.post("/login", response_model=AdminToken, dependencies=[Depends(rate_limit_auth)])
-def login_admin(payload: AdminLoginRequest) -> AdminToken:
+def login_admin(payload: AdminLoginRequest, db: Session = Depends(get_db)) -> AdminToken:
     username = (settings.admin_username or "").strip()
     password_hash = (settings.admin_password_hash or "").strip()
+    if username and password_hash:
+        valid_username = hmac.compare_digest(payload.username, username)
+        valid_password = verify_password(payload.password, password_hash)
+        if valid_username and valid_password:
+            return AdminToken(access_token=create_admin_access_token(username))
+    user = db.scalar(select(User).where(
+        (func.lower(User.username) == payload.username.strip().lower()) |
+        (func.lower(User.email) == payload.username.strip().lower())
+    ))
+    if user and user.is_active and user.role == "admin" and verify_password(payload.password, user.hashed_password):
+        return AdminToken(access_token=create_admin_access_token(user.username, user_id=user.id))
     if not username or not password_hash:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Administrator login is not configured.",
-        )
-    valid_username = hmac.compare_digest(payload.username, username)
-    valid_password = verify_password(payload.password, password_hash)
-    if not valid_username or not valid_password:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect administrator username or password.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return AdminToken(access_token=create_admin_access_token(username))
+        if not db.scalar(select(User.id).where(User.role == "admin").limit(1)):
+            raise HTTPException(status_code=503, detail="Administrator login is not configured.")
+    raise HTTPException(
+        status_code=401, detail="Incorrect administrator username or password.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 def admin_user_read(db: Session, user: User) -> AdminUserRead:
@@ -65,6 +70,7 @@ def admin_user_read(db: Session, user: User) -> AdminUserRead:
         username=user.username,
         display_name=user.display_name,
         is_active=user.is_active,
+        role=user.role,
         is_email_verified=user.is_email_verified,
         auth_provider=user.auth_provider,
         created_at=user.created_at,
@@ -88,6 +94,30 @@ def list_admin_users(
 ) -> list[AdminUserRead]:
     users = db.execute(select(User).order_by(User.created_at.desc())).scalars()
     return [admin_user_read(db, user) for user in users]
+
+
+@router.post("/users", response_model=AdminUserRead, status_code=201)
+def create_admin_user(
+    payload: AdminUserCreate,
+    db: Session = Depends(get_db),
+    admin_username: str = Depends(get_current_admin),
+) -> AdminUserRead:
+    if db.scalar(select(User.id).where(func.lower(User.username) == payload.username.lower())):
+        raise HTTPException(status_code=409, detail="Username is already in use.")
+    user = User(
+        email=str(payload.email).lower(), username=payload.username,
+        hashed_password=hash_password(payload.password), role=payload.role,
+        display_name=payload.display_name, is_email_verified=False,
+    )
+    db.add(user)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Email or username is already in use.") from exc
+    db.refresh(user)
+    logger.info("Administrator %s created user %s with role %s", admin_username, user.id, user.role)
+    return admin_user_read(db, user)
 
 
 def admin_target_user(db: Session, user_id: int) -> User:
@@ -124,6 +154,8 @@ def update_admin_user(
         user.username = payload.username
     if "display_name" in payload.model_fields_set:
         user.display_name = payload.display_name
+    if payload.role is not None:
+        user.role = payload.role
     if payload.is_active is not None:
         user.is_active = payload.is_active
     if payload.is_email_verified is not None:
