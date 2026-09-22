@@ -172,10 +172,8 @@ window.addEventListener("resize", () => {
   closeChatActionsMenu();
 });
 window.addEventListener("orientationchange", syncViewportHeight);
-window.visualViewport?.addEventListener("resize", () => {
-  syncViewportHeight();
-  autoresizeMessageInput();
-});
+window.visualViewport?.addEventListener("resize", syncViewportHeight);
+window.visualViewport?.addEventListener("resize", autoresizeMessageInput);
 window.addEventListener("beforeunload", () => {
   if (state.journalDirty) saveJournalEntry({ keepalive: true });
 });

@@ -22,6 +22,7 @@ async function loadChats() {
 
 function startNewChat() {
   stopPolling();
+  document.querySelector("#map-analysis-retry").classList.add("hidden");
   state.activeChatId = null;
   chatTitle.textContent = "New conversation";
   document.title = "New conversation | FeelY";
@@ -49,7 +50,8 @@ async function loadChat(chatId) {
   renderMapSuggestion(chat.pending_map_suggestion || null);
   renderChats();
   closeSidebar();
-  await pollTopicOnce();
+  const analysisFinished = await pollTopicOnce();
+  if (!analysisFinished && state.activeChatId === chatId) pollTopicSoon();
 }
 
 async function deleteChat(chat) {

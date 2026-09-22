@@ -1391,7 +1391,7 @@ class OllamaBaseClient:
         self,
         system_prompt: str,
         user_payload: str,
-        response_schema: dict[str, Any],
+        response_schema: dict[str, Any] | None,
         temperature: float,
         *,
         stream: bool,
@@ -1401,7 +1401,7 @@ class OllamaBaseClient:
             "stream": stream,
             "think": False,
             "keep_alive": settings.ollama_keep_alive,
-            "format": response_schema,
+            **({"format": response_schema} if response_schema is not None else {}),
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_payload},
@@ -1418,7 +1418,7 @@ class OllamaBaseClient:
         self,
         system_prompt: str,
         user_payload: str,
-        response_schema: dict[str, Any],
+        response_schema: dict[str, Any] | None,
         temperature: float,
     ) -> dict[str, Any]:
         started_at = monotonic()
@@ -1479,6 +1479,19 @@ class OllamaBaseClient:
             raise_bad_gateway("Ollama returned an unexpected HTTP response")
         message = response_payload.get("message")
         content = message.get("content") if isinstance(message, dict) else None
+        if response_schema is None:
+            # Conversational recovery needs text, not model-generated JSON.
+            # Python builds the API envelope after validating the reply.
+            if not isinstance(content, str) or not content.strip():
+                raise_bad_gateway("The model returned an empty reply")
+            if response_payload.get("done_reason") == "length":
+                raise_bad_gateway("The model could not finish the reply within its output limit")
+            text = content.strip()
+            # A model may retain the old envelope despite the plain-text request.
+            # Unwrap complete JSON; never show private fields or broken JSON.
+            if text.startswith("{") or text.startswith("```json"):
+                return {"assistant_message": chat_result_from_payload(parse_json_response(text)).assistant_message}
+            return {"assistant_message": text}
         return parse_json_response(content)
 
     async def request_json_stream(
@@ -1495,6 +1508,8 @@ class OllamaBaseClient:
         generated_json = ""
         emitted_text = ""
         stream_finished = False
+        finish_reason = None
+        generated_tokens = None
         try:
             # Ollama can stream its structured JSON a fragment at a time. Keep
             # the full JSON private and emit only the decoded assistant message.
@@ -1534,6 +1549,8 @@ class OllamaBaseClient:
                             await on_text_chunk(delta)
                     if event.get("done") is True:
                         stream_finished = True
+                        finish_reason = event.get("done_reason")
+                        generated_tokens = event.get("eval_count")
         except httpx.ConnectError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -1566,8 +1583,14 @@ class OllamaBaseClient:
         value_start = top_level_json_string_value_start(generated_json, "assistant_message")
         if value_start is not None:
             try:
-                json.JSONDecoder().raw_decode(generated_json[value_start - 1 :])
+                # A literal newline is malformed JSON, but does not mean the
+                # reply was truncated. Require a closing quote even here.
+                json.JSONDecoder(strict=False).raw_decode(generated_json[value_start - 1 :])
             except ValueError:
+                logger.warning(
+                    "Invalid streamed chat text: model=%s stop=%s tokens=%s budget=%s",
+                    self.model, finish_reason, generated_tokens, self.max_tokens,
+                )
                 raise_bad_gateway("The reply was cut short before it finished. Please try again.")
         logger.info(
             "Ollama model %s completed in %.2fs",
@@ -1605,25 +1628,58 @@ class OllamaChatLLMClient(OllamaBaseClient):
         *,
         on_text_chunk: TextChunkCallback | None = None,
     ) -> ChatLLMResult:
-        request_payload = chat_request_payload(user_input, profile, chat_info, chat_id)
+        from copy import copy
+
+        request = {
+            "system_prompt": read_system_prompt("chat"),
+            "user_payload": chat_request_payload(user_input, profile, chat_info, chat_id),
+            "response_schema": CHAT_RESPONSE_SCHEMA,
+            "temperature": settings.ollama_chat_temperature,
+        }
         emitted_text = ""
-        if on_text_chunk is None:
-            payload = await self.request_json(
-                system_prompt=read_system_prompt("chat"),
-                user_payload=request_payload,
-                response_schema=CHAT_RESPONSE_SCHEMA,
-                temperature=0.5,
+        recovered = False
+        try:
+            if on_text_chunk is None:
+                payload = await self.request_json(**request)
+            else:
+                payload, emitted_text = await self.request_json_stream(
+                    **request, on_text_chunk=on_text_chunk,
+                )
+            result = chat_result_from_payload(payload)
+        except HTTPException as exc:
+            if exc.status_code != 502 or exc.detail not in {
+                "The reply was cut short before it finished. Please try again.",
+                "LLM returned invalid JSON", "LLM returned an empty response",
+                "LLM returned a non-object JSON response",
+                "Chat-LLM response did not match the expected schema",
+            }:
+                raise
+            retry = copy(self)
+            retry.max_tokens = max(self.max_tokens, min(3072, max(1536, self.max_tokens * 2)))
+            # Remove the editable prompt's standard JSON contract/example so
+            # recovery does not make the model follow conflicting formats.
+            request["system_prompt"] = re.sub(
+                r"(?ms)^OUTPUT CONTRACT\s*\n.*?(?=^INPUT AND MEMORY\s*$)",
+                "", request["system_prompt"],
             )
-        else:
-            payload, emitted_text = await self.request_json_stream(
-                system_prompt=read_system_prompt("chat"),
-                user_payload=request_payload,
-                response_schema=CHAT_RESPONSE_SCHEMA,
-                temperature=0.5,
-                on_text_chunk=on_text_chunk,
+            request["system_prompt"] = re.sub(
+                r"(?m)^Output:.*$", "", request["system_prompt"],
             )
-        result = chat_result_from_payload(payload)
-        if on_text_chunk is not None and result.assistant_message.startswith(emitted_text):
+            request["system_prompt"] += (
+                "\nTRANSPORT OVERRIDE FOR THIS REPLY: The application handles JSON. "
+                "Return ONLY the conversational reply as plain text, not JSON, code fences, "
+                "field names, or reasoning notes. This replaces earlier JSON formatting "
+                "instructions and examples, while all reflection and safety guidance still applies. "
+                "Use at most 100 words and end with a complete sentence. Do not repeat passages."
+            )
+            request["response_schema"] = None
+            request["temperature"] = 0.2
+            logger.warning("Recovering malformed chat reply with a %s-token budget", retry.max_tokens)
+            # Regenerate from the original input, not the broken partial answer.
+            # Deliver it only in the final result so two replies are not joined.
+            result = chat_result_from_payload(await retry.request_json(**request))
+            recovered = True
+        if on_text_chunk is not None and not recovered and result.assistant_message.startswith(emitted_text):
             remaining_text = result.assistant_message[len(emitted_text) :]
             if remaining_text:
                 await on_text_chunk(remaining_text)

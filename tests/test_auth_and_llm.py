@@ -2050,8 +2050,9 @@ def test_ollama_does_not_save_unfinished_streamed_reply(tail):
         pass
 
     with pytest.raises(HTTPException, match="cut short"):
-        asyncio.run(chat_client.respond(
-            "I feel overwhelmed.", {}, {"messages": []}, "cut-short",
+        asyncio.run(chat_client.request_json_stream(
+            system_prompt="Return JSON", user_payload="I feel overwhelmed.",
+            response_schema={}, temperature=0.5,
             on_text_chunk=collect_text,
         ))
 
@@ -2285,3 +2286,106 @@ def test_failed_map_analysis_can_be_retried_without_resending_chat(client, monke
     assert suggestion['analysis_status'] == 'topic_ready'
     assert suggestion['suggestion']['topic'] == 'Pressure'
     assert client.post(url+'/retry').status_code == 401
+
+@pytest.mark.parametrize('streaming', [True, False])
+@pytest.mark.parametrize('recover', [True, False])
+def test_chat_recovers_once_without_joining_partial_and_replacement(monkeypatch, streaming, recover):
+    from fastapi import HTTPException
+    model = make_ollama_client(OllamaChatLLMClient, {})
+    model.max_tokens = 1536
+    attempts = []
+    visible = []
+    async def collect(chunk):
+        visible.append(chunk)
+    async def stream(self, **kwargs):
+        attempts.append(self.max_tokens)
+        await kwargs['on_text_chunk']('An unfinished answer that')
+        raise HTTPException(502, 'The reply was cut short before it finished. Please try again.')
+    async def request(self, **kwargs):
+        attempts.append(self.max_tokens)
+        if len(attempts) == 1 or not recover:
+            raise HTTPException(502, 'LLM returned invalid JSON')
+        assert 'I feel pressure.' in kwargs['user_payload']
+        assert 'unfinished answer' not in kwargs['user_payload']
+        return {'assistant_message': 'You feel pressure to finish. What matters most to you now?'}
+    monkeypatch.setattr(OllamaChatLLMClient, 'request_json_stream', stream)
+    monkeypatch.setattr(OllamaChatLLMClient, 'request_json', request)
+    async def run():
+        return await model.respond('I feel pressure.', {}, {}, 'recovery-test', on_text_chunk=collect if streaming else None)
+    if recover:
+        result = asyncio.run(run())
+        assert result.assistant_message.startswith('You feel pressure')
+    else:
+        with pytest.raises(HTTPException):
+            asyncio.run(run())
+    assert attempts == [1536, 3072]
+    assert model.max_tokens == 1536
+    assert visible == (['An unfinished answer that'] if streaming else [])
+
+
+def test_chat_does_not_retry_connection_failures(monkeypatch):
+    from fastapi import HTTPException
+    model = make_ollama_client(OllamaChatLLMClient, {})
+    calls = []
+    async def request(self, **kwargs):
+        calls.append(1)
+        raise HTTPException(503, 'Could not connect to Ollama')
+    monkeypatch.setattr(OllamaChatLLMClient, 'request_json', request)
+    with pytest.raises(HTTPException):
+        asyncio.run(model.respond('Hello', {}, {}, 'offline'))
+    assert len(calls) == 1
+
+
+def test_complete_streamed_reply_with_literal_newlines_is_not_called_truncated():
+    model = make_ollama_client(OllamaChatLLMClient, {})
+    model.client = RecordingOllamaStreamHttpClient([
+        '{"assistant_message":"You feel pressure.\n\nWhat would help?"}',
+    ])
+    visible = []
+    async def collect(chunk):
+        visible.append(chunk)
+    result = asyncio.run(model.respond('Pressure', {}, {}, 'newline-test', on_text_chunk=collect))
+    assert result.assistant_message == 'You feel pressure.\n\nWhat would help?'
+    assert ''.join(visible) == result.assistant_message
+
+
+def test_chat_plain_text_recovery_does_not_require_json():
+    model = make_ollama_client(OllamaChatLLMClient, {})
+    calls = []
+    class Response:
+        def raise_for_status(self):
+            pass
+        def json(self):
+            if len(calls) == 1:
+                return {'message': {'content': '{"assistant_message":"unfinished'}}
+            return {'message': {'content': 'It sounds like the deadline is weighing on you.\n\nWhat feels most urgent?'}, 'done_reason': 'stop'}
+    class Client:
+        async def post(self, path, json):
+            calls.append(json)
+            return Response()
+    model.client = Client()
+    result = asyncio.run(model.respond('I feel pressure.', {}, {}, 'plain-recovery'))
+    assert result.assistant_message.endswith('What feels most urgent?')
+    assert len(calls) == 2
+    assert 'format' in calls[0]
+    assert 'format' not in calls[1]
+    assert calls[1]['think'] is False
+    assert result.profile == {}
+    assert result.map_suggestion is None
+
+
+@pytest.mark.parametrize('content,reason', [('', 'stop'), ('An unfinished thought', 'length')])
+def test_plain_text_recovery_rejects_empty_or_token_limited_reply(content, reason):
+    from fastapi import HTTPException
+    model = make_ollama_client(OllamaChatLLMClient, {})
+    class Response:
+        def raise_for_status(self):
+            pass
+        def json(self):
+            return {'message': {'content': content}, 'done_reason': reason}
+    class Client:
+        async def post(self, *args, **kwargs):
+            return Response()
+    model.client = Client()
+    with pytest.raises(HTTPException):
+        asyncio.run(model.request_json('Reply briefly', 'Hello', None, 0.2))
