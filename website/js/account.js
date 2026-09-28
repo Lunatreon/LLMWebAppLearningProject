@@ -134,6 +134,11 @@ function renderSubscription() {
     cancelableStatuses.includes(subscription.status) &&
     !subscription.cancel_at_period_end
   );
+  if (subscription.free_test_phase) {
+    billingPlan.textContent = "Now for free";
+    billingStatus.textContent = "All features are free during the test phase. Existing subscriptions can still be managed below.";
+    billingSubscribeActions.hidden = true;
+  }
   renderPremiumAccess();
 }
 
@@ -155,6 +160,7 @@ function renderPremiumAccess() {
   chatPlanCopy.textContent = mapAccess
     ? `Premium - up to ${dailyLimit} messages per day.`
     : `Free plan - ${dailyLimit} messages per day.`;
+  if (state.subscription?.free_test_phase) chatPlanCopy.textContent = "Now for free - All features during the test phase";
   chatPlanUpgrade.hidden = mapAccess;
 
   if (!mapAccess) {

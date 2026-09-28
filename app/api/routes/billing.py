@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_user, get_db
 from app.models.user import User
+from app.core.config import settings
 from app.schemas.billing import (
     BillingSessionResponse,
     CheckoutRequest,
@@ -55,6 +56,8 @@ def start_checkout(
     current_user: User = Depends(get_current_user),
 ) -> BillingSessionResponse:
     try:
+        if not settings.premium_features_enabled:
+            raise HTTPException(status_code=409, detail="All features are now free during the test phase.")
         checkout_url = create_checkout_session(db, current_user, payload.plan)
     except BillingNotConfiguredError:
         raise _configuration_error() from None

@@ -342,6 +342,8 @@ async function confirmPasswordReset(event) {
 }
 
 function logout() {
+  state.chatRequest?.controller.abort();
+  state.chatRequest = null;
   clearTimeout(sessionExpiryTimer);
   sessionExpiryTimer = null;
   state.token = null;

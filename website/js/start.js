@@ -206,7 +206,7 @@ document.querySelectorAll("[data-lens]").forEach((button) => {
 messageInput.addEventListener("input", autoresizeMessageInput);
 document.querySelector("#map-analysis-retry").addEventListener("click", retryMapAnalysis);
 messageInput.addEventListener("keydown", (event) => {
-  if (event.key === "Enter" && !event.shiftKey) {
+  if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !event.isComposing && !state.chatRequest) {
     event.preventDefault();
     messageForm.requestSubmit();
   }

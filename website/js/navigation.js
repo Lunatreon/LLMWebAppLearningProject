@@ -48,6 +48,6 @@ function switchWorkspace(view) {
     }
   }
   if (showJournal) loadJournalWorkspace().catch(renderInlineError);
-  if (returningToChat) startNewChat();
+  if (returningToChat && !state.activeChatId) openSidebar();
 }
 

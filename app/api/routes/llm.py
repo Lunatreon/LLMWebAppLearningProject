@@ -18,6 +18,7 @@ from app.db.session import SessionLocal
 from app.models.user import ChatSession, DailyLLMUsage, User, UserProfile
 from app.schemas.llm import (
     ChatCreateRequest,
+    ReplyReactionRequest,
     ChatRead,
     LLMRequest,
     LLMResponse,
@@ -635,6 +636,11 @@ async def analyse_chat_for_topic(
         chat_session.info = info
         db.commit()
     except Exception as exc:  # pragma: no cover - defensive for background jobs
+        logger.warning(
+            "Background map analysis failed: provider=%s status=%s error_type=%s",
+            settings.topic_llm_provider or settings.llm_provider,
+            getattr(exc, "status_code", None), type(exc).__name__,
+        )
         db.rollback()
         chat_session = db.execute(
             select(ChatSession).where(
@@ -705,6 +711,28 @@ def read_chat(
         chat_session,
         premium_access=has_premium_feature_access(db, current_user),
     )
+
+
+@router.put("/chats/{chat_id}/reaction")
+def react_to_reply(
+    chat_id: str,
+    payload: ReplyReactionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    chat = get_chat_session(db, current_user, chat_id)
+    if chat is None:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    info = dict(chat.info or {})
+    messages = [dict(message) for message in info.get("messages", [])]
+    target = next((message for message in messages if message.get("role") == "assistant" and message.get("created_at") == payload.created_at), None)
+    if target is None:
+        raise HTTPException(status_code=404, detail="Reply not found")
+    target["reaction"] = payload.reaction
+    info["messages"] = messages
+    chat.info = info
+    db.commit()
+    return {"reaction": payload.reaction}
 
 
 @router.delete("/chats/{chat_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -824,7 +852,8 @@ async def process_llm_message(
                 **chat_request,
                 on_text_chunk=on_text_chunk,
             )
-    except Exception:
+    except (Exception, asyncio.CancelledError):
+        db.rollback()
         release_daily_message(
             db,
             user_id=current_user.id,
@@ -838,6 +867,7 @@ async def process_llm_message(
         chat_id=chat_session.chat_id,
     )
 
+    db.refresh(chat_session)
     base_chat_info = chat_session.info or {}
     map_suggestion = base_chat_info.get("pending_map_suggestion") if premium_access else None
     next_chat_info = append_chat_exchange(
@@ -942,13 +972,14 @@ async def stream_message_to_llm(
                     yield json.dumps(
                         {
                             "type": "status",
-                            "message": "Thinking",
+                            "message": "FeelY - Weaving a reply",
                             "elapsed_seconds": elapsed,
                         }
                     ) + "\n"
             result = await task
             yield json.dumps({"type": "result", "data": result.model_dump(mode="json")}) + "\n"
         except HTTPException as exc:
+            logger.warning("Chat stream failed: status=%s provider=%s", exc.status_code, settings.chat_llm_provider or settings.llm_provider)
             stream_db.rollback()
             yield json.dumps(
                 {"type": "error", "message": str(exc.detail), "status": exc.status_code}
@@ -965,6 +996,10 @@ async def stream_message_to_llm(
         finally:
             if not task.done():
                 task.cancel()
+            try:
+                await task
+            except (Exception, asyncio.CancelledError):
+                pass
             stream_db.close()
 
     return StreamingResponse(

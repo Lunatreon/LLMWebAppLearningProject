@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -98,3 +98,8 @@ class MapSuggestionConfirmationResponse(BaseModel):
     accepted: bool
     entry: dict[str, Any] | None = None
     map: dict[str, Any]
+
+
+class ReplyReactionRequest(BaseModel):
+    created_at: str = Field(min_length=1, max_length=64)
+    reaction: Literal["like", "dislike"] | None = None

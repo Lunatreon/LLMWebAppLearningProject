@@ -1477,6 +1477,16 @@ class OllamaBaseClient:
 
         if not isinstance(response_payload, dict):
             raise_bad_gateway("Ollama returned an unexpected HTTP response")
+        # Ollama reports nanoseconds. Record timings, never prompt/reply text,
+        # so model loading, input processing and generation can be distinguished.
+        logger.info(
+            "Ollama timing model=%s num_gpu=%s load_s=%.2f prompt_s=%.2f generation_s=%.2f input_tokens=%s output_tokens=%s",
+            self.model, self.num_gpu,
+            float(response_payload.get("load_duration") or 0) / 1e9,
+            float(response_payload.get("prompt_eval_duration") or 0) / 1e9,
+            float(response_payload.get("eval_duration") or 0) / 1e9,
+            response_payload.get("prompt_eval_count"), response_payload.get("eval_count"),
+        )
         message = response_payload.get("message")
         content = message.get("content") if isinstance(message, dict) else None
         if response_schema is None:

@@ -5005,3 +5005,9 @@ html[data-theme="light"] .chat-review-dialog .suggestion-target-field > span { c
   .chat-review-dialog .map-suggestion-card { padding: 12px; }
   .chat-review-dialog .suggestion-actions { flex-wrap: wrap; }
 }
+
+.send-button.is-stopping { border-radius: 50%; }
+.stop-square { display: block; width: 12px; height: 12px; border-radius: 3px; background: currentColor; }
+.reply-reactions { display: flex; gap: 6px; margin-top: 10px; }
+.reply-reactions button { background: transparent; border: 1px solid transparent; border-radius: 12px; padding: 4px 8px; cursor: pointer; opacity: .65; }
+.reply-reactions button:hover, .reply-reactions button[aria-pressed="true"] { opacity: 1; border-color: currentColor; }

@@ -121,7 +121,7 @@ class Settings(BaseSettings):
     ollama_topic_max_tokens: int = 768
     ollama_journal_max_tokens: int = 768
     ollama_chat_num_gpu: int = 0
-    ollama_topic_num_gpu: int = 999
+    ollama_topic_num_gpu: int = 0
     ollama_journal_num_gpu: int | None = None
     ollama_keep_alive: int = 300
     ollama_prewarm: bool = False

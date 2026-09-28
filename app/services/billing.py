@@ -214,10 +214,11 @@ def normalize_subscription(
         else:
             plan = "premium"
 
-    configured_plans = available_plans()
+    configured_plans = available_plans() if settings.premium_features_enabled else []
     return {
         "status": status,
         "premium": premium,
+        "free_test_phase": not settings.premium_features_enabled,
         "my_map_access": premium_feature_access,
         "journal_access": premium_feature_access,
         "chat_daily_limit": (

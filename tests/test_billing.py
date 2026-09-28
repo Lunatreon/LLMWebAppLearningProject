@@ -50,6 +50,7 @@ def test_subscription_status_normalizes_to_safe_free_state():
     assert normalized == {
         "status": SubscriptionStatus.NONE,
         "premium": False,
+        "free_test_phase": False,
         "my_map_access": False,
         "journal_access": False,
         "chat_daily_limit": 10,
@@ -258,6 +259,7 @@ def test_disabled_billing_returns_free_state_and_safe_error(client):
     assert subscription_response.json() == {
         "status": "none",
         "premium": False,
+        "free_test_phase": False,
         "my_map_access": False,
         "journal_access": False,
         "chat_daily_limit": 10,
@@ -450,3 +452,63 @@ def test_admin_subscription_removal_cancels_stripe_and_local_access(monkeypatch,
         assert cancel_calls == [
             ("sub_admin_cancel", {"invoice_now": False, "prorate": False})
         ]
+
+
+def test_free_test_phase_unlocks_features_and_blocks_checkout(client, monkeypatch):
+    headers = _register_and_authenticate(client)
+    monkeypatch.setattr(settings, "premium_features_enabled", False)
+    response = client.get("/api/v1/billing/subscription", headers=headers).json()
+    assert response["free_test_phase"] is True
+    assert response["my_map_access"] is True
+    assert response["journal_access"] is True
+    assert response["premium"] is False
+    assert response["available_plans"] == []
+    assert client.post("/api/v1/billing/checkout", headers=headers, json={"plan": "monthly"}).status_code == 409
+    monkeypatch.setattr(settings, "premium_features_enabled", True)
+    response = client.get("/api/v1/billing/subscription", headers=headers).json()
+    assert response["free_test_phase"] is False
+    assert response["my_map_access"] is False
+    assert response["journal_access"] is False
+
+
+def test_reply_reactions_persist_toggle_and_require_chat_owner(client):
+    headers = _register_and_authenticate(client)
+    reply = client.post("/api/v1/llm/message", headers=headers, json={"context": "I feel uncertain about work."})
+    assert reply.status_code == 200
+    result = reply.json()
+    url = f"/api/v1/llm/chats/{result['chat_id']}"
+    stamp = result["chat_info"]["messages"][-1]["created_at"]
+    for reaction in ("like", "dislike", None):
+        response = client.put(url + "/reaction", headers=headers, json={"created_at": stamp, "reaction": reaction})
+        assert response.status_code == 200
+        assert client.get(url, headers=headers).json()["messages"][-1]["reaction"] == reaction
+    assert client.put(url + "/reaction", headers=headers, json={"created_at": stamp, "reaction": "invalid"}).status_code == 422
+    assert client.put(url + "/reaction", headers=headers, json={"created_at": "missing", "reaction": "like"}).status_code == 404
+    client.post("/api/v1/auth/register", json={"email": "other@example.com", "username": "other", "password": "secure-password"})
+    token = client.post("/api/v1/auth/login", json={"email_or_username": "other@example.com", "password": "secure-password"}).json()["access_token"]
+    assert client.put(url + "/reaction", headers={"Authorization": f"Bearer {token}"}, json={"created_at": stamp, "reaction": "like"}).status_code == 404
+
+
+def test_cancelled_generation_releases_reserved_daily_quota(client, monkeypatch):
+    import asyncio
+    from fastapi import BackgroundTasks
+    from app.api.dependencies import get_db
+    from app.api.routes import llm as routes
+    from app.models.user import DailyLLMUsage
+    from app.schemas.llm import LLMRequest
+    from sqlalchemy import select
+
+    _register_and_authenticate(client)
+    async def cancel(**kwargs):
+        raise asyncio.CancelledError()
+    monkeypatch.setattr(routes, "get_chat_llm_client", lambda: SimpleNamespace(respond=cancel))
+    generator = client.app.dependency_overrides[get_db]()
+    db = next(generator)
+    try:
+        user = db.scalar(select(User).where(User.email == "billing@example.com"))
+        with pytest.raises(asyncio.CancelledError):
+            asyncio.run(routes.process_llm_message(LLMRequest(context="hello"), BackgroundTasks(), db, user))
+        usage = db.scalar(select(DailyLLMUsage).where(DailyLLMUsage.user_id == user.id))
+        assert usage.message_count == 0
+    finally:
+        generator.close()

@@ -40,6 +40,7 @@ class BillingSessionResponse(BaseModel):
 
 
 class SubscriptionResponse(BaseModel):
+    free_test_phase: bool = False
     status: SubscriptionStatus
     premium: bool
     my_map_access: bool

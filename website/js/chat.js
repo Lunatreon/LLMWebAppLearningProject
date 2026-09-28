@@ -21,6 +21,7 @@ async function loadChats() {
 }
 
 function startNewChat() {
+  state.chatNavigation = (state.chatNavigation || 0) + 1;
   stopPolling();
   document.querySelector("#map-analysis-retry").classList.add("hidden");
   state.activeChatId = null;
@@ -35,9 +36,11 @@ function startNewChat() {
 }
 
 async function loadChat(chatId) {
+  const navigation = state.chatNavigation = (state.chatNavigation || 0) + 1;
   const chat = await api(`/llm/chats/${encodeURIComponent(chatId)}`, {
     headers: authHeaders(),
   });
+  if (navigation !== state.chatNavigation) return;
   state.activeChatId = chat.chat_id;
   const existing = state.chats.find((item) => item.chat_id === chat.chat_id) || {};
   const completeChat = { ...existing, ...chat };
@@ -46,6 +49,11 @@ async function loadChat(chatId) {
   chatTitle.textContent = chat.title || "New conversation";
   document.title = `${chat.title || "Conversation"} | FeelY`;
   renderMessages(chat.messages || []);
+  if (completeChat.failedDraft && !messageInput.value && !state.chatRequest) {
+    messageInput.value = completeChat.failedDraft;
+    autoresizeMessageInput();
+    if (completeChat.replyError) renderInlineError(completeChat.replyError);
+  }
   renderTopic(chat.pending_topic || null);
   renderMapSuggestion(chat.pending_map_suggestion || null);
   renderChats();
@@ -224,6 +232,7 @@ function renderMessages(items, followLatest = true) {
 
     empty.append(mark, heading, copy, suggestions);
     messages.append(empty);
+    restoreActiveReply();
     return;
   }
 
@@ -231,8 +240,10 @@ function renderMessages(items, followLatest = true) {
     const bubble = document.createElement("article");
     bubble.className = `message ${item.role === "user" ? "user" : "assistant"}`;
     bubble.textContent = item.content || "";
+    if (item.role === "assistant" && item.created_at) addReplyReactions(bubble, item);
     messages.append(bubble);
   });
+  restoreActiveReply();
   messages.scrollTop = followLatest ? messages.scrollHeight : previousScrollTop;
 }
 
@@ -240,11 +251,11 @@ function showWaitingMessage() {
   const bubble = document.createElement("article");
   bubble.className = "message assistant waiting-message";
   bubble.setAttribute("role", "status");
-  bubble.setAttribute("aria-label", "FeelY is thinking");
+  bubble.setAttribute("aria-label", "FeelY - Weaving a reply");
 
   const label = document.createElement("span");
   label.className = "waiting-label";
-  label.textContent = "FeelY is thinking";
+  label.textContent = "FeelY - Weaving a reply";
 
   const dots = document.createElement("span");
   dots.className = "waiting-dots";
@@ -500,77 +511,127 @@ function renderMapSuggestion(suggestion) {
   }
 }
 
+function updateSendControl() {
+  const request = state.chatRequest;
+  const active = request && request.chatId === state.activeChatId;
+  sendButton.disabled = Boolean(request && !active);
+  sendButton.classList.toggle("is-stopping", Boolean(active));
+  sendButton.title = active ? "Stop response" : "Send message";
+  sendButton.setAttribute("aria-label", sendButton.title);
+  sendButton.innerHTML = active ? '<span class="stop-square" aria-hidden="true"></span>' : '<span aria-hidden="true">&#8593;</span>';
+}
+
+function restoreActiveReply() {
+  updateSendControl();
+  const request = state.chatRequest;
+  if (!request || request.chatId !== state.activeChatId) return;
+  messages.querySelector(".empty-chat")?.remove();
+  const user = document.createElement("article");
+  user.className = "message user";
+  user.textContent = request.context;
+  messages.append(user);
+  request.player?.cancel();
+  request.bubble = showWaitingMessage();
+  if (request.text) appendStreamingText(request.bubble, request.text);
+  request.player = createChatTextPlayer(request.bubble);
+}
+
+function addReplyReactions(bubble, item) {
+  const chatId = state.activeChatId;
+  const controls = document.createElement("div");
+  controls.className = "reply-reactions";
+  for (const [value, symbol] of [["like", "\u{1F44D}"], ["dislike", "\u{1F44E}"]]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = symbol;
+    button.title = value === "like" ? "Helpful reply" : "Unhelpful reply";
+    button.setAttribute("aria-label", button.title);
+    button.setAttribute("aria-pressed", String(item.reaction === value));
+    button.addEventListener("click", async () => {
+      for (const control of controls.children) control.disabled = true;
+      try {
+        const reaction = item.reaction === value ? null : value;
+        await api(`/llm/chats/${encodeURIComponent(chatId)}/reaction`, {
+          method: "PUT", headers: authHeaders(),
+          body: JSON.stringify({created_at: item.created_at, reaction}),
+        });
+        item.reaction = reaction;
+        [...controls.children].forEach((control, index) => control.setAttribute("aria-pressed", String(reaction === ["like", "dislike"][index])));
+      } catch (error) { renderInlineError(error); }
+      finally { for (const control of controls.children) control.disabled = false; }
+    });
+    controls.append(button);
+  }
+  bubble.append(controls);
+}
+
 async function sendMessage(event) {
   event.preventDefault();
+  if (state.chatRequest) {
+    if (state.chatRequest.chatId === state.activeChatId) state.chatRequest.controller.abort();
+    return;
+  }
   const context = messageInput.value.trim();
   if (!context || sendButton.disabled) return;
-
-  sendButton.disabled = true;
+  const request = {chatId: state.activeChatId, context, text: "", controller: new AbortController(), token: state.token, navigation: state.chatNavigation};
+  state.chatRequest = request;
   messageInput.value = "";
   autoresizeMessageInput();
-
-  const currentChat = state.chats.find((chat) => chat.chat_id === state.activeChatId);
-  const existingMessages = currentChat?.messages || [];
-  renderMessages([...existingMessages, { role: "user", content: context }]);
-  const waitingMessage = showWaitingMessage();
-  const waitingLabel = waitingMessage.querySelector(".waiting-label");
-  const textPlayer = createChatTextPlayer(waitingMessage);
-
+  updateSendControl();
   try {
+    if (!request.chatId) {
+      const chat = await api("/llm/chats", {method: "POST", headers: authHeaders(), body: "{}", signal: request.controller.signal});
+      request.chatId = chat.chat_id;
+      if (request.token !== state.token) return;
+      upsertChat(chat);
+      if (state.activeChatId === null && state.chatNavigation === request.navigation) state.activeChatId = chat.chat_id;
+    }
+    const currentChat = state.chats.find(chat => chat.chat_id === request.chatId);
+    if (state.activeChatId === request.chatId) renderMessages(currentChat?.messages || []);
+    renderChats();
     let response = null;
     await apiStream("/llm/message/stream", {
-      method: "POST",
-      headers: authHeaders(),
-      body: JSON.stringify({
-        chat_id: state.activeChatId,
-        context,
-      }),
-    }, (event) => {
-      if (event.type === "status" && waitingLabel) {
-        const elapsed = event.elapsed_seconds ? ` - ${event.elapsed_seconds}s` : "";
-        waitingLabel.textContent = `${event.message}${elapsed}`;
-        messages.scrollTop = messages.scrollHeight;
-      } else if (event.type === "text_delta" && typeof event.text === "string") {
-        textPlayer.push(event.text);
-      } else if (event.type === "result") {
-        response = event.data;
-        textPlayer.finish();
-      } else if (event.type === "error") {
-        throw new ApiError(event.message || "Request failed", event.status || 500);
-      }
+      method: "POST", headers: authHeaders(), signal: request.controller.signal,
+      body: JSON.stringify({chat_id: request.chatId, context}),
+    }, event => {
+      if (event.type === "text_delta" && typeof event.text === "string") {
+        request.text += event.text;
+        if (state.activeChatId === request.chatId) request.player?.push(event.text);
+      } else if (event.type === "result") response = event.data;
+      else if (event.type === "error") throw new ApiError(event.message || "Request failed", event.status || 500);
     });
-    if (!response) throw new ApiError("The response stream ended unexpectedly.", 502);
-    await textPlayer.finish();
-    const updatedChat = {
-      chat_id: response.chat_id,
-      title: response.chat_info.title || "New conversation",
-      message_count: response.chat_info.message_count || 0,
-      updated_at: response.chat_info.updated_at,
-      pending_topic: response.chat_info.pending_topic || null,
-      pending_topics: response.chat_info.pending_topics || [],
-      messages: response.chat_info.messages || [],
-      pending_map_suggestion: response.map_suggestion || null,
-    };
-    state.activeChatId = response.chat_id;
+    if (!response) throw new ApiError("The response stream ended unexpectedly. Please retry.", 502);
+    if (request.token !== state.token) return;
+    const updatedChat = {...response.chat_info, chat_id: response.chat_id, messages: response.chat_info.messages || [], pending_map_suggestion: response.map_suggestion || null};
     upsertChat(updatedChat);
-    chatTitle.textContent = updatedChat.title;
-    document.title = `${updatedChat.title} | FeelY`;
+    await request.player?.finish();
+    if (request.token !== state.token || state.chatRequest !== request) return;
+    state.chatRequest = null;
+    if (state.activeChatId === request.chatId) {
+      chatTitle.textContent = updatedChat.title || "Conversation";
+      renderMessages(updatedChat.messages);
+      renderMapSuggestion(updatedChat.pending_map_suggestion);
+      renderTopic(updatedChat.pending_topic);
+      pollTopicSoon();
+    }
     renderChats();
-    const followLatest = messages.scrollHeight - messages.scrollTop - messages.clientHeight < 80;
-    renderMessages(updatedChat.messages, followLatest);
-    renderMapSuggestion(response.map_suggestion || null);
-    renderTopic(updatedChat.pending_topic);
-    pollTopicSoon();
   } catch (error) {
-    waitingMessage.remove();
-    messageInput.value = context;
-    autoresizeMessageInput();
-    renderInlineError(error);
+    const failedChat = state.chats.find(chat => chat.chat_id === request.chatId);
+    if (failedChat && request.token === state.token) {
+      failedChat.failedDraft = context;
+      failedChat.replyError = request.controller.signal.aborted ? "Response stopped." : error.message;
+    }
+    if (request.token === state.token && state.activeChatId === request.chatId) {
+      state.chatRequest = null;
+      renderMessages(state.chats.find(chat => chat.chat_id === request.chatId)?.messages || []);
+      if (!messageInput.value) messageInput.value = context;
+      autoresizeMessageInput();
+      if (!request.controller.signal.aborted) renderInlineError(error);
+    }
   } finally {
-    textPlayer.cancel();
-    waitingMessage.remove();
-    sendButton.disabled = false;
-    messageInput.focus();
+    request.player?.cancel();
+    if (state.chatRequest === request) state.chatRequest = null;
+    updateSendControl();
   }
 }
 
