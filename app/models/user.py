@@ -8,6 +8,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.billing import BillingSubscription
+    from app.models.terms import TermsAcceptance
 
 
 def utc_now() -> datetime:
@@ -36,6 +37,9 @@ class User(Base):
     email_verification_sent_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
+    )
+    email_verification_attempts: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False,
     )
     password_reset_token_hash: Mapped[str | None] = mapped_column(
         String(128),
@@ -73,6 +77,12 @@ class User(Base):
     journal_entries: Mapped[list["JournalEntry"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
+    )
+    feedback_entries: Mapped[list["Feedback"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan",
+    )
+    terms_acceptances: Mapped[list["TermsAcceptance"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan",
     )
 
 

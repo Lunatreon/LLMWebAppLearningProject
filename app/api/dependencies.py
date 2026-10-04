@@ -70,6 +70,9 @@ def get_current_user(
     if user is None or not user.is_active:
         raise credentials_error
 
+    if (settings.email_verification_enabled or settings.email_verification_required) and not user.is_email_verified:
+        raise HTTPException(status_code=403, detail="Please verify your email before logging in.")
+
     return user
 
 

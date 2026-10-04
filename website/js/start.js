@@ -3,6 +3,9 @@
 loginTab.addEventListener("click", () => setMode("login"));
 registerTab.addEventListener("click", () => setMode("register"));
 forgotPasswordButton.addEventListener("click", openPasswordResetRequest);
+activateAccountButton.addEventListener("click", () => openEmailVerification());
+verificationForm.addEventListener("submit", confirmEmailPin);
+verificationResend.addEventListener("click", resendEmailPin);
 passwordResetRequestForm.addEventListener("submit", (event) =>
   requestPasswordReset(event).catch((error) => {
     passwordResetStatus.textContent = error instanceof Error ? error.message : String(error);
@@ -242,7 +245,7 @@ authForm.addEventListener("submit", async (event) => {
 async function init() {
   const savedToken = state.token;
   scheduleSessionExpiry();
-  await Promise.all([loadCaptchaConfig(), loadGoogleConfig()]);
+  await Promise.all([loadCaptchaConfig(), loadGoogleConfig(), loadEmailConfig(), loadFeedbackConfig()]);
   const requestedMode = new URLSearchParams(window.location.search).get("mode");
   setMode(!savedToken && requestedMode === "register" ? "register" : "login");
   renderUser();

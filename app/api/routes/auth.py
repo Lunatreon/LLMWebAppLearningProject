@@ -1,5 +1,7 @@
+from datetime import timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -10,6 +12,7 @@ from app.core.email_verification import (
     create_email_verification_token,
     email_verification_is_expired,
     hash_email_verification_token,
+    hash_email_verification_pin,
     send_email_verification_message,
 )
 from app.core.google_auth import (
@@ -46,7 +49,18 @@ from app.schemas.user import UserCreate, UserRead
 router = APIRouter()
 
 
+@router.get("/email/config")
+def read_email_config() -> dict[str, bool]:
+    return {
+        "verification_enabled": settings.email_verification_enabled,
+        "password_reset_enabled": settings.password_reset_enabled,
+    }
+
+
 def token_for_user(user: User, db: Session) -> Token:
+    if (settings.email_verification_enabled or settings.email_verification_required) and not user.is_email_verified:
+        db.commit()
+        raise HTTPException(status_code=403, detail="Please verify your email before logging in.")
     user.last_login_at = utc_now()
     db.commit()
     return Token(access_token=create_access_token(subject=str(user.id)))
@@ -73,6 +87,30 @@ def read_captcha_config() -> CaptchaConfig:
 @router.get("/google/config", response_model=GoogleAuthConfig)
 def read_google_config() -> GoogleAuthConfig:
     return GoogleAuthConfig(**google_public_config())
+
+
+@router.get("/android/config")
+def read_android_config():
+    """Public discovery metadata, not proof of an app's identity or authorization."""
+    enabled = settings.android_app_enabled
+    google_enabled = bool(enabled and settings.google_auth_enabled and settings.google_client_id)
+    return {
+        "enabled": enabled,
+        "package_name": settings.android_package_name or None,
+        "password_login_enabled": enabled,
+        "google": {"enabled": google_enabled,
+                   "server_client_id": settings.google_client_id if google_enabled else None},
+        "token_type": "bearer",
+        "access_token_expires_in_seconds": settings.access_token_expire_minutes * 60,
+        "endpoints": {name: settings.api_v1_prefix + path for name, path in {
+            "register": "/auth/register", "login": "/auth/login", "google": "/auth/google",
+            "captcha_config": "/auth/captcha/config", "email_config": "/auth/email/config",
+            "verify_email": "/auth/email-verification/confirm",
+            "password_reset_request": "/auth/password-reset/request",
+            "password_reset_confirm": "/auth/password-reset/confirm",
+            "terms_config": "/terms/config", "terms_status": "/terms/me", "terms_accept": "/terms/accept",
+        }.items()},
+    }
 
 
 @router.post(
@@ -137,7 +175,13 @@ def register(
         ) from exc
     db.refresh(user)
     if verification_token:
-        send_email_verification_message(user, verification_token)
+        try:
+            send_email_verification_message(user, verification_token)
+        except HTTPException as exc:
+            raise HTTPException(
+                status_code=502,
+                detail="Your account was created, but the activation email could not be sent. Use Activate account to request a new PIN.",
+            ) from exc
     return user
 
 
@@ -164,7 +208,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> Token:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if settings.email_verification_required and not user.is_email_verified:
+    if (settings.email_verification_enabled or settings.email_verification_required) and not user.is_email_verified:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Please verify your email before logging in.",
@@ -230,7 +274,7 @@ def login_with_google(
         user.display_name = str(name).strip()
     if picture and not user.avatar_url:
         user.avatar_url = str(picture).strip()
-    if email_verified and not user.is_email_verified:
+    if email_verified and user.email == email and not user.is_email_verified:
         user.is_email_verified = True
         user.email_verified_at = utc_now()
         user.email_verification_token_hash = None
@@ -267,36 +311,69 @@ def request_email_verification(
             detail="Email verification is not enabled.",
         )
 
-    user = db.scalar(select(User).where(User.email == str(payload.email).lower()))
-    if user is None or user.is_email_verified:
+    email = str(payload.email).strip().lower()
+    enforce_rate_limit(
+        f"verification-send:{email}", max_attempts=3, window_seconds=3600,
+        detail="Too many code requests. Please try again in an hour.",
+    )
+    user = db.scalar(select(User).where(User.email == email))
+    if user is None or not user.is_active or user.is_email_verified:
         return generic_response
 
     token = create_email_verification_token(user)
-    db.commit()
-    db.refresh(user)
     send_email_verification_message(user, token)
+    db.commit()
     return generic_response
 
 
-@router.post("/email-verification/confirm", response_model=EmailVerificationConfirmResponse)
+@router.post("/email-verification/confirm", response_model=EmailVerificationConfirmResponse,
+             dependencies=[Depends(rate_limit_auth)])
 def confirm_email_verification(
     payload: EmailVerificationConfirmRequest,
     db: Session = Depends(get_db),
 ) -> EmailVerificationConfirmResponse:
-    token_hash = hash_email_verification_token(payload.token)
-    user = db.scalar(
-        select(User).where(User.email_verification_token_hash == token_hash)
-    )
-    if user is None or email_verification_is_expired(user.email_verification_sent_at):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Verification link is invalid or expired.",
+    invalid = HTTPException(status_code=400, detail="Verification code or link is invalid or expired. Request a new code.")
+    if payload.pin is not None:
+        email = str(payload.email).lower()
+        enforce_rate_limit(
+            f"verification-confirm:{email}", max_attempts=10, window_seconds=900,
+            detail="Too many verification attempts. Please wait before trying again.",
         )
+        user = db.scalar(select(User).where(User.email == email))
+        if user is None or not user.is_active or user.is_email_verified or not user.email_verification_sent_at:
+            raise invalid
+        sent_at = user.email_verification_sent_at
+        if sent_at.tzinfo is None:
+            sent_at = sent_at.replace(tzinfo=timezone.utc)
+        if utc_now() > sent_at + timedelta(minutes=settings.email_verification_pin_expire_minutes):
+            raise invalid
+        # Persist attempts atomically, including failures; this survives restarts.
+        changed = db.execute(update(User).where(
+            User.id == user.id,
+            User.email_verification_token_hash == user.email_verification_token_hash,
+            User.email_verification_attempts < settings.email_verification_max_attempts,
+        ).values(email_verification_attempts=User.email_verification_attempts + 1),
+            execution_options={"synchronize_session": False})
+        db.commit()
+        if not changed.rowcount:
+            raise invalid
+        token_hash = hash_email_verification_pin(email, payload.pin)
+    else:
+        # Keep already-issued, high-entropy verification links working.
+        token_hash = hash_email_verification_token(payload.token)
+        user = db.scalar(select(User).where(User.email_verification_token_hash == token_hash))
+        if user is None or not user.is_active or email_verification_is_expired(user.email_verification_sent_at):
+            raise invalid
 
-    user.is_email_verified = True
-    user.email_verified_at = utc_now()
-    user.email_verification_token_hash = None
-    user.email_verification_sent_at = None
+    changed = db.execute(update(User).where(
+        User.id == user.id, User.is_email_verified.is_(False),
+        User.email_verification_token_hash == token_hash,
+    ).values(is_email_verified=True, email_verified_at=utc_now(),
+             email_verification_token_hash=None, email_verification_sent_at=None,
+             email_verification_attempts=0))
+    if not changed.rowcount:
+        db.rollback()
+        raise invalid
     db.commit()
     return EmailVerificationConfirmResponse(
         verified=True,
@@ -335,9 +412,8 @@ def request_password_reset(
         return generic_response
 
     token = create_password_reset_token(user)
-    db.commit()
-    db.refresh(user)
     send_password_reset_message(user, token)
+    db.commit()
     return generic_response
 
 
@@ -352,17 +428,20 @@ def confirm_password_reset(
 ) -> PasswordResetConfirmResponse:
     token_hash = hash_password_reset_token(payload.token)
     user = db.scalar(select(User).where(User.password_reset_token_hash == token_hash))
-    if user is None or password_reset_is_expired(user.password_reset_sent_at):
+    if user is None or not user.is_active or password_reset_is_expired(user.password_reset_sent_at):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Password reset link is invalid or expired.",
         )
 
-    user.hashed_password = hash_password(payload.new_password)
-    if "password" not in user.auth_provider:
-        user.auth_provider = f"{user.auth_provider},password"
-    user.password_reset_token_hash = None
-    user.password_reset_sent_at = None
+    provider = user.auth_provider if "password" in user.auth_provider else f"{user.auth_provider},password"
+    changed = db.execute(update(User).where(
+        User.id == user.id, User.is_active.is_(True), User.password_reset_token_hash == token_hash,
+    ).values(hashed_password=hash_password(payload.new_password), auth_provider=provider,
+             password_reset_token_hash=None, password_reset_sent_at=None))
+    if not changed.rowcount:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Password reset link is invalid or expired.")
     db.commit()
     return PasswordResetConfirmResponse(
         reset=True,

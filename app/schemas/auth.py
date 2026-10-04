@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 
 class LoginRequest(BaseModel):
@@ -42,7 +42,18 @@ class EmailVerificationRequestResponse(BaseModel):
 
 
 class EmailVerificationConfirmRequest(BaseModel):
-    token: str = Field(min_length=20, max_length=512)
+    token: str | None = Field(default=None, min_length=20, max_length=512)
+    email: EmailStr | None = None
+    pin: str | None = Field(default=None, pattern=r"^[0-9]{6}$")
+
+    @model_validator(mode="after")
+    def require_one_verification_method(self):
+        if self.token is not None:
+            if self.email is not None or self.pin is not None:
+                raise ValueError("Use either a verification link or an email and PIN.")
+        elif self.email is None or self.pin is None:
+            raise ValueError("Enter your email and six-digit PIN.")
+        return self
 
 
 class EmailVerificationConfirmResponse(BaseModel):

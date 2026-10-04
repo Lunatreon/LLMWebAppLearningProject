@@ -9,7 +9,7 @@
     <meta name="referrer" content="no-referrer" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta name="feely-api-base" content="https://api.feel-y.com/api/v1" />
-    <link rel="icon" type="image/png" sizes="64x64" href="assets/feely-favicon.png?v=20260902-2" />
+    <link rel="icon" type="image/png" sizes="1254x1254" href="assets/feely-favicon.png?v=20260928-transparent-1" />
     <title>FeelY Administration</title>
     <link rel="stylesheet" href="styles.css?v=20260831-4" />
     <link rel="stylesheet" href="admin.css?v=20260917-roles-1" />
@@ -58,6 +58,7 @@
     <header class="admin-header">
       <a class="brand-lockup" href="./"><span class="brand-symbol">F</span><span>FeelY Admin</span></a>
       <div class="admin-header-actions">
+        <a class="secondary-button" href="webmail.html">Open mail</a>
         <a class="secondary-button" href="./">Back to chat</a>
         <button id="admin-logout" class="secondary-button" type="button">Sign out</button>
       </div>
@@ -65,6 +66,16 @@
 
     <main class="admin-shell">
       <p id="admin-status" class="admin-status" role="status">Loading administration...</p>
+
+      <section class="admin-section">
+        <div class="admin-section-heading">
+          <div><p class="eyebrow">Test phase</p><h2>Feedback inbox</h2></div>
+          <button id="refresh-feedback" class="secondary-button" type="button">Refresh feedback</button>
+        </div>
+        <p id="admin-feedback-status" role="status"></p>
+        <div id="admin-feedback-list"></div>
+        <button id="more-feedback" class="secondary-button hidden" type="button">Load older feedback</button>
+      </section>
 
       <section class="admin-section">
         <div class="admin-section-heading">

@@ -17,6 +17,9 @@ ENV/
 # Environment and secrets
 .env
 .env.*
+.dev.vars
+.wrangler/
+node_modules/
 !.env.example
 
 # Local databases and generated files

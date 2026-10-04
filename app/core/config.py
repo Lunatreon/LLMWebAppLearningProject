@@ -70,10 +70,23 @@ class Settings(BaseSettings):
     turnstile_timeout_seconds: float = 5.0
     google_auth_enabled: bool = False
     google_client_id: str | None = None
+    android_app_enabled: bool = False
+    android_package_name: str = ""
+    terms_version: str = Field(default="", max_length=80)
+    terms_document_url: str = ""
+    terms_document_sha256: str = Field(default="", pattern=r"^$|^[a-f0-9]{64}$")
     google_allowed_hosted_domain: str | None = None
     email_verification_enabled: bool = False
     email_verification_required: bool = False
     email_verification_token_expire_hours: int = 24
+    email_verification_pin_expire_minutes: int = Field(default=15, ge=1, le=60)
+    email_verification_max_attempts: int = Field(default=5, ge=1, le=10)
+    feedback_enabled: bool = False
+    feedback_email_to: str | None = None
+    webmail_enabled: bool = False
+    webmail_address: str = "info@feel-y.com"
+    webmail_worker_url: str = ""
+    webmail_bridge_secret: str = ""
     password_reset_enabled: bool = False
     password_reset_token_expire_minutes: int = 60
     public_app_url: str = "http://127.0.0.1:5500"
@@ -83,6 +96,7 @@ class Settings(BaseSettings):
     smtp_password: str | None = None
     smtp_from_email: str | None = None
     smtp_use_tls: bool = True
+    smtp_use_ssl: bool = False
 
     stripe_enabled: bool = False
     stripe_secret_key: str | None = None

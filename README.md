@@ -32,6 +32,8 @@ per-user LLM requests, and persistent user profiles.
 
 - [Stripe subscription setup](docs/stripe-setup.md)
 - [Administration and editable prompts](docs/admin.md)
+- [Local webmail and reusable setup](WEBMAIL_SETUP.md)
+- [Android login and versioned AGB acceptance](docs/ANDROID_AND_TERMS.md)
 - [Bright-theme design guide](docs/BRIGHT_DESIGN.md)
 
 See [docs/CODE_GUIDE.md](docs/CODE_GUIDE.md) for a walkthrough of how the code
@@ -407,48 +409,41 @@ Google ID token to `POST /api/v1/auth/google`; the backend verifies the token,
 checks the configured client ID, and links the account through Google's stable
 subject ID.
 
-Verification email is also possible, but it needs an email delivery provider.
-Use SMTP credentials from a service such as your domain host, Postmark,
-SendGrid, Mailgun, AWS SES, or another transactional email provider. You also
-need a public frontend URL so the email link can point back to the app:
+### Email activation and password reset
 
-```env
-EMAIL_VERIFICATION_ENABLED=true
-EMAIL_VERIFICATION_REQUIRED=false
-EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS=24
-PUBLIC_APP_URL="https://your-site.example"
-SMTP_HOST="smtp.example.com"
-SMTP_PORT=587
-SMTP_USERNAME="smtp-user"
-SMTP_PASSWORD="smtp-password"
-SMTP_FROM_EMAIL="hello@your-site.example"
-SMTP_USE_TLS=true
-```
+The email setup guide is [EMAIL_SETUP.md](EMAIL_SETUP.md). Configure a real
+sending provider for `noreply@feel-y.com` and its SMTP credentials before
+turning on account emails. The application does not provision a mailbox.
 
-When enabled, registration creates an unverified account and emails a one-time
-verification link. Users can also request another email from Account settings.
-Set `EMAIL_VERIFICATION_REQUIRED=true` only after SMTP delivery is working,
-because unverified password users cannot log in when it is required.
+With `EMAIL_VERIFICATION_ENABLED=true`, new password accounts must enter a
+six-digit email PIN before logging in. PINs expire after 15 minutes by default,
+allow five attempts, and can only be used once. Resending replaces the old PIN.
+Users can reopen **Activate account / enter email PIN** on the login page or
+request a code through Account settings. Already-issued verification links
+remain valid until their original expiry. Google-verified addresses do not need
+another PIN. Existing accounts already marked verified remain verified.
 
-### Password reset email
+`PASSWORD_RESET_ENABLED=true` enables **Forgot your password?** emails through
+the same SMTP connection. Links point to `PUBLIC_APP_URL`, expire after 60
+minutes by default, and can only be used once. Resetting a password does not
+activate an unverified account. Existing sessions keep their original expiry.
 
-Password reset uses the same SMTP connection. FeelY sends the messages, but it
-does not host a mailbox or automatically create an account with an email
-provider. Add the SMTP credentials supplied by your chosen provider above,
-verify that its sender/domain is allowed, and then enable reset links:
+### Test feedback
 
-```env
-PASSWORD_RESET_ENABLED=true
-PASSWORD_RESET_TOKEN_EXPIRE_MINUTES=60
-RATE_LIMIT_PASSWORD_RESET_IDENTIFIER_PER_HOUR=3
-PUBLIC_APP_URL="https://app.feel-y.com"
-```
+Set `FEEDBACK_ENABLED=true` and restart the backend to show **Share test
+feedback** in the signed-in sidebar. Feedback is stored in the database's
+`feedback` table and can be read in the **Feedback inbox** at `/admin.html`.
+The inbox includes the sender's account email, category, message, and time;
+chat content is never automatically attached. Set `FEEDBACK_EMAIL_TO` to
+`info@feel-y.com` for best-effort SMTP notifications in addition to database
+storage. Clear it to use feedback without an email provider. Notification
+failures leave saved feedback available in admin; automatic retries are not
+implemented. Emailed copies are not removed by account deletion.
 
-Restart FastAPI after editing `.env`. The login page's **Forgot password?**
-action always gives the same response whether an address exists or not. For a
-matching active account, it emails a one-time link back to the website root; the link
-expires after the configured number of minutes. Keep
-`PASSWORD_RESET_ENABLED=false` until SMTP delivery has been tested.
+Set `FEEDBACK_ENABLED=false` and restart to hide the form on refresh and reject
+new submissions immediately, including from already-open tabs. Existing
+feedback remains available to administrators. Feedback is deleted along with
+its author's account. Submissions are limited to five per account per hour.
 
 ### Premium journal
 

@@ -1,0 +1,14 @@
+<dialog id="feedback-dialog" class="app-dialog">
+  <button class="dialog-close" type="button" data-close-dialog="feedback-dialog" aria-label="Close">&times;</button>
+  <p class="eyebrow">Help shape FeelY</p>
+  <h2>Share test feedback</h2>
+  <p>Your feedback and account email are shared with the FeelY team. Chat messages are not attached.</p>
+  <form id="feedback-form">
+    <label><span>What would you like to share?</span><select id="feedback-category">
+      <option value="general">General feedback</option><option value="bug">Something is not working</option><option value="idea">An idea</option>
+    </select></label>
+    <label><span>Your feedback</span><textarea id="feedback-message" rows="6" minlength="3" maxlength="5000" required placeholder="Tell us what happened or what could be better..."></textarea></label>
+    <button id="feedback-submit" class="primary-button" type="submit">Send feedback</button>
+  </form>
+  <p id="feedback-status" role="status"></p>
+</dialog>

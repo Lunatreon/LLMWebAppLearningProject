@@ -435,6 +435,7 @@ async function requestEmailVerification() {
     body: JSON.stringify({ email: accountEmail.value.trim() }),
   });
   accountStatus.textContent = response.detail || "Verification email requested.";
+  if (response.sent) openEmailVerification(accountEmail.value.trim(), response.detail);
 }
 
 async function updateAccountPassword(event) {

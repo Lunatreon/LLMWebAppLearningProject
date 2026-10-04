@@ -16,7 +16,7 @@
       name="description"
       content="A private FeelY space for thoughtful conversations and personal reflection."
     />
-    <link rel="icon" type="image/png" sizes="64x64" href="assets/feely-favicon.png?v=20260902-2" />
+    <link rel="icon" type="image/png" sizes="1254x1254" href="assets/feely-favicon.png?v=20260928-transparent-1" />
     <title>FeelY Chat</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -5038,6 +5038,18 @@ html[data-theme="light"] .chat-review-dialog .suggestion-target-field > span { c
 .reply-reactions { display: flex; gap: 6px; margin-top: 10px; }
 .reply-reactions button { background: transparent; border: 1px solid transparent; border-radius: 12px; padding: 4px 8px; cursor: pointer; opacity: .65; }
 .reply-reactions button:hover, .reply-reactions button[aria-pressed="true"] { opacity: 1; border-color: currentColor; }
+.sidebar-feedback-link {
+  background: transparent;
+  color: inherit;
+  border: 0;
+  padding: 12px 16px;
+  text-align: left;
+  cursor: pointer;
+}
+
+#feedback-form, #email-verification-form { display: grid; gap: 16px; }
+#feedback-message { width: 100%; resize: vertical; }
+#verification-pin { letter-spacing: .3em; font-size: 24px; }
 
 </style>
   </head>
@@ -5148,6 +5160,7 @@ html[data-theme="light"] .chat-review-dialog .suggestion-target-field > span { c
     </form>
 
     <p id="auth-status" class="auth-status" role="status"></p>
+    <button id="activate-account-button" class="auth-link-button hidden" type="button">Activate account / enter email PIN</button>
     <p class="privacy-note">Your conversations remain connected to your private account.</p>
   </div>
 </section>
@@ -5284,6 +5297,8 @@ html[data-theme="light"] .chat-review-dialog .suggestion-target-field > span { c
     <span aria-hidden="true">&#9998;</span> Journal
     <span id="journal-plan-badge" class="hidden" aria-hidden="true"></span>
   </button>
+
+  <button id="feedback-button" class="sidebar-feedback-link hidden" type="button">Share test feedback</button>
 
   <div class="sidebar-profile">
     <span id="user-avatar" class="user-avatar" aria-hidden="true">Y</span>
@@ -5642,6 +5657,35 @@ html[data-theme="light"] .chat-review-dialog .suggestion-target-field > span { c
     </form>
   </section>
   <p id="password-reset-status" class="form-error" role="status"></p>
+</dialog>
+
+    <dialog id="email-verification-dialog" class="app-dialog">
+  <button class="dialog-close" type="button" data-close-dialog="email-verification-dialog" aria-label="Close">&times;</button>
+  <p class="eyebrow">Your private space</p>
+  <h2>Activate your account</h2>
+  <p>Enter the six-digit PIN from your FeelY email. You only need to activate your email once.</p>
+  <form id="email-verification-form">
+    <label><span>Email</span><input id="verification-email" type="email" autocomplete="email" required /></label>
+    <label><span>Activation PIN</span><input id="verification-pin" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" minlength="6" maxlength="6" required /></label>
+    <button class="primary-button" type="submit">Activate account</button>
+    <button id="verification-resend" class="auth-link-button" type="button">Send a new PIN</button>
+  </form>
+  <p id="verification-status" role="status"></p>
+</dialog>
+
+    <dialog id="feedback-dialog" class="app-dialog">
+  <button class="dialog-close" type="button" data-close-dialog="feedback-dialog" aria-label="Close">&times;</button>
+  <p class="eyebrow">Help shape FeelY</p>
+  <h2>Share test feedback</h2>
+  <p>Your feedback and account email are shared with the FeelY team. Chat messages are not attached.</p>
+  <form id="feedback-form">
+    <label><span>What would you like to share?</span><select id="feedback-category">
+      <option value="general">General feedback</option><option value="bug">Something is not working</option><option value="idea">An idea</option>
+    </select></label>
+    <label><span>Your feedback</span><textarea id="feedback-message" rows="6" minlength="3" maxlength="5000" required placeholder="Tell us what happened or what could be better..."></textarea></label>
+    <button id="feedback-submit" class="primary-button" type="submit">Send feedback</button>
+  </form>
+  <p id="feedback-status" role="status"></p>
 </dialog>
 
 
@@ -6305,6 +6349,15 @@ async function loadUser() {
   renderUser();
 }
 
+const verificationDialog = document.querySelector("#email-verification-dialog");
+const verificationForm = document.querySelector("#email-verification-form");
+const verificationEmail = document.querySelector("#verification-email");
+const verificationPin = document.querySelector("#verification-pin");
+const verificationStatus = document.querySelector("#verification-status");
+const verificationResend = document.querySelector("#verification-resend");
+const activateAccountButton = document.querySelector("#activate-account-button");
+
+
 </script>
     <script data-app-source="js/account.js">
 // FeelY account: see website/EDITING.md for file responsibilities and load order.
@@ -6744,6 +6797,7 @@ async function requestEmailVerification() {
     body: JSON.stringify({ email: accountEmail.value.trim() }),
   });
   accountStatus.textContent = response.detail || "Verification email requested.";
+  if (response.sent) openEmailVerification(accountEmail.value.trim(), response.detail);
 }
 
 async function updateAccountPassword(event) {
@@ -6830,6 +6884,68 @@ async function confirmEmailVerificationFromUrl() {
 </script>
     <script data-app-source="js/auth.js">
 // FeelY auth: see website/EDITING.md for file responsibilities and load order.
+
+async function loadEmailConfig() {
+  try {
+    const config = await api("/auth/email/config");
+    activateAccountButton.classList.toggle("hidden", !config.verification_enabled);
+  } catch {
+    // Keep login usable while the backend is temporarily unavailable.
+  }
+}
+
+function openEmailVerification(email = emailInput.value.trim(), message = "") {
+  verificationEmail.value = email.includes("@") ? email : "";
+  verificationPin.value = "";
+  verificationStatus.textContent = message;
+  verificationDialog.showModal();
+  (verificationEmail.value ? verificationPin : verificationEmail).focus();
+}
+
+async function confirmEmailPin(event) {
+  event.preventDefault();
+  const submit = verificationForm.querySelector('button[type="submit"]');
+  submit.disabled = true;
+  verificationStatus.textContent = "Activating...";
+  try {
+    await api("/auth/email-verification/confirm", {
+      method: "POST",
+      body: JSON.stringify({ email: verificationEmail.value.trim(), pin: verificationPin.value.trim() }),
+    });
+    verificationPin.value = "";
+    verificationDialog.close();
+    if (state.token) {
+      await loadUser();
+      if (accountDialog.open) await openAccountDialog();
+    } else {
+      setMode("login");
+      emailInput.value = verificationEmail.value.trim();
+      authStatus.textContent = "Email activated. You can now log in.";
+      passwordInput.focus();
+    }
+  } catch (error) {
+    verificationStatus.textContent = error.message;
+  } finally {
+    submit.disabled = false;
+  }
+}
+
+async function resendEmailPin() {
+  if (!verificationEmail.reportValidity()) return;
+  verificationResend.disabled = true;
+  verificationStatus.textContent = "Sending a new PIN...";
+  try {
+    const response = await api("/auth/email-verification/request", {
+      method: "POST", body: JSON.stringify({ email: verificationEmail.value.trim() }),
+    });
+    verificationStatus.textContent = response.detail;
+    verificationPin.value = "";
+  } catch (error) {
+    verificationStatus.textContent = error.message;
+  } finally {
+    verificationResend.disabled = false;
+  }
+}
 
 function setMode(mode) {
   state.mode = mode;
@@ -6986,6 +7102,9 @@ async function handleGoogleCredential(response) {
     await showChat({ startFreshChat: true });
   } catch (error) {
     authError.textContent = error instanceof Error ? error.message : String(error);
+    if (error.status === 403 && error.message.includes("verify your email")) {
+      openEmailVerification("", "Enter your email and request a PIN to activate your account.");
+    }
     if (authStatus) authStatus.textContent = "";
   }
 }
@@ -7079,7 +7198,7 @@ async function registerAndLogin() {
     throw new Error("Please complete the verification before creating an account.");
   }
 
-  await api("/auth/register", {
+  const registered = await api("/auth/register", {
     method: "POST",
     body: JSON.stringify({
       email: emailInput.value.trim(),
@@ -7089,17 +7208,32 @@ async function registerAndLogin() {
       captcha_token: captchaIsEnabled ? state.captcha.token : null,
     }),
   });
+  if (!registered.is_email_verified) {
+    passwordInput.value = "";
+    setMode("login");
+    openEmailVerification(registered.email, "We sent your activation PIN. Check your inbox and spam folder.");
+    return;
+  }
   await login();
 }
 
 async function login() {
-  const payload = await api("/auth/login", {
-    method: "POST",
-    body: JSON.stringify({
-      email_or_username: emailInput.value.trim(),
-      password: passwordInput.value,
-    }),
-  });
+  let payload;
+  try {
+    payload = await api("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({
+        email_or_username: emailInput.value.trim(),
+        password: passwordInput.value,
+      }),
+    });
+  } catch (error) {
+    if (error.status === 403 && error.message.includes("verify your email")) {
+      openEmailVerification(emailInput.value.trim(), "Enter your PIN or request a new one to activate your account.");
+      return;
+    }
+    throw error;
+  }
   state.token = payload.access_token;
   localStorage.setItem("feely_token", state.token);
   await showChat({ startFreshChat: true });
@@ -7173,6 +7307,8 @@ async function confirmPasswordReset(event) {
 }
 
 function logout() {
+  feedbackForm.reset();
+  feedbackStatus.textContent = "";
   state.chatRequest?.controller.abort();
   state.chatRequest = null;
   clearTimeout(sessionExpiryTimer);
@@ -10141,12 +10277,71 @@ function switchWorkspace(view) {
 
 
 </script>
+    <script data-app-source="js/feedback.js">
+const feedbackButton = document.querySelector("#feedback-button");
+const feedbackDialog = document.querySelector("#feedback-dialog");
+const feedbackForm = document.querySelector("#feedback-form");
+const feedbackMessage = document.querySelector("#feedback-message");
+const feedbackStatus = document.querySelector("#feedback-status");
+const feedbackSubmit = document.querySelector("#feedback-submit");
+
+async function loadFeedbackConfig() {
+  try {
+    const config = await api("/feedback/config");
+    feedbackButton.classList.toggle("hidden", !config.enabled);
+    if (!config.enabled && feedbackDialog.open) feedbackDialog.close();
+  } catch {
+    feedbackButton.classList.add("hidden");
+  }
+}
+
+feedbackButton.addEventListener("click", () => {
+  feedbackStatus.textContent = "";
+  feedbackForm.classList.remove("hidden");
+  closeSidebar();
+  feedbackDialog.showModal();
+  feedbackMessage.focus();
+});
+
+feedbackForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (feedbackSubmit.disabled) return;
+  const token = state.token;
+  feedbackSubmit.disabled = true;
+  feedbackStatus.textContent = "Saving feedback...";
+  try {
+    const response = await api("/feedback", {
+      method: "POST", headers: authHeaders(),
+      body: JSON.stringify({
+        category: document.querySelector("#feedback-category").value,
+        message: feedbackMessage.value.trim(),
+      }),
+    });
+    if (state.token !== token) return;
+    feedbackForm.reset();
+    feedbackStatus.textContent = response.detail;
+  } catch (error) {
+    if (state.token !== token) return;
+    feedbackStatus.textContent = error.message;
+    if (error.status === 404) {
+      feedbackButton.classList.add("hidden");
+      feedbackForm.classList.add("hidden");
+    }
+  } finally {
+    feedbackSubmit.disabled = false;
+  }
+});
+
+</script>
     <script data-app-source="js/start.js">
 // FeelY start: see website/EDITING.md for file responsibilities and load order.
 
 loginTab.addEventListener("click", () => setMode("login"));
 registerTab.addEventListener("click", () => setMode("register"));
 forgotPasswordButton.addEventListener("click", openPasswordResetRequest);
+activateAccountButton.addEventListener("click", () => openEmailVerification());
+verificationForm.addEventListener("submit", confirmEmailPin);
+verificationResend.addEventListener("click", resendEmailPin);
 passwordResetRequestForm.addEventListener("submit", (event) =>
   requestPasswordReset(event).catch((error) => {
     passwordResetStatus.textContent = error instanceof Error ? error.message : String(error);
@@ -10386,7 +10581,7 @@ authForm.addEventListener("submit", async (event) => {
 async function init() {
   const savedToken = state.token;
   scheduleSessionExpiry();
-  await Promise.all([loadCaptchaConfig(), loadGoogleConfig()]);
+  await Promise.all([loadCaptchaConfig(), loadGoogleConfig(), loadEmailConfig(), loadFeedbackConfig()]);
   const requestedMode = new URLSearchParams(window.location.search).get("mode");
   setMode(!savedToken && requestedMode === "register" ? "register" : "login");
   renderUser();

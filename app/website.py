@@ -9,6 +9,7 @@ from app.core.middleware import HttpRateLimitMiddleware, SecurityHeadersMiddlewa
 
 WEBSITE_ROOT = Path(__file__).resolve().parents[1] / "website"
 PUBLIC_FILES = frozenset({
+    "webmail.html", "webmail.js", "webmail.css",
     "index.html", "chat.html", "admin.html", "app.js", "admin.js",
     "styles.css", "admin.css", "assets/feely-landscape.jpg", "assets/feely-favicon.png",
     "assets/feely-lake.png",
@@ -18,6 +19,7 @@ PUBLIC_FILES = frozenset({
     "views/journal.html", "views/account.html", "views/password-reset.html",
     "views/practice.html", "views/reflection.html", "views/delete-account.html",
     "views/subscription-cancel.html",
+    "views/email-verification.html", "views/feedback.html", "js/feedback.js",
 })
 
 app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)

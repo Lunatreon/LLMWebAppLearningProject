@@ -427,3 +427,12 @@ async function loadUser() {
   state.account = state.user;
   renderUser();
 }
+
+const verificationDialog = document.querySelector("#email-verification-dialog");
+const verificationForm = document.querySelector("#email-verification-form");
+const verificationEmail = document.querySelector("#verification-email");
+const verificationPin = document.querySelector("#verification-pin");
+const verificationStatus = document.querySelector("#verification-status");
+const verificationResend = document.querySelector("#verification-resend");
+const activateAccountButton = document.querySelector("#activate-account-button");
+

@@ -90,6 +90,46 @@ async function loadPrompts() {
   });
 }
 
+let feedbackCursor = null;
+let feedbackLoading = false;
+async function loadFeedback(append = false) {
+  if (feedbackLoading) return;
+  feedbackLoading = true;
+  const token = adminToken;
+  const status = document.querySelector("#admin-feedback-status");
+  const list = document.querySelector("#admin-feedback-list");
+  status.textContent = "Loading feedback...";
+  try {
+    const query = append && feedbackCursor ? `?before_id=${feedbackCursor}` : "";
+    const entries = await api(`/admin/feedback${query}`, { headers: authHeaders() });
+    if (adminToken !== token) return;
+    if (!append) list.replaceChildren();
+    entries.forEach((entry) => {
+      const card = document.createElement("article");
+      card.className = "admin-panel";
+      const heading = document.createElement("h3");
+      heading.textContent = `${entry.category} - ${entry.email}`;
+      const date = document.createElement("p");
+      date.textContent = new Date(/(?:Z|[+-]\d{2}:\d{2})$/.test(entry.created_at) ? entry.created_at : `${entry.created_at}Z`).toLocaleString();
+      const message = document.createElement("p");
+      message.style.whiteSpace = "pre-wrap";
+      message.style.overflowWrap = "anywhere";
+      message.textContent = entry.message;
+      card.append(heading, date, message);
+      list.append(card);
+    });
+    feedbackCursor = entries.at(-1)?.id || null;
+    document.querySelector("#more-feedback").classList.toggle("hidden", entries.length < 50);
+    status.textContent = !append && !entries.length ? "No feedback yet." : "";
+  } catch (error) {
+    if (adminToken === token) status.textContent = error.message;
+  } finally {
+    feedbackLoading = false;
+  }
+}
+document.querySelector("#refresh-feedback").addEventListener("click", () => loadFeedback());
+document.querySelector("#more-feedback").addEventListener("click", () => loadFeedback(true));
+
 document.querySelector("#admin-create-user-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -173,7 +213,7 @@ loginForm.addEventListener("submit", async (event) => {
     adminToken = response.access_token;
     localStorage.setItem("feely_admin_token", adminToken);
     showAdmin();
-    await Promise.all([loadUsers(), loadPrompts()]);
+    await Promise.all([loadUsers(), loadPrompts(), loadFeedback()]);
     setStatus("Administration ready.");
   } catch (error) {
     loginError.textContent = error.message;
@@ -192,7 +232,7 @@ async function start() {
   try {
     const status = await api("/admin/status", { headers: authHeaders() });
     showAdmin();
-    await Promise.all([loadUsers(), loadPrompts()]);
+    await Promise.all([loadUsers(), loadPrompts(), loadFeedback()]);
     setStatus(`Administration ready · ${status.username}`);
   } catch (error) {
     adminToken = null;

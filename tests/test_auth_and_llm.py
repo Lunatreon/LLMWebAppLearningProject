@@ -659,7 +659,7 @@ def test_email_verification_request_and_confirm(client, monkeypatch):
 
     confirm_response = client.post(
         "/api/v1/auth/email-verification/confirm",
-        json={"token": sent_tokens[0]},
+        json={"email": "verify@example.com", "pin": sent_tokens[0]},
     )
     assert confirm_response.status_code == 200
     assert confirm_response.json()["verified"] is True

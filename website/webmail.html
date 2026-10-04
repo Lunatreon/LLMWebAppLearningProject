@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="feely-api-base" content="https://api.feel-y.com/api/v1">
+  <title>FeelY Mail</title><link rel="stylesheet" href="webmail.css">
+  <script src="webmail.js" defer></script>
+</head>
+<body>
+  <header><a href="./">FeelY</a><span>Mail</span><button id="logout" hidden>Sign out</button></header>
+  <p id="notice" role="status" aria-live="polite"></p>
+  <form id="login" class="card login" method="post">
+    <p class="eyebrow">Your team inbox</p><h1>A place for the conversation.</h1>
+    <p>Sign in with your FeelY administrator account to read and reply to mail.</p>
+    <label>Username or email<input name="username" autocomplete="username" required></label>
+    <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+    <button>Open inbox</button>
+  </form>
+  <main id="workspace" hidden>
+    <aside class="card"><p class="eyebrow">FeelY Mail</p><h2 id="address"></h2>
+      <button id="new">Write a message</button>
+      <nav aria-label="Mail folders">
+        <button data-folder="inbox">Inbox</button><button data-folder="sent">Sent</button>
+        <button data-folder="pending">Pending</button><button data-folder="uncertain">Unconfirmed</button>
+        <button data-folder="trash">Trash</button>
+      </nav><button id="refresh">Refresh</button><p id="sync" class="muted"></p>
+    </aside>
+    <section class="card"><h2 id="folder">Inbox</h2><div id="list"></div><button id="older" hidden>Older messages</button></section>
+    <section class="card reader">
+      <div id="empty"><h2>Room to listen.</h2><p>Select a message or write a new one.</p></div>
+      <article id="message" hidden>
+        <h2 id="subject"></h2><p id="sender"></p><p id="date" class="muted"></p>
+        <div class="actions"><button id="reply">Reply</button><button id="trash">Move to trash</button><button id="raw">Download email</button></div>
+        <pre id="body"></pre><div id="attachments"></div>
+      </article>
+      <form id="compose" method="post" hidden>
+        <h2>Write a message</h2><p>From <strong id="from"></strong></p>
+        <label>To<input name="to" type="email" required></label>
+        <label>Subject<input name="subject" maxlength="300" required></label>
+        <label>Message<textarea name="body" rows="14" maxlength="30000" required></textarea></label>
+        <div class="actions"><button id="send">Send message</button><button type="button" id="cancel">Cancel</button></div>
+        <p class="muted">Messages are sent as plain text. Keep this page open until sending is confirmed.</p>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

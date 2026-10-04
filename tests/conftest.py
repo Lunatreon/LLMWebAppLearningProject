@@ -32,6 +32,7 @@ def reset_security_test_state(monkeypatch):
     monkeypatch.setattr(settings, "google_auth_enabled", False)
     monkeypatch.setattr(settings, "email_verification_enabled", False)
     monkeypatch.setattr(settings, "email_verification_required", False)
+    monkeypatch.setattr(settings, "feedback_email_to", None)
     monkeypatch.setattr(settings, "premium_features_enabled", True)
     monkeypatch.setattr(settings, "stripe_enabled", False)
     monkeypatch.setattr(settings, "stripe_secret_key", None)

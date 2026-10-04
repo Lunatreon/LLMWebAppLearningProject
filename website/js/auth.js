@@ -1,5 +1,67 @@
 // FeelY auth: see website/EDITING.md for file responsibilities and load order.
 
+async function loadEmailConfig() {
+  try {
+    const config = await api("/auth/email/config");
+    activateAccountButton.classList.toggle("hidden", !config.verification_enabled);
+  } catch {
+    // Keep login usable while the backend is temporarily unavailable.
+  }
+}
+
+function openEmailVerification(email = emailInput.value.trim(), message = "") {
+  verificationEmail.value = email.includes("@") ? email : "";
+  verificationPin.value = "";
+  verificationStatus.textContent = message;
+  verificationDialog.showModal();
+  (verificationEmail.value ? verificationPin : verificationEmail).focus();
+}
+
+async function confirmEmailPin(event) {
+  event.preventDefault();
+  const submit = verificationForm.querySelector('button[type="submit"]');
+  submit.disabled = true;
+  verificationStatus.textContent = "Activating...";
+  try {
+    await api("/auth/email-verification/confirm", {
+      method: "POST",
+      body: JSON.stringify({ email: verificationEmail.value.trim(), pin: verificationPin.value.trim() }),
+    });
+    verificationPin.value = "";
+    verificationDialog.close();
+    if (state.token) {
+      await loadUser();
+      if (accountDialog.open) await openAccountDialog();
+    } else {
+      setMode("login");
+      emailInput.value = verificationEmail.value.trim();
+      authStatus.textContent = "Email activated. You can now log in.";
+      passwordInput.focus();
+    }
+  } catch (error) {
+    verificationStatus.textContent = error.message;
+  } finally {
+    submit.disabled = false;
+  }
+}
+
+async function resendEmailPin() {
+  if (!verificationEmail.reportValidity()) return;
+  verificationResend.disabled = true;
+  verificationStatus.textContent = "Sending a new PIN...";
+  try {
+    const response = await api("/auth/email-verification/request", {
+      method: "POST", body: JSON.stringify({ email: verificationEmail.value.trim() }),
+    });
+    verificationStatus.textContent = response.detail;
+    verificationPin.value = "";
+  } catch (error) {
+    verificationStatus.textContent = error.message;
+  } finally {
+    verificationResend.disabled = false;
+  }
+}
+
 function setMode(mode) {
   state.mode = mode;
   const isLogin = mode === "login";
@@ -155,6 +217,9 @@ async function handleGoogleCredential(response) {
     await showChat({ startFreshChat: true });
   } catch (error) {
     authError.textContent = error instanceof Error ? error.message : String(error);
+    if (error.status === 403 && error.message.includes("verify your email")) {
+      openEmailVerification("", "Enter your email and request a PIN to activate your account.");
+    }
     if (authStatus) authStatus.textContent = "";
   }
 }
@@ -248,7 +313,7 @@ async function registerAndLogin() {
     throw new Error("Please complete the verification before creating an account.");
   }
 
-  await api("/auth/register", {
+  const registered = await api("/auth/register", {
     method: "POST",
     body: JSON.stringify({
       email: emailInput.value.trim(),
@@ -258,17 +323,32 @@ async function registerAndLogin() {
       captcha_token: captchaIsEnabled ? state.captcha.token : null,
     }),
   });
+  if (!registered.is_email_verified) {
+    passwordInput.value = "";
+    setMode("login");
+    openEmailVerification(registered.email, "We sent your activation PIN. Check your inbox and spam folder.");
+    return;
+  }
   await login();
 }
 
 async function login() {
-  const payload = await api("/auth/login", {
-    method: "POST",
-    body: JSON.stringify({
-      email_or_username: emailInput.value.trim(),
-      password: passwordInput.value,
-    }),
-  });
+  let payload;
+  try {
+    payload = await api("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({
+        email_or_username: emailInput.value.trim(),
+        password: passwordInput.value,
+      }),
+    });
+  } catch (error) {
+    if (error.status === 403 && error.message.includes("verify your email")) {
+      openEmailVerification(emailInput.value.trim(), "Enter your PIN or request a new one to activate your account.");
+      return;
+    }
+    throw error;
+  }
   state.token = payload.access_token;
   localStorage.setItem("feely_token", state.token);
   await showChat({ startFreshChat: true });
@@ -342,6 +422,8 @@ async function confirmPasswordReset(event) {
 }
 
 function logout() {
+  feedbackForm.reset();
+  feedbackStatus.textContent = "";
   state.chatRequest?.controller.abort();
   state.chatRequest = null;
   clearTimeout(sessionExpiryTimer);

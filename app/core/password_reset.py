@@ -1,6 +1,5 @@
 import hmac
 import secrets
-import smtplib
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from hashlib import sha256
@@ -9,6 +8,7 @@ from urllib.parse import quote
 from fastapi import HTTPException, status
 
 from app.core.config import settings
+from app.core.mail import send_mail
 from app.models.user import User
 
 
@@ -54,7 +54,6 @@ def send_password_reset_message(user: User, token: str) -> None:
 
     message = EmailMessage()
     message["Subject"] = "Reset your FeelY password"
-    message["From"] = settings.smtp_from_email
     message["To"] = user.email
     link = password_reset_link(token)
     message.set_content(
@@ -71,15 +70,4 @@ def send_password_reset_message(user: User, token: str) -> None:
         )
     )
 
-    try:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as smtp:
-            if settings.smtp_use_tls:
-                smtp.starttls()
-            if settings.smtp_username:
-                smtp.login(settings.smtp_username, settings.smtp_password or "")
-            smtp.send_message(message)
-    except (OSError, smtplib.SMTPException) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Could not send the password reset email. Please try again later.",
-        ) from exc
+    send_mail(message)

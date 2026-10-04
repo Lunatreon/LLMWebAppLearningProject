@@ -5011,3 +5011,15 @@ html[data-theme="light"] .chat-review-dialog .suggestion-target-field > span { c
 .reply-reactions { display: flex; gap: 6px; margin-top: 10px; }
 .reply-reactions button { background: transparent; border: 1px solid transparent; border-radius: 12px; padding: 4px 8px; cursor: pointer; opacity: .65; }
 .reply-reactions button:hover, .reply-reactions button[aria-pressed="true"] { opacity: 1; border-color: currentColor; }
+.sidebar-feedback-link {
+  background: transparent;
+  color: inherit;
+  border: 0;
+  padding: 12px 16px;
+  text-align: left;
+  cursor: pointer;
+}
+
+#feedback-form, #email-verification-form { display: grid; gap: 16px; }
+#feedback-message { width: 100%; resize: vertical; }
+#verification-pin { letter-spacing: .3em; font-size: 24px; }

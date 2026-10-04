@@ -24,6 +24,7 @@ function fixture(status = 200) {
     localStorage: { removeItem(key) { removed.push(key); } },
     authView: view("auth"), chatView: view("chat"), authStatus: {}, emailInput: { focus() {} },
     journalText: { value: "private" }, messageInput: { value: "private" }, authForm: { reset() {} },
+    feedbackForm: { reset() {} }, feedbackStatus: {},
     document: { visibilityState: "visible", querySelectorAll() { return []; } },
     fetch: async () => new Response(JSON.stringify({ detail: "response" }), {
       status, headers: { "Content-Type": "application/json" },

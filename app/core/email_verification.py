@@ -1,6 +1,5 @@
 import hmac
 import secrets
-import smtplib
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from hashlib import sha256
@@ -9,6 +8,7 @@ from urllib.parse import quote
 from fastapi import HTTPException, status
 
 from app.core.config import settings
+from app.core.mail import send_mail
 from app.models.user import User
 
 
@@ -17,10 +17,16 @@ def current_timestamp() -> datetime:
 
 
 def create_email_verification_token(user: User) -> str:
-    token = secrets.token_urlsafe(32)
-    user.email_verification_token_hash = hash_email_verification_token(token)
+    token = f"{secrets.randbelow(1_000_000):06d}"
+    user.email_verification_token_hash = hash_email_verification_pin(user.email, token)
     user.email_verification_sent_at = current_timestamp()
+    user.email_verification_attempts = 0
     return token
+
+
+def hash_email_verification_pin(email: str, pin: str) -> str:
+    # Scope short codes to an address so identical PINs cannot verify another user.
+    return hash_email_verification_token(f"email-pin:{email.strip().lower()}:{pin}")
 
 
 def hash_email_verification_token(token: str) -> str:
@@ -55,33 +61,14 @@ def send_email_verification_message(user: User, token: str) -> None:
         )
 
     message = EmailMessage()
-    message["Subject"] = "Verify your FeelY email"
-    message["From"] = settings.smtp_from_email
+    message["Subject"] = "Your FeelY activation code"
     message["To"] = user.email
-    link = email_verification_link(token)
     message.set_content(
-        "\n".join(
-            [
-                f"Hi {user.display_name or user.username},",
-                "",
-                "Please verify your FeelY email address by opening this link:",
-                link,
-                "",
-                "If you did not create this account, you can ignore this email.",
-            ]
-        )
+        f"Hi {user.display_name or user.username},\n\n"
+        f"Your FeelY activation PIN is: {token}\n\n"
+        "Enter this six-digit code in FeelY to activate your account.\n"
+        f"It expires in {settings.email_verification_pin_expire_minutes} minutes "
+        "and can only be used once.\n\n"
+        "If you did not request this code, you can ignore this email.\n"
     )
-
-    try:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as smtp:
-            if settings.smtp_use_tls:
-                smtp.starttls()
-            if settings.smtp_username:
-                smtp.login(settings.smtp_username, settings.smtp_password or "")
-            smtp.send_message(message)
-    except OSError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Could not send verification email. Please try again later.",
-        ) from exc
-
+    send_mail(message)

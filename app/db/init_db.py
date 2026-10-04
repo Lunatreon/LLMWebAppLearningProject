@@ -1,6 +1,6 @@
 from app.db.base import Base
 from app.db.session import engine
-from app.models import billing, user  # noqa: F401
+from app.models import billing, feedback, mail_message, terms, user  # noqa: F401
 
 
 def init_db() -> None:
@@ -23,6 +23,7 @@ def ensure_sqlite_user_columns() -> None:
         "email_verified_at": "DATETIME",
         "email_verification_token_hash": "VARCHAR(128)",
         "email_verification_sent_at": "DATETIME",
+        "email_verification_attempts": "INTEGER NOT NULL DEFAULT 0",
         "password_reset_token_hash": "VARCHAR(128)",
         "password_reset_sent_at": "DATETIME",
         "last_login_at": "DATETIME",
