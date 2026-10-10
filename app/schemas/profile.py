@@ -102,26 +102,3 @@ class PracticeUpdate(BaseModel):
 class PracticeUpdateResponse(BaseModel):
     practice: dict[str, Any]
     map: SelfAuthorshipMapRead
-
-
-class TopicRefreshUpdate(BaseModel):
-    id: str = Field(min_length=1, max_length=64)
-    title: str = Field(min_length=1, max_length=120)
-    description: str = Field(max_length=2000)
-    category: TopicCategory
-
-
-class MapRefreshApply(BaseModel):
-    revision: str = Field(min_length=64, max_length=64)
-    topics: list[TopicRefreshUpdate] = Field(min_length=1, max_length=200)
-
-
-class TopicRefreshPreview(BaseModel):
-    revision: str
-    original: TopicRefreshUpdate
-    suggested: TopicRefreshUpdate
-
-
-class MapRefreshResult(BaseModel):
-    revision: str
-    map: SelfAuthorshipMapRead

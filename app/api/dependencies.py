@@ -101,14 +101,6 @@ def get_current_premium_user(
     return current_user
 
 
-def get_current_map_debug_user(
-    current_user: User = Depends(get_current_premium_user),
-) -> User:
-    if current_user.role not in ("admin", "test"):
-        raise HTTPException(status_code=403, detail="Map debug tools require an admin or test account.")
-    return current_user
-
-
 def get_current_admin(
     token: str = Depends(admin_oauth2_scheme),
     db: Session = Depends(get_db),

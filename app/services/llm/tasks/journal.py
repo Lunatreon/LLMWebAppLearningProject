@@ -5,17 +5,17 @@ import logging
 from fastapi import HTTPException, status
 
 from app.core.config import settings
-from app.services.llm.anthropic import AnthropicBaseClient
+from app.services.llm.providers.anthropic import AnthropicBaseClient
 from app.services.llm.context import journal_request_payload
-from app.services.llm.factory import (
+from app.services.llm.providers.factory import (
     ensure_anthropic_api_key,
     ensure_openai_api_key,
     unsupported_provider,
 )
 from app.services.llm.json_response import parse_json_response
-from app.services.llm.local import local_journal_analysis
-from app.services.llm.ollama import OllamaBaseClient
-from app.services.llm.openai import OpenAIBaseClient
+from app.services.llm.providers.local import local_journal_analysis
+from app.services.llm.providers.ollama import OllamaBaseClient
+from app.services.llm.providers.openai import OpenAIBaseClient
 from app.services.llm.responses import JOURNAL_RESPONSE_SCHEMA, journal_result_from_payload
 from app.services.llm.types import JournalLLMResult
 from app.services.prompts import read_system_prompt

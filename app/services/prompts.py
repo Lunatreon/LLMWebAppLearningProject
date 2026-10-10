@@ -8,7 +8,6 @@ from app.core.config import settings
 PROMPT_FILENAMES = {
     "chat": "chat_system.txt",
     "topic": "topic_system.txt",
-    "map_refresh": "map_refresh_system.txt",
     "journal": "journal_system.txt",
 }
 

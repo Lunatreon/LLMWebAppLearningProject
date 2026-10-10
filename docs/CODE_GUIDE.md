@@ -59,16 +59,18 @@ app/
     prompts.py             Editable system-prompt loading and saving
     llm/
       types.py             Provider contracts and result types
-      factory.py           Provider selection and credential checks
       context.py           Bounded chat, topic, and journal request payloads
       responses.py         Structured response schemas and validation
-      openai.py            OpenAI SDK integration
-      anthropic.py         Anthropic SDK integration
-      ollama.py            Ollama HTTP calls, scheduling, and retries
-      local.py             Deterministic development responses
-      journal.py           Journal analysis orchestration
       streaming.py         Partial JSON assistant-text decoding
       json_response.py     Complete JSON decoding and upstream errors
+      providers/
+        factory.py         Provider selection and credential checks
+        openai.py          OpenAI SDK integration
+        anthropic.py       Anthropic SDK integration
+        ollama.py          Ollama HTTP calls, scheduling, and retries
+        local.py           Deterministic development responses
+      tasks/
+        journal.py         Journal analysis orchestration
 tests/
   conftest.py              Test app and temporary test database setup
   test_auth_and_llm.py     Basic register, login, and LLM flow test
@@ -243,8 +245,9 @@ Response body:
 
 The LLM package lives in `app/services/llm/`. Provider implementations depend on
 shared contracts, context builders, and response validators. Those shared modules
-do not import providers or HTTP routes. Provider selection lives in `factory.py`;
-editable prompt files are handled by `app/services/prompts.py`.
+do not import providers or HTTP routes. Provider implementations and selection
+live in `providers/`; operations such as journal analysis live in `tasks/`. Editable prompt files are handled by `app/services/prompts.py`.
+See `app/services/llm/README.md` for where to put a change.
 
 FastAPI, Pydantic, SQLAlchemy, and the official provider SDKs remain the framework
 boundaries. Adding a feature does not require a new framework or a provider rewrite.
@@ -495,7 +498,7 @@ def create_note(payload: NoteCreate, db: Session = Depends(get_db)):
 
 ## How To Add A New LLM Provider
 
-Add a provider module under `app/services/llm/`. Reuse the contracts in `types.py`,
+Add a provider module under `app/services/llm/providers/`. Reuse the contracts in `types.py`,
 payload builders in `context.py`, and validators in `responses.py`.
 
 Implement either the chat protocol, topic protocol, or both. A chat provider
@@ -536,7 +539,7 @@ class MyLLMClient:
         )
 ```
 
-Then update the matching factory in `app/services/llm/factory.py`:
+Then update the matching factory in `app/services/llm/providers/factory.py`:
 
 ```python
 def get_chat_llm_client() -> ChatLLMClient:

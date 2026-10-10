@@ -61,8 +61,7 @@ def test_admin_creates_roles_and_revokes_database_admin_access(monkeypatch, clie
                         json={"role": "invalid"}).status_code == 422
 
 
-def test_regular_accounts_cannot_grant_roles_or_use_debug(monkeypatch, client):
-    from test_auth_and_llm import grant_premium_access
+def test_regular_accounts_cannot_grant_roles_or_manage_users(monkeypatch, client):
 
     root = configure_and_login_admin(monkeypatch, client)
     client.post("/api/v1/auth/register", json={
@@ -83,18 +82,11 @@ def test_regular_accounts_cannot_grant_roles_or_use_debug(monkeypatch, client):
         "email": "blocked@example.com", "username": "blocked", "password": "account-password",
         "role": "admin",
     }).status_code == 401
-    grant_premium_access(client, member["email"])
-    assert client.post("/api/v1/users/me/map/topics/missing/refresh-preview", headers=headers).status_code == 403
-    assert client.post("/api/v1/users/me/map/refresh/apply", headers=headers, json={
-        "revision": "0" * 64, "topics": [{"id": "missing", "title": "Name", "category": "other", "description": ""}],
-    }).status_code == 403
     for role in ("test", "admin"):
         client.patch(f"/api/v1/admin/users/{member['id']}", headers=root, json={"role": role})
         assert client.get("/api/v1/users/me/account", headers=headers).json()["role"] == role
-        # Authorization passed, but this account does not have that topic.
-        assert client.post("/api/v1/users/me/map/topics/missing/refresh-preview", headers=headers).status_code == 404
     client.patch(f"/api/v1/admin/users/{member['id']}", headers=root, json={"role": "member"})
-    assert client.post("/api/v1/users/me/map/topics/missing/refresh-preview", headers=headers).status_code == 403
+    assert client.get("/api/v1/users/me/account", headers=headers).json()["role"] == "member"
 
 
 def test_legacy_sqlite_role_migration_is_safe_to_repeat(monkeypatch):

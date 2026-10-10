@@ -5,10 +5,10 @@ from typing import NoReturn
 from fastapi import HTTPException, status
 
 from app.core.config import settings
-from app.services.llm.anthropic import AnthropicChatLLMClient, AnthropicTopicLLMClient
-from app.services.llm.local import LocalChatLLMClient, LocalTopicLLMClient
-from app.services.llm.ollama import OllamaChatLLMClient, OllamaTopicLLMClient
-from app.services.llm.openai import OpenAIChatLLMClient, OpenAITopicLLMClient
+from app.services.llm.providers.anthropic import AnthropicChatLLMClient, AnthropicTopicLLMClient
+from app.services.llm.providers.local import LocalChatLLMClient, LocalTopicLLMClient
+from app.services.llm.providers.ollama import OllamaChatLLMClient, OllamaTopicLLMClient
+from app.services.llm.providers.openai import OpenAIChatLLMClient, OpenAITopicLLMClient
 from app.services.llm.types import ChatLLMClient, TopicLLMClient
 
 

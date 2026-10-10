@@ -10,14 +10,12 @@ for provider in ("LLM_PROVIDER", "CHAT_LLM_PROVIDER", "TOPIC_LLM_PROVIDER", "JOU
     os.environ[provider] = "mock"
 os.environ["SECRET_KEY"] = "map-browser-tests-only-not-for-deployment"
 
-from fastapi import HTTPException
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.api.dependencies import get_db
-from app.api.routes import users
 from app.core.config import settings
 from app.core.security import hash_password
 from app.db.base import Base
@@ -61,16 +59,6 @@ def create_fixture_app():
         with factory() as db:
             yield db
 
-    async def preview(topic):
-        if topic["title"] == "Fail preview":
-            raise HTTPException(502, "Fixture model unavailable. Nothing was changed.")
-        return {
-            "title": "Girlfriend" if topic["id"] == "legacy-person" else topic["title"],
-            "category": "person" if topic["id"] == "legacy-person" else topic.get("category", "other"),
-            "description": "You feel supported by her as you recover." if topic["id"] == "legacy-person" else topic.get("description") or "A topic you chose to keep.",
-        }
-
-    users.suggest_topic_refresh = preview
     app = create_app(init_database=False)
     app.dependency_overrides[get_db] = database
     app.mount("/", StaticFiles(directory=ROOT / "website", html=True))

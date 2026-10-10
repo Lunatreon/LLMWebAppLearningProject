@@ -130,8 +130,7 @@ Restart Uvicorn after running the command. Then open
 username and the original password (not the hash).
 
 In the admin page, create accounts or change their role to Member, Test, or Admin.
-Test and Admin accounts can use the map debug preview; only Admin accounts can
-manage users and prompts. Premium access remains separate from roles.
+Only Admin accounts can manage users and prompts. Premium access remains separate from roles.
 
 ### Editing the frontend
 

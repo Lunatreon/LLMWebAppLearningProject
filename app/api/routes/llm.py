@@ -31,7 +31,7 @@ from app.schemas.llm import (
 from app.services.billing import has_premium_feature_access
 from app.services.chat_usage import release_daily_message, reserve_daily_message
 from app.services.conversation_summary import update_conversation_summary
-from app.services.llm.factory import get_chat_llm_client, get_topic_llm_client
+from app.services.llm.providers.factory import get_chat_llm_client, get_topic_llm_client
 from app.services.llm.types import TextChunkCallback
 from app.services.map_suggestions import (
     remember_map_suggestion_event,
@@ -765,7 +765,7 @@ async def stream_message_to_llm(
                     yield json.dumps(
                         {
                             "type": "status",
-                            "message": "FeelY - Weaving a reply",
+                            "message": "FeelY - reflecting ...",
                             "elapsed_seconds": elapsed,
                         }
                     ) + "\n"

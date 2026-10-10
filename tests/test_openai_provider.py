@@ -8,8 +8,8 @@ import pytest
 from fastapi import HTTPException
 
 from app.core.config import settings
-from app.services.llm.factory import get_chat_llm_client, get_topic_llm_client
-from app.services.llm.journal import analyse_journal_text
+from app.services.llm.providers.factory import get_chat_llm_client, get_topic_llm_client
+from app.services.llm.tasks.journal import analyse_journal_text
 
 
 @pytest.mark.parametrize("role", ["chat", "topic", "journal"])

@@ -4714,29 +4714,9 @@ html[data-theme="light"] .map-topic-filters button:focus-visible { color: var(--
 }
 
 /* Map forms keep feedback visible and preserve edits until saving succeeds. */
-.map-toolbar-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.map-toolbar-button {
-  min-height: 40px; border: 1px solid var(--line-dark); border-radius: 8px;
-  padding: 8px 12px; background: var(--night); color: var(--paper-muted);
-  font-size: 12px; font-weight: 700;
-}
-.map-toolbar-button:hover { border-color: var(--lavender); color: var(--lavender); }
 .map-form-error { color: #9b342b; font-size: 14px; line-height: 1.5; margin: 8px 0; }
 .map-feedback { color: var(--danger); font-size: 14px; line-height: 1.5; }
 html[data-theme="light"] .map-feedback { color: #9b342b; }
-.map-refresh-popup { width: min(680px, 100%); }
-.map-refresh-popup > p { color: #5f5863; font-size: 14px; line-height: 1.6; }
-.map-refresh-popup h3 { padding-right: 26px; }
-.map-refresh-status { margin: 0; color: #514456; font-size: 14px; line-height: 1.5; }
-.map-refresh-rows { display: grid; gap: 18px; }
-.map-refresh-row { min-width: 0; display: grid; gap: 12px; margin: 0; padding: 16px; border: 1px solid var(--line-light); border-radius: 10px; }
-.map-refresh-row legend { max-width: 100%; overflow-wrap: anywhere; padding: 0 6px; font-size: 14px; font-weight: 700; }
-.map-refresh-row label { display: grid; gap: 6px; font-size: 13px; color: #554b58; }
-.map-refresh-row .map-refresh-include { display: flex; align-items: center; gap: 8px; }
-.map-refresh-row input[type="checkbox"] { width: 20px; height: 20px; accent-color: #78649d; }
-.map-refresh-row details { font-size: 13px; color: #62596a; overflow-wrap: anywhere; }
-.map-refresh-row details p { max-height: 150px; overflow-y: auto; white-space: pre-wrap; }
-.map-refresh-row summary { cursor: pointer; }
 .map-action-form button:disabled { opacity: 0.6; cursor: wait; }
 .map-action-form [hidden] { display: none; }
 
@@ -4817,7 +4797,6 @@ html[data-theme="light"] .map-feedback { color: #9b342b; }
 }
 .sidebar-journal-link:focus-visible { outline: 2px solid var(--lavender); outline-offset: 2px; }
 #journal-plan-badge { display: none; }
-.map-toolbar-actions:empty { display: none; }
 
 /* Match layoutMobileMap: bounded bubbles with space for two title lines. */
 @media (max-width: 900px) {
@@ -9082,192 +9061,6 @@ async function saveMapPopup(form, save) {
   }
 }
 
-function openMapRefreshPopup() {
-  if (!["admin", "test"].includes(state.user?.role)) return;
-  closeMapActionPopup();
-  const backdrop = document.createElement("div");
-  backdrop.className = "map-action-backdrop";
-  const popup = document.createElement("section");
-  popup.className = "map-action-popup map-refresh-popup";
-  popup.setAttribute("role", "dialog");
-  popup.setAttribute("aria-modal", "true");
-  popup.setAttribute("aria-label", "Update older map topics");
-  const close = document.createElement("button");
-  close.type = "button";
-  close.className = "map-action-close";
-  close.setAttribute("aria-label", "Close preview");
-  close.textContent = "x";
-  close.addEventListener("click", closeMapActionPopup);
-  const title = document.createElement("h3");
-  title.textContent = "Update older map topics";
-  const intro = document.createElement("p");
-  intro.textContent = "Generate simpler names, short descriptions, and topic types. Review and edit each suggestion before applying it. Your saved reflections, chats, journals, and connections stay attached.";
-  const status = document.createElement("p");
-  status.className = "map-refresh-status";
-  status.setAttribute("role", "status");
-  const generate = document.createElement("button");
-  generate.type = "button";
-  generate.textContent = "Generate preview";
-  const form = document.createElement("form");
-  form.className = "map-action-form";
-  const rows = document.createElement("div");
-  rows.className = "map-refresh-rows";
-  const apply = document.createElement("button");
-  apply.type = "submit";
-  apply.textContent = "Apply selected updates";
-  apply.disabled = true;
-  const undo = document.createElement("button");
-  undo.type = "button";
-  undo.textContent = "Undo this update";
-  undo.hidden = true;
-  let revision = null;
-  let originals = [];
-  let busy = false;
-  let stale = false;
-  form.append(generate, status, rows, apply, undo);
-  popup.append(close, title, intro, form);
-  backdrop.append(popup);
-  backdrop.addEventListener("click", (event) => {
-    if (event.target === backdrop) closeMapActionPopup();
-  });
-  mountMapPopup(backdrop);
-  generate.focus();
-
-  generate.addEventListener("click", async () => {
-    if (busy) return;
-    busy = true;
-    generate.disabled = true;
-    apply.disabled = true;
-    undo.hidden = true;
-    rows.replaceChildren();
-    apply.hidden = false;
-    revision = null;
-    stale = false;
-    originals = [];
-    let failed = 0;
-    try {
-      await loadMap();
-      const topics = state.map?.topic_spaces || [];
-      if (topics.length > 200) throw new Error("This tool supports up to 200 topics at a time. Edit individual topics for larger maps.");
-      for (const [index, topic] of topics.entries()) {
-        if (!backdrop.isConnected) return;
-        status.textContent = `Generating preview ${index + 1} of ${topics.length}. Closing this window stops after the current topic.`;
-        try {
-          const result = await api(`/users/me/map/topics/${encodeURIComponent(topic.id)}/refresh-preview`, {
-            method: "POST", headers: authHeaders(),
-          });
-          if (!backdrop.isConnected) return;
-          if (revision && revision !== result.revision) {
-            stale = true;
-            throw new Error("Your map changed during the preview. Generate a fresh preview.");
-          }
-          revision = result.revision;
-          originals.push(result.original);
-          const row = document.createElement("fieldset");
-          row.className = "map-refresh-row";
-          row.dataset.topicId = topic.id;
-          const legend = document.createElement("legend");
-          legend.textContent = result.original.title;
-          const includeLabel = document.createElement("label");
-          includeLabel.className = "map-refresh-include";
-          const include = document.createElement("input");
-          include.type = "checkbox";
-          include.name = "include_topic";
-          include.checked = true;
-          includeLabel.append(include, document.createTextNode("Apply this topic"));
-          const before = document.createElement("details");
-          const summary = document.createElement("summary");
-          summary.textContent = "Current description";
-          const previous = document.createElement("p");
-          previous.textContent = result.original.description || "No description yet.";
-          before.append(summary, previous);
-          const nameLabel = document.createElement("label");
-          nameLabel.textContent = "Suggested name";
-          const name = document.createElement("input");
-          name.name = "refresh_title";
-          name.required = true;
-          name.maxLength = 120;
-          name.value = result.suggested.title;
-          nameLabel.append(name);
-          const category = createTopicCategorySelect(result.suggested.category);
-          const descriptionLabel = document.createElement("label");
-          descriptionLabel.textContent = "Suggested description";
-          const description = document.createElement("textarea");
-          description.name = "refresh_description";
-          description.maxLength = 2000;
-          description.rows = 3;
-          description.value = result.suggested.description;
-          descriptionLabel.append(description);
-          row.append(legend, includeLabel, before, nameLabel, category, descriptionLabel);
-          include.addEventListener("change", () => {
-            row.querySelectorAll("input:not([type='checkbox']), select, textarea").forEach((field) => { field.disabled = !include.checked; });
-          });
-          rows.append(row);
-        } catch (error) {
-          failed += 1;
-          const failure = document.createElement("p");
-          failure.className = "map-form-error";
-          failure.textContent = `${topic.title}: ${error.message}`;
-          rows.append(failure);
-          if (stale || [401, 402, 429, 503].includes(error.status)) break;
-        }
-      }
-      status.textContent = stale ? "Your map changed. Generate a fresh preview before applying." :
-        `${originals.length} topics ready for review${failed ? `; ${failed} could not be previewed` : ""}. Nothing has been saved.`;
-      if (!topics.length) status.textContent = "There are no topics to update yet.";
-      apply.disabled = stale || originals.length === 0;
-    } catch (error) {
-      status.textContent = error.message;
-    } finally {
-      busy = false;
-      generate.disabled = false;
-    }
-  });
-
-  async function applyUpdates(topics) {
-    const result = await api("/users/me/map/refresh/apply", {
-      method: "POST", headers: authHeaders(), body: JSON.stringify({ revision, topics }),
-    });
-    revision = result.revision;
-    state.map = result.map;
-    renderMap();
-  }
-  async function saveUpdates(topics, reverting = false) {
-    if (busy) return;
-    if (!topics.length) { status.textContent = "Select at least one topic to update."; return; }
-    busy = true;
-    backdrop.dataset.busy = "true";
-    [apply, undo, generate, close].forEach((button) => { button.disabled = true; });
-    status.textContent = "Saving...";
-    try {
-      await applyUpdates(topics);
-      if (!reverting) originals = originals.filter((topic) => topics.some((update) => update.id === topic.id));
-      rows.querySelectorAll("input, select, textarea").forEach((field) => { field.disabled = true; });
-      status.textContent = reverting ? "The previous names, descriptions, and types have been restored." : `${topics.length} topics updated. All saved contents and connections were kept.`;
-      apply.hidden = true;
-      undo.hidden = reverting;
-    } catch (error) {
-      status.textContent = error.message;
-    } finally {
-      busy = false;
-      backdrop.dataset.busy = "false";
-      [apply, undo, generate, close].forEach((button) => { button.disabled = false; });
-    }
-  }
-  form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const topics = [...rows.querySelectorAll(".map-refresh-row")]
-      .filter((row) => row.querySelector("[name='include_topic']").checked)
-      .map((row) => ({ id: row.dataset.topicId,
-        title: row.querySelector("[name='refresh_title']").value.trim(),
-        category: row.querySelector("select").value,
-        description: row.querySelector("textarea").value.trim(),
-      }));
-    saveUpdates(topics);
-  });
-  undo.addEventListener("click", () => saveUpdates(originals, true));
-}
-
 function openMapTopicPopup(topic = null) {
   closeMapActionPopup();
   const isEdit = Boolean(topic);
@@ -10172,15 +9965,7 @@ function renderMap() {
     });
     filters.append(button);
   });
-  const actions = document.createElement("div");
-  actions.className = "map-toolbar-actions";
-  const refresh = document.createElement("button");
-  refresh.type = "button";
-  refresh.className = "map-toolbar-button";
-  refresh.textContent = "Debug: update old topics";
-  refresh.addEventListener("click", openMapRefreshPopup);
-  if (["admin", "test"].includes(state.user?.role)) actions.append(refresh);
-  toolbar.append(summary, filters, actions);
+  toolbar.append(summary, filters);
 
   const layout = document.createElement("section");
   layout.className = "map-concept-layout";

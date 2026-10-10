@@ -19,7 +19,7 @@ near the bottom of the sidebar.
 Smaller dialogs each have their own HTML file in `views/`.
 `shell.html` is the small editable outer shell. Each `<template data-view="views/...html">`
 marks where that view is loaded into the page.
-Map bubbles, forms, and debug previews are created in `js/map.js`; edit their
+Map bubbles and forms are created in `js/map.js`; edit their
 labels there rather than looking for them in the static HTML.
 
 `styles.css` holds the shared cozy appearance and feature styles. `admin.css`

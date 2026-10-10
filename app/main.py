@@ -14,7 +14,7 @@ from app.core.middleware import (
     SecurityHeadersMiddleware,
 )
 from app.db.init_db import init_db
-from app.services.llm.ollama import warm_ollama_model
+from app.services.llm.providers.ollama import warm_ollama_model
 from app.services.webmail import poll_mail
 
 

@@ -35,9 +35,8 @@ User password resets do not revoke already-issued user JWTs; those remain valid 
 expiration. Disabling the user invalidates their authenticated API access immediately because
 each request reloads the user and checks `is_active`.
 
-Member accounts cannot see or call the map debug preview/apply tool. Test and Admin accounts
-can use it when they have Premium map access. Test accounts cannot use administration;
-Admin accounts can manage users and prompts. Changing roles does not change subscriptions.
+Member and Test accounts cannot use administration. Admin accounts can manage
+users and prompts. Changing roles does not change subscriptions.
 Roles are only writable through admin endpoints. Revoking the Admin role or disabling the
 account immediately invalidates that account's admin access, including existing admin tokens.
 The configured administrator login remains independent and can restore access.

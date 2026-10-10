@@ -3,14 +3,11 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_current_map_debug_user, get_current_premium_user, get_current_user, get_db
+from app.api.dependencies import get_current_premium_user, get_current_user, get_db
 from app.core.config import settings
 from app.core.security import hash_password, verify_password
 from app.models.user import User, UserProfile
 from app.schemas.profile import (
-    MapRefreshApply,
-    MapRefreshResult,
-    TopicRefreshPreview,
     MapEntryCreate,
     MapEntryCreateResponse,
     MapEntryDeleteResponse,
@@ -35,11 +32,9 @@ from app.schemas.user import (
     UserRead,
 )
 from app.services.billing import has_premium_feature_access
-from app.services.map_refresh import apply_topic_refresh, map_revision, suggest_topic_refresh
 from app.services.self_authorship import (
     add_map_entry,
     create_topic_space,
-    find_topic_space,
     delete_map_entry,
     delete_topic_space,
     merge_topic_spaces,
@@ -236,41 +231,6 @@ def read_self_authorship_map(
 ) -> SelfAuthorshipMapRead:
     profile_data = current_user.profile.data if current_user.profile else {}
     return SelfAuthorshipMapRead(**read_map(profile_data))
-
-
-@router.post("/me/map/topics/{topic_space_id}/refresh-preview", response_model=TopicRefreshPreview)
-async def preview_map_topic_refresh(
-    topic_space_id: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_map_debug_user),
-) -> TopicRefreshPreview:
-    profile = get_or_create_profile(db, current_user)
-    try:
-        topic = find_topic_space(read_map(profile.data), topic_space_id)
-    except LookupError as exc:
-        raise HTTPException(404, str(exc)) from exc
-    revision = map_revision(profile.data)
-    suggested = await suggest_topic_refresh(topic)
-    return TopicRefreshPreview(
-        revision=revision,
-        original={key: topic.get(key, "") for key in ("id", "title", "description", "category")},
-        suggested={"id": topic_space_id, **suggested},
-    )
-
-
-@router.post("/me/map/refresh/apply", response_model=MapRefreshResult)
-def apply_map_refresh(
-    payload: MapRefreshApply,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_map_debug_user),
-) -> MapRefreshResult:
-    profile = get_or_create_profile(db, current_user)
-    profile.data = apply_topic_refresh(
-        profile.data, payload.revision, [topic.model_dump() for topic in payload.topics],
-    )
-    db.commit()
-    db.refresh(profile)
-    return MapRefreshResult(revision=map_revision(profile.data), map=read_map(profile.data))
 
 
 @router.post("/me/map/topics", response_model=TopicSpaceResponse)

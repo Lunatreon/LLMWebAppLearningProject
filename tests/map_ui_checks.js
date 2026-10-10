@@ -154,26 +154,6 @@ window.runMapUIChecks = async function () {
     document.querySelector("#map-workspace-button").click(); await loadMap();
     passed.push("All filters, connected chat, and connected journal navigation");
 
-    button("Debug: update old topics").click(); button("Generate preview").click();
-    await wait(() => document.querySelector(".map-refresh-status")?.textContent.includes("ready for review"), "Preview did not finish");
-    const before = JSON.stringify(state.map);
-    document.querySelector("[aria-label='Close preview']").click();
-    await loadMap(); assert(JSON.stringify(state.map) === before, "Preview cancel mutated the map");
-    button("Debug: update old topics").click(); button("Generate preview").click();
-    await wait(() => document.querySelector(".map-refresh-status")?.textContent.includes("ready for review"), "Second preview did not finish");
-    for (const row of document.querySelectorAll(".map-refresh-row")) {
-      if (row.dataset.topicId === "legacy-person") continue;
-      row.querySelector("[name='include_topic']").click();
-    }
-    button("Apply selected updates").click();
-    await wait(() => document.querySelector(".map-refresh-status")?.textContent.includes("1 topics updated"), "Preview apply failed");
-    assert(topic("legacy-person").description.length < 240, "Preview not applied");
-    assert(topic("legacy-person").entries[0].id === "legacy-entry", "Refresh lost observations");
-    button("Undo this update").click();
-    await wait(() => document.querySelector(".map-refresh-status")?.textContent.includes("restored"), "Undo failed");
-    assert(topic("legacy-person").description === longDescription.trim(), "Undo did not restore description");
-    document.querySelector("[aria-label='Close preview']").click();
-    passed.push("Debug preview, cancel, selected apply, preserved contents, undo");
     return { passed, success: true };
   } catch (error) {
     return { passed, success: false, error: error.message, stack: error.stack };
@@ -214,41 +194,6 @@ window.runMapUIFailureChecks = async function () {
     document.querySelector(".map-action-form").requestSubmit();
     await wait(() => !document.querySelector(".map-action-popup"));
     passed.push("Network failure retains inputs and permits retry");
-
-    const failedTopic = await api("/users/me/map/topics", {method: "POST", headers: authHeaders(), body: JSON.stringify({title: "Fail preview"})});
-    await loadMap();
-    button("Debug: update old topics").click(); button("Generate preview").click();
-    await wait(() => document.querySelector(".map-refresh-status")?.textContent.includes("ready for review"));
-    assert(document.querySelector(".map-refresh-rows .map-form-error")?.textContent.includes("Fixture model unavailable"), "Model error not shown");
-    assert(document.querySelectorAll(".map-refresh-row").length === state.map.topic_spaces.length - 1, "Failed model preview produced an editable proposal");
-    passed.push("Partial model failure keeps successful previews and names the failure");
-
-    await api("/users/me/map/topics/curious", {method: "PATCH", headers: authHeaders(), body: JSON.stringify({description: "Changed in another session."})});
-    button("Apply selected updates").click();
-    await wait(() => document.querySelector(".map-refresh-status")?.textContent.includes("map changed"));
-    const latest = await api("/users/me/map", {headers: authHeaders()});
-    assert(latest.topic_spaces.find((topic) => topic.id === "legacy-person").description.length > 1000, "Stale preview overwrote the map");
-    passed.push("Stale preview rejects the whole update without partial changes");
-    document.querySelector("[aria-label='Close preview']").click();
-    await api(`/users/me/map/topics/${failedTopic.topic.id}`, {method: "DELETE", headers: authHeaders()});
-    await loadMap();
-
-    button("Debug: update old topics").click(); button("Generate preview").click();
-    await wait(() => document.querySelector(".map-refresh-status")?.textContent.includes("ready for review"));
-    document.querySelectorAll("[name='include_topic']").forEach((input) => input.click());
-    button("Apply selected updates").click();
-    assert(document.querySelector(".map-refresh-status").textContent.includes("Select at least one"), "Empty selection was not explained");
-    const row = document.querySelector(".map-refresh-row[data-topic-id='legacy-person']");
-    row.querySelector("[name='include_topic']").click();
-    row.querySelector("[name='refresh_title']").value = "Partner";
-    row.querySelector("textarea").value = "You feel supported.";
-    button("Apply selected updates").click();
-    await wait(() => document.querySelector(".map-refresh-status")?.textContent.includes("1 topics updated"));
-    assert(state.map.topic_spaces.find((topic) => topic.id === "legacy-person").title === "Partner", "Edited preview was ignored");
-    button("Undo this update").click();
-    await wait(() => document.querySelector(".map-refresh-status")?.textContent.includes("restored"));
-    document.querySelector("[aria-label='Close preview']").click();
-    passed.push("Empty selection, edited preview, and undo");
 
     openMapTopicPopup(state.map.topic_spaces[0]);
     const popup = document.querySelector(".map-action-popup");

@@ -69,7 +69,7 @@ test("map nodes render with empty or saved entries and open on click", () => {
   }
 });
 
-test("map debug button is rendered only for admin and test accounts", () => {
+test("map renders without the removed debug controls for every role", () => {
   const mapContent = element();
   const context = vm.createContext({
     document: { createElement: element, createElementNS: element },
@@ -84,9 +84,6 @@ test("map debug button is rendered only for admin and test accounts", () => {
     context.state.user = { role };
     context.renderMap();
     assert.equal(descendants(mapContent).some(node => node.textContent === "Debug: update old topics"),
-      role === "test" || role === "admin");
+      false);
   }
-  context.state.user = { role: "member" };
-  // Calling the UI handler directly must also stop before mounting a preview.
-  assert.doesNotThrow(() => context.openMapRefreshPopup());
 });

@@ -24,7 +24,7 @@ from app.models.user import User
 from app.services.conversation_summary import (
     update_conversation_summary,
 )
-from app.services.llm.anthropic import (
+from app.services.llm.providers.anthropic import (
     AnthropicChatLLMClient,
     AnthropicTopicLLMClient,
 )
@@ -33,19 +33,19 @@ from app.services.llm.context import (
     focused_profile_context,
     topic_chat_context,
 )
-from app.services.llm.factory import (
+from app.services.llm.providers.factory import (
     get_chat_llm_client,
     get_topic_llm_client,
 )
 from app.services.llm.json_response import (
     parse_json_response,
 )
-from app.services.llm.local import (
+from app.services.llm.providers.local import (
     LocalChatLLMClient,
     LocalTopicLLMClient,
     is_scam_abuse_request,
 )
-from app.services.llm.ollama import (
+from app.services.llm.providers.ollama import (
     OllamaChatLLMClient,
     OllamaTopicLLMClient,
 )
