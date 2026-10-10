@@ -15,8 +15,7 @@ $env:OLLAMA_KEEP_ALIVE = "300"
 ```
 
 ```powershell
-# Terminal 3: website (also builds a complete page for static preview servers)
-.\.venv\Scripts\python.exe scripts\build_frontend.py
+# Terminal 3: website (serves HTML views, CSS, and JavaScript directly)
 .\.venv\Scripts\python.exe -m uvicorn app.website:app --host 127.0.0.1 --port 5500 --proxy-headers --forwarded-allow-ips 127.0.0.1 --no-server-header
 ```
 

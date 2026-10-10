@@ -64,7 +64,7 @@ download the static document to verify it.
 
 Relevant code: `app/services/terms.py`, `app/api/routes/terms.py`,
 `app/api/dependencies.py`, `website/js/terms.js`, and `website/agb.html`.
-Run `python scripts/build_frontend.py` after changing frontend JS or views.
+Refresh the website after changing frontend JS or views; no HTML build is needed.
 
 AGB acceptance is separate from privacy and marketing consent. For German consumer
 contracts, review the notice, access and agreement requirements in

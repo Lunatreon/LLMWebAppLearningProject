@@ -17,57 +17,68 @@ near the bottom of the sidebar.
 | Admin page and account roles | `admin.html` | `admin.js` |
 
 Smaller dialogs each have their own HTML file in `views/`.
-`shell.html` is the small editable outer shell. Each `<template data-view="views/...html">`
-marks where that view is loaded into the page.
-Map bubbles and forms are created in `js/map.js`; edit their
-labels there rather than looking for them in the static HTML.
+`index.html` is the editable entry page and shared layout. It references each view:
 
-`styles.css` holds the shared cozy appearance and feature styles. `admin.css`
-holds admin styling. Existing element IDs connect HTML to JavaScript; keep them
-unless you update their references too.
+```html
+<template data-view="views/chat.html"></template>
+```
+
+The browser replaces that placeholder with the view's markup. The view is never
+copied into `index.html` on disk. There is no duplicate shell or generated page.
+Map bubbles and forms are created in `js/map.js`.
+
+`styles.css` holds shared and feature styling; `admin.css` holds admin styling.
+Keep styling in CSS and behavior in JS. View files contain only HTML: no scripts,
+style blocks, inline event handlers, or nested view placeholders. Keep element IDs
+in sync with the JavaScript that uses them.
 
 ## Apply an edit
 
-1. Edit the matching file in `website/views/`, its JavaScript file, or the stylesheet.
-2. With the FeelY website server (`app.website:app`), simply refresh: it assembles
-   the complete page from your source files on every request.
-3. For a basic static server or VS Code Live Server, rebuild the ready-to-serve
-   `index.html` after editing:
+Edit `index.html` for the shared layout, `views/` for feature markup, `styles.css`
+for styling, and the matching JS file for behavior. Refresh the browser after any
+edit. There is no build step and no generated HTML to commit.
 
-   ```powershell
-   .venv\Scripts\python.exe scripts/build_frontend.py
-   ```
-
-The launcher and the website startup block in `STARTUP.md` run this build
-before starting. The assembled `index.html` stays on disk and works immediately
-after restarting any static server. Commit it together with source changes.
-
-Edit `views/chat.html`, `views/map.html`, and `views/journal.html` for their layouts.
-Edit `shell.html` for the shared layout and script order. Do not edit the generated
-`index.html` directly. The website opens at `/`; the FeelY server redirects old
-`/chat.html` links there, preserving URL parameters.
+Serve the entire `website/` directory over HTTP using the FeelY website server,
+VS Code Live Server, or another static server. The website opens at `/`; the
+FeelY server redirects old `/chat.html` links there while preserving URL parameters.
 
 ## How the page loads
 
-`app/frontend.py` assembles the separate views, stylesheet, and application
-scripts into **one HTML response**. The browser does not download individual
-views, CSS, or application scripts during startup. A 502 for a dialog or Journal
-file can no longer block the page. The landscape and fonts are optional visual
-assets; the page layout and login form are already present in the main response.
+1. `index.html` loads `styles.css` and the deferred `js/load-views.js` bootstrap.
+2. The loader fetches the referenced `views/*.html` files in parallel.
+3. After all views succeed, it inserts their markup and loads application scripts
+   in the `APP_SCRIPTS` order defined in `js/load-views.js`.
+4. `app.js` binds shared state and DOM references; feature scripts define behavior;
+   `js/start.js` registers event handlers and starts the app.
 
-The dynamic FeelY server assembles the response live. Static servers serve the
-preassembled `index.html`. Both use the same assembly function and script order.
-The old runtime view loader is no longer part of the page; its legacy URL only
-redirects old cached shells to the complete page.
+The app stays hidden behind a loading message until its views and scripts have
+loaded. A failed view or script download shows a retry button that reloads the
+page, rather than starting a partially loaded app. Requests have a 15-second
+loading timeout. Temporary view network failures and HTTP 408/502/503/504 responses
+are retried up to three attempts with a short delay. Failed script downloads are
+also retried; script timeouts are not retried because execution may already have
+started. Missing or invalid views fail immediately. CSS, JS, and HTML remain
+separate network resources.
 
-`app.js` holds shared state, DOM references, theme handling, and HTTP helpers.
-`js/start.js` connects the event handlers and starts the app. Keep `app.js` first
-and `js/start.js` last in the script list in `shell.html`. The source files stay
-separate; only the browser response combines them.
+Keep `app.js` first and `js/start.js` last in `APP_SCRIPTS`. These are classic
+scripts that currently share state and functions. Do not convert individual
+files to modules without introducing their explicit imports and exports.
 
-When adding a directly served asset, add its exact path to `PUBLIC_FILES` in
-`app/website.py`. Backend requests remain normal authenticated API requests.
-A backend or internet outage does not erase a valid saved session.
+## Future Node.js migration
+
+A Node.js static server or development tool can serve the same `website/`
+directory without any Python HTML processing. Asset and view references are
+relative URLs; backend requests still use the configured API URL.
+
+For a later JavaScript module migration, export shared state and HTTP helpers
+from `app.js`, import them into each feature, and use one module entry point after
+view loading. No npm dependency or backend migration is required for this layout.
+
+## Serving assets
+
+When adding a view or asset, add its exact path to `PUBLIC_FILES` in
+`app/website.py`. Keep `.env`, databases, and backend source outside the static
+root. A backend or internet outage does not erase a valid saved session.
 
 ## Account roles
 
@@ -75,9 +86,9 @@ Sign into `admin.html` with the configured administrator credentials or an accou
 whose role is Admin. Create an account, or select an existing account and change
 its **Account role**:
 
-- **Member:** normal account; no map debug tool.
-- **Test:** map debug tool; no access to administration.
-- **Admin:** map debug tool and administration access.
+- **Member:** normal account.
+- **Test:** test account; no access to administration.
+- **Admin:** administration access.
 
 Map access still requires Premium. Roles do not create subscriptions or bypass
 billing. Role changes take effect on the next API request; refresh the user's
@@ -90,7 +101,6 @@ receive the role column automatically, with existing users defaulting to Member.
 ## Checks
 
 ```powershell
-.venv\Scripts\python.exe scripts/build_frontend.py --check
 .venv\Scripts\python.exe -m pytest
 node --test tests/map_node_render.test.cjs
 node --test tests/frontend_startup.test.cjs tests/session_expiry.test.cjs

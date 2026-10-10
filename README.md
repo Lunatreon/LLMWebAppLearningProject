@@ -136,11 +136,11 @@ Only Admin accounts can manage users and prompts. Premium access remains separat
 
 See [the frontend editing guide](website/EDITING.md) for the HTML and JavaScript
 file for each feature. Edit `website/views/chat.html`, `website/views/map.html`,
-or `website/views/journal.html`. The small `website/shell.html` defines the shared
-layout. The FeelY website server assembles all views, styles, and scripts into
-one response. For a basic static server, run
-`.venv\Scripts\python.exe scripts/build_frontend.py` after edits to update the
-standalone `website/index.html`. The launcher runs this automatically.
+or `website/views/journal.html`. `website/index.html` is the editable shared layout
+with references to those views. `js/load-views.js` loads the view markup before
+starting the application scripts. HTML, CSS, and JavaScript are served as separate
+files. Serve the whole `website/` directory and refresh after edits; no frontend
+build step is required.
 
 ### Important
 

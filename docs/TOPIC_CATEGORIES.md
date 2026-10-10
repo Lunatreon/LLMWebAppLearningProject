@@ -17,4 +17,4 @@ To add a choice, update its backend validation and frontend label definitions to
 
 `merged_topic` is reserved for the merge history; it is excluded from suggestion category pickers.
 
-After changing website sources, run `python scripts/build_frontend.py` to rebuild `website/index.html`. Restart the backend after changing Python definitions, then refresh the website. Keep existing category keys stable so previously saved notes remain readable.
+Website sources are loaded directly; there is no HTML build step. Restart the backend after changing Python definitions, then refresh the website. Keep existing category keys stable so previously saved notes remain readable.

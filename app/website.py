@@ -2,9 +2,8 @@
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 
-from app.frontend import render_page
 from app.core.middleware import HttpRateLimitMiddleware, SecurityHeadersMiddleware
 
 WEBSITE_ROOT = Path(__file__).resolve().parents[1] / "website"
@@ -27,13 +26,6 @@ app.add_middleware(HttpRateLimitMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 
 
-def render_index() -> str:
-    # Read source files on each request, while also supporting small isolated tests.
-    if (WEBSITE_ROOT / "shell.html").is_file():
-        return render_page(WEBSITE_ROOT)
-    return (WEBSITE_ROOT / "index.html").read_text(encoding="utf-8")
-
-
 @app.api_route("/{path:path}", methods=["GET", "HEAD"])
 def public_file(path: str, request: Request):
     if path in {"chat.html", "index.html"}:
@@ -46,6 +38,5 @@ def public_file(path: str, request: Request):
     target = (root / name).resolve()
     if not target.is_relative_to(root) or not target.is_file():
         raise HTTPException(status_code=404, detail="Not found")
-    if name == "index.html":
-        return HTMLResponse(render_index(), headers={"Cache-Control": "no-store"})
-    return FileResponse(target, headers={"Cache-Control": "no-cache"})
+    cache_control = "no-store" if name == "index.html" else "no-cache"
+    return FileResponse(target, headers={"Cache-Control": cache_control})

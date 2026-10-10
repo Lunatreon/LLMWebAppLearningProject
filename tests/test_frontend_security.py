@@ -12,8 +12,8 @@ def read_frontend_javascript():
 
 def test_website_root_is_the_shell():
     index_html = (ROOT_DIR / "website" / "index.html").read_text(encoding="utf-8")
-    assert 'id="conversation-view"' in index_html
-    assert 'data-view=' not in index_html
+    assert 'data-view="views/chat.html"' in index_html
+    assert 'id="conversation-view"' not in index_html
     assert 'window.location.replace' not in index_html
 
 
@@ -76,7 +76,7 @@ def test_new_chat_is_only_listed_after_its_first_saved_message():
     assert "state.activeChatId = null;" in javascript
     assert "async function showChat({ startFreshChat = false } = {})" in javascript
     assert javascript.count("await showChat({ startFreshChat: true });") == 2
-    assert 'data-app-source="app.js"' in assembled_chat_html()
+    assert 'src="js/load-views.js" defer' in assembled_chat_html()
     assert "await createChat();" not in javascript
     assert "chat_id: state.activeChatId" in javascript
     assert "upsertChat(updatedChat);" in javascript
@@ -156,7 +156,7 @@ def test_overall_map_thread_is_permanent_and_available_as_a_destination():
     assert "const nodes = [\n    overallMapNode(map)," in javascript
     assert "unassigned.textContent = OVERALL_MAP_TITLE;" in javascript
     assert ".map-node.overall" in stylesheet
-    assert '<style data-source="styles.css">' in html
+    assert '<link rel="stylesheet" href="styles.css" />' in html
 
 
 def test_dark_and_pink_light_appearance_can_be_switched_and_saved():
@@ -186,8 +186,8 @@ def test_sidebar_lists_scroll_without_scrolling_the_page():
     javascript = read_frontend_javascript()
     stylesheet = (CHAT_HTML.parent / "styles.css").read_text(encoding="utf-8")
 
-    assert 'data-app-source="app.js"' in html
-    assert '<style data-source="styles.css">' in html
+    assert 'src="js/load-views.js" defer' in html
+    assert '<link rel="stylesheet" href="styles.css" />' in html
     assert "function syncViewportHeight()" in javascript
     assert 'style.setProperty("--app-height"' in javascript
     assert "window.visualViewport?.addEventListener(\"resize\", syncViewportHeight);" in javascript

@@ -5,12 +5,10 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 from urllib.request import urlopen
 
-import pytest
 
 from fastapi.testclient import TestClient
 
 from app.website import PUBLIC_FILES, app
-from app.frontend import render_page, write_page
 from frontend_helpers import assembled_chat_html, application_scripts
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,10 +19,10 @@ def test_root_serves_shell_and_legacy_urls_redirect_with_query_intact():
     with TestClient(app) as client:
         root = client.get("/", follow_redirects=False)
         assert root.status_code == 200
-        assert root.text == assembled_chat_html()
-        assert 'data-view=' not in root.text
-        assert 'id="auth-view"' in root.text
-        assert 'id="journal-view"' in root.text
+        assert root.content == (WEBSITE / "index.html").read_bytes()
+        assert 'data-view=' in root.text
+        assert 'data-view="views/auth.html"' in root.text
+        assert 'data-view="views/journal.html"' in root.text
         for page in ("chat.html", "index.html"):
             for query in ("", "?reset_password_token=a%2Bb&mode=login", "?checkout=success&session_id=abc", "?view=account&billing_return=portal"):
                 for method in ("GET", "HEAD"):
@@ -41,9 +39,9 @@ def test_shell_views_and_scripts_are_public():
     assert sources[-1] == "js/start.js"
     assert {"js/chat.js", "js/map.js", "js/journal.js", "js/account.js"} <= set(sources)
     with TestClient(app) as client:
-        views = re.findall(r'data-view="([^"]+)"', (WEBSITE / "shell.html").read_text(encoding="utf-8"))
+        views = re.findall(r'data-view="([^"]+)"', (WEBSITE / "index.html").read_text(encoding="utf-8"))
         assert {"views/chat.html", "views/map.html", "views/journal.html"} <= set(views)
-        for source in [*sources, *views, "js/load-views.js"]:
+        for source in [*sources, *views, "styles.css", "js/load-views.js"]:
             assert source in PUBLIC_FILES
             response = client.get(f"/{source}")
             assert response.status_code == 200
@@ -71,53 +69,61 @@ def test_all_direct_dom_bindings_exist_in_the_assembled_page():
     assert set(bindings) <= ids
 
 
-def test_static_page_is_complete_and_matches_current_sources():
-    html = assembled_chat_html()
-    assert html == render_page()
-    assert '<script src=' not in html
+def test_index_references_views_and_separate_assets():
+    html = (WEBSITE / "index.html").read_text(encoding="utf-8")
+    assert application_scripts(html)
+    assert all(
+        re.fullmatch(r'<script src="[^"]+" defer></script>', script)
+        for script in re.findall(r'<script\b[^>]*>.*?</script>', html, re.DOTALL)
+    )
+    assert '<style' not in html
+    assert not re.search(r'\s(?:style|on\w+)\s*=', html)
     assert 'type="text/plain"' not in html
-    assert 'data-view=' not in html
-    assert '<style data-source="styles.css">' in html
-    assert '<main class="shell" data-app-shell>' in html
+    assert 'data-view=' in html
+    assert '<link rel="stylesheet" href="styles.css" />' in html
+    assert '<main class="shell" data-app-shell hidden>' in html
     assert 'A page file could not load' not in html
     assert 'fetchFeelYView' not in html
     assert 'loadFeelYViews' not in html
 
 
-def test_static_server_restart_does_not_require_any_view_or_script_routes():
-    class MainPageOnly(SimpleHTTPRequestHandler):
-        def do_GET(self):
-            if self.path != "/":
-                self.send_error(502, "Simulated unavailable secondary file")
-                return
-            super().do_GET()
-
+def test_static_server_serves_the_entry_page_views_and_assets():
+    class StaticAssets(SimpleHTTPRequestHandler):
         def log_message(self, *args):
             pass
 
     port = 0
     for _ in range(2):
-        server = ThreadingHTTPServer(("127.0.0.1", port), partial(MainPageOnly, directory=str(WEBSITE)))
+        server = ThreadingHTTPServer(("127.0.0.1", port), partial(StaticAssets, directory=str(WEBSITE)))
         port = server.server_port
         thread = Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
             with urlopen(f"http://127.0.0.1:{port}/", timeout=3) as response:
                 html = response.read().decode("utf-8").replace("\r\n", "\n")
-            assert html == assembled_chat_html()
-            assert 'id="auth-form"' in html
-            assert 'data-view=' not in html
-            assert '<script src=' not in html
-            assert '<style data-source="styles.css">' in html
+            assert html == (WEBSITE / "index.html").read_text(encoding="utf-8")
+            assert 'data-view="views/auth.html"' in html
+            assert 'data-view=' in html
+            assert '<style' not in html
+            assert '<link rel="stylesheet" href="styles.css" />' in html
+            views = re.findall(r'data-view="([^"]+)"', html)
+            for name in ["styles.css", "js/load-views.js", *views, *application_scripts(html)]:
+                with urlopen(f"http://127.0.0.1:{port}/{name}", timeout=3) as response:
+                    assert response.status == 200
+                    assert response.read() == (WEBSITE / name).read_bytes()
+                    expected_types = ({"text/html"} if name.endswith(".html") else
+                                      {"text/css"} if name.endswith(".css") else
+                                      {"text/javascript", "application/javascript"})
+                    assert response.headers.get_content_type() in expected_types
         finally:
             server.shutdown()
             server.server_close()
             thread.join(timeout=3)
 
 
-def test_failed_assembly_keeps_the_previous_static_page(tmp_path):
-    (tmp_path / "index.html").write_text("previous complete page", encoding="utf-8")
-    (tmp_path / "shell.html").write_text('<template data-view="views/missing.html"></template>', encoding="utf-8")
-    with pytest.raises(FileNotFoundError):
-        write_page(tmp_path)
-    assert (tmp_path / "index.html").read_text(encoding="utf-8") == "previous complete page"
+def test_views_contain_markup_without_scripts_or_styles():
+    index = (WEBSITE / "index.html").read_text(encoding="utf-8")
+    for name in re.findall(r'data-view="([^"]+)"', index):
+        view = (WEBSITE / name).read_text(encoding="utf-8")
+        assert not re.search(r"<(?:script|style|html)\b", view, re.IGNORECASE)
+        assert not re.search(r"\s(?:style|on\w+)\s*=", view)

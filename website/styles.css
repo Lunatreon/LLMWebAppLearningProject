@@ -1785,8 +1785,8 @@ textarea {
   max-height: var(--app-height);
   grid-template-rows: auto minmax(0, 1fr);
   background:
-    radial-gradient(circle at 18% 22%, rgba(197, 181, 255, 0.18), transparent 30%),
-    radial-gradient(circle at 84% 76%, rgba(130, 183, 168, 0.12), transparent 28%),
+    radial-gradient(circle at 18%, rgba(197, 181, 255, 0.18), transparent 30%),
+    radial-gradient(circle at 84%, rgba(130, 183, 168, 0.12), transparent 28%),
     linear-gradient(135deg, #151218 0%, #1d1915 52%, #171b18 100%);
   color: var(--white);
 }
@@ -4956,4 +4956,16 @@ html[data-theme="light"] .chat-review-dialog .suggestion-target-field > span { c
   #feedback-dialog, #email-verification-dialog { padding: 22px; }
   .app-dialog input:not([type="checkbox"]):not([type="radio"]),
   .app-dialog textarea, .app-dialog select { font-size: 16px; }
+}
+
+/* Startup stays separate from the app until its HTML views and scripts load. */
+[hidden] { display: none !important; }
+.app-loading {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
 }
