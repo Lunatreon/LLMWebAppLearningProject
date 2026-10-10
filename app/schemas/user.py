@@ -1,9 +1,12 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, StrictBool, field_validator
 
 
 class UserCreate(BaseModel):
+    terms_accepted: StrictBool = False
+    terms_version: str | None = Field(default=None, max_length=80)
+    terms_document_sha256: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     email: EmailStr
     username: str = Field(min_length=3, max_length=80, pattern=r"^[a-zA-Z0-9_.-]+$")
     password: str = Field(min_length=8, max_length=128)

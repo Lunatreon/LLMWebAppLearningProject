@@ -46,7 +46,7 @@
       <div class="suggestion-heading">
         <div>
           <p class="eyebrow">Add to My Map?</p>
-          <span id="map-suggestion-category" class="suggestion-category"></span>
+          <label>Note category <select id="map-suggestion-category" aria-label="Note category"></select></label>
         </div>
         <span id="map-suggestion-topic" class="suggestion-topic"></span>
       </div>
@@ -108,6 +108,10 @@
         </label>
       </div>
       <div id="topic-connections"></div>
+      <label id="topic-entry-category-field" class="topic-field hidden">
+        <span>Save the description as a note in this topic</span>
+        <select id="topic-entry-category" aria-label="Note category for existing topic"></select>
+      </label>
       <div class="topic-actions">
         <button id="topic-dismiss" class="secondary-button" type="button">Not this</button>
         <button id="topic-accept" class="primary-button small" type="button">Save topic</button>

@@ -170,8 +170,10 @@ passwordForm.addEventListener("submit", async (event) => {
 removeSubscription.addEventListener("click", async () => {
   const user = selectedUser();
   if (!user) return;
-  const confirmation = window.prompt(`This immediately cancels Stripe for ${user.email} and removes Premium. Type REMOVE_SUBSCRIPTION to continue.`);
-  if (confirmation !== "REMOVE_SUBSCRIPTION") { setStatus("Subscription removal canceled."); return; }
+  const confirmation = "REMOVE_SUBSCRIPTION";
+  if (!await confirmAction(`This immediately cancels Stripe for ${user.email} and removes Premium.`, confirmation)) {
+    setStatus("Subscription removal canceled."); return;
+  }
   const updated = await api(`/admin/users/${user.id}/subscription/remove`, { method: "POST", headers: authHeaders(), body: JSON.stringify({ confirmation }) });
   state.users = state.users.map((item) => item.id === updated.id ? updated : item);
   selectUser(updated.id); setStatus("Stripe subscription canceled and Premium removed.");

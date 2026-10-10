@@ -64,7 +64,7 @@ async function loadChat(chatId) {
 
 async function deleteChat(chat) {
   const title = chat.title || "New conversation";
-  if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return;
+  if (!await confirmAction(`Delete "${title}"? This cannot be undone.`)) return;
 
   await api(`/llm/chats/${encodeURIComponent(chat.chat_id)}`, {
     method: "DELETE",
@@ -390,6 +390,7 @@ function updateTopicRoutePresentation() {
   });
 
   topicParentField.classList.toggle("hidden", Boolean(selectedSpace));
+  topicEntryCategoryField.classList.toggle("hidden", !selectedSpace);
   topicMatchBadge.classList.toggle("hidden", !isRecommended);
   topicNameLabel.textContent = selectedSpace ? "Detected aspect" : "New topic name";
   if (selectedSpace) {
@@ -398,7 +399,8 @@ function updateTopicRoutePresentation() {
       `${prefix}This chat will join “${selectedSpace.title}” ` +
       `(${topicContentsLabel(selectedSpace)}), so no extra map bubble is created. ` +
       "The same chat can also belong to other topics.";
-    topicAccept.textContent = "Connect chat";
+    topicRouteHint.textContent += " Your description will also be saved as a note in this topic.";
+    topicAccept.textContent = "Add to topic";
   } else {
     topicRouteHint.textContent =
       "This creates a new map topic and connects this chat to it. Its name is independent from the conversation name.";
@@ -407,6 +409,7 @@ function updateTopicRoutePresentation() {
 }
 
 function renderTopic(topic) {
+  document.querySelector("#topic-review-dialog .review-error")?.remove();
   state.pendingTopic = topic;
   updateChatReviewNotice("topic", Boolean(topic), topic ? `Review topic: ${topic.topic || "New topic"}` : "Review topic");
   topicCard.classList.toggle("hidden", !topic);
@@ -422,6 +425,7 @@ function renderTopic(topic) {
   }
   topicTitle.value = topic.topic || "";
   topicDescription.value = topic.description || "";
+  fillEntryCategorySelect(topicEntryCategory);
   topicCategory.value = topic.category || "other";
   topicConnections.replaceChildren(createTopicConnections(topic.related_topic_ids || []));
   const queueTotal = Number(topic.queue_total || 1);
@@ -472,6 +476,7 @@ function renderTopic(topic) {
 }
 
 function renderMapSuggestion(suggestion) {
+  document.querySelector("#map-suggestion-review-dialog .review-error")?.remove();
   if (!hasMyMapAccess()) suggestion = null;
   updateChatReviewNotice("map-suggestion", Boolean(suggestion), "Review map note");
   state.pendingMapSuggestion = suggestion;
@@ -486,8 +491,7 @@ function renderMapSuggestion(suggestion) {
     return;
   }
 
-  mapSuggestionCategory.textContent =
-    MAP_CATEGORY_LABELS[suggestion.category] || suggestion.category;
+  fillEntryCategorySelect(mapSuggestionCategory, suggestion.category);
   mapSuggestionTopic.textContent = suggestion.topic_title
     ? `Topic: ${suggestion.topic_title}`
     : "Not connected to a topic yet";
@@ -643,6 +647,19 @@ function upsertChat(chat) {
 
 function renderInlineError(error) {
   if (error instanceof ApiError && error.status === 401 && !state.token) return;
+  const review = document.querySelector("#topic-review-dialog[open], #map-suggestion-review-dialog[open]");
+  if (review) {
+    let alert = review.querySelector(".review-error");
+    if (!alert) {
+      alert = document.createElement("p");
+      alert.className = "review-error form-error";
+      alert.setAttribute("role", "alert");
+      review.append(alert);
+    }
+    alert.textContent = error instanceof Error ? error.message : String(error);
+    alert.scrollIntoView({ block: "nearest" });
+    return;
+  }
   if (!mapView.classList.contains("hidden")) {
     let alert = mapContent.querySelector(".map-feedback");
     if (!alert) {
@@ -753,7 +770,7 @@ function stopPolling() {
 }
 
 async function confirmTopic(accepted) {
-  if (!state.pendingTopic) return;
+  if (!state.pendingTopic || topicAccept.disabled) return;
   const topic = state.pendingTopic;
   const editedTopic = topicTitle.value.trim() || topic.topic;
   const editedDescription = topicDescription.value.trim() || topic.description;
@@ -767,27 +784,42 @@ async function confirmTopic(accepted) {
   const category = topicCategory.value;
   const relatedTopicIds = [...topicConnections.querySelectorAll("input:checked")]
     .map((input) => input.value).filter((id) => id !== existingTopicSpaceId);
-  renderTopic(null);
-  await api("/llm/topics/confirm", {
-    method: "POST",
-    headers: authHeaders(),
-    body: JSON.stringify({
-      chat_id: topic.chat_id,
-      topic: editedTopic,
-      description: editedDescription,
-      category,
-      related_topic_ids: relatedTopicIds,
-      accepted,
-      existing_topic_space_id: existingTopicSpaceId,
-      parent_topic_space_id: parentTopicSpaceId,
-    }),
-  });
-  if (hasMyMapAccess()) await loadMap();
-  await loadChats();
+  topicAccept.disabled = topicDismiss.disabled = true;
+  try {
+    const response = await api("/llm/topics/confirm", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({
+        chat_id: topic.chat_id,
+        require_map_access: true,
+        suggestion_id: topic.suggestion_id || null,
+        entry_category: topicEntryCategory.value || "own_perception",
+        topic: editedTopic,
+        description: editedDescription,
+        category,
+        related_topic_ids: relatedTopicIds,
+        accepted,
+        existing_topic_space_id: existingTopicSpaceId,
+        parent_topic_space_id: parentTopicSpaceId,
+      }),
+    });
+    renderTopic(null);
+    if (response.profile?.self_authorship_map) state.map = response.profile.self_authorship_map;
+    if (accepted && response.saved_topic_space_id) {
+      state.mapFilter = "all";
+      state.activeMapNodeId = response.saved_topic_space_id;
+      state.mapDetailOpen = true;
+      renderMap();
+    }
+    if (hasMyMapAccess()) await loadMap();
+    await loadChats();
+  } finally {
+    topicAccept.disabled = topicDismiss.disabled = false;
+  }
 }
 
 async function confirmMapSuggestion(accepted) {
-  if (!state.pendingMapSuggestion) return;
+  if (!state.pendingMapSuggestion || mapSuggestionAccept.disabled) return;
   const suggestion = state.pendingMapSuggestion;
   const text = mapSuggestionText.value.trim();
   if (accepted && !text) return;
@@ -795,22 +827,27 @@ async function confirmMapSuggestion(accepted) {
     ? suggestion.topic_space_id
     : mapSuggestionTarget.value || null;
 
-  renderMapSuggestion(null);
-  const response = await api("/llm/map-suggestions/confirm", {
-    method: "POST",
-    headers: authHeaders(),
-    body: JSON.stringify({
-      chat_id: suggestion.source_chat_id || state.activeChatId,
-      accepted,
-      category: suggestion.category,
-      text: text || suggestion.text,
-      reason: suggestion.reason,
-      topic_space_id: targetTopicSpaceId,
-    }),
-  });
-  state.map = response.map;
-  state.activeMapNodeId = targetTopicSpaceId || OVERALL_MAP_NODE_ID;
-  renderMap();
+  mapSuggestionAccept.disabled = mapSuggestionDismiss.disabled = true;
+  try {
+    const response = await api("/llm/map-suggestions/confirm", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({
+        chat_id: suggestion.source_chat_id || state.activeChatId,
+        accepted,
+        category: mapSuggestionCategory.value || suggestion.category,
+        text: text || suggestion.text,
+        reason: suggestion.reason,
+        topic_space_id: targetTopicSpaceId,
+      }),
+    });
+    renderMapSuggestion(null);
+    state.map = response.map;
+    state.activeMapNodeId = targetTopicSpaceId || OVERALL_MAP_NODE_ID;
+    renderMap();
+  } finally {
+    mapSuggestionAccept.disabled = mapSuggestionDismiss.disabled = false;
+  }
 }
 
 function updateChatReviewNotice(kind, available, label) {

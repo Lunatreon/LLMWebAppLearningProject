@@ -5050,6 +5050,53 @@ html[data-theme="light"] .chat-review-dialog .suggestion-target-field > span { c
 #feedback-form, #email-verification-form { display: grid; gap: 16px; }
 #feedback-message { width: 100%; resize: vertical; }
 #verification-pin { letter-spacing: .3em; font-size: 24px; }
+#terms-review { max-width: 640px; width: calc(100% - 32px); }
+.terms-review-form { display: grid; gap: 16px; padding: 16px; }
+.terms-consent-label { display: flex; align-items: center; gap: 8px; }
+.terms-consent-label input[type="checkbox"] {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+}
+.terms-consent-label > span { margin: 0; color: inherit; font: inherit; }
+
+/* Shared popup geometry; paper forms and conversation panels retain their surfaces. */
+.app-dialog, .chat-review-dialog, .map-action-popup {
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  max-height: calc(var(--app-height) - 32px - var(--safe-area-top) - var(--safe-area-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.app-dialog { border: 1px solid var(--line-light); color-scheme: light; }
+.map-action-popup { background: var(--paper); border-color: var(--line-light); color-scheme: light; }
+.app-dialog::backdrop, .chat-review-dialog::backdrop, .map-action-backdrop {
+  background: rgba(8, 7, 10, 0.76);
+}
+.app-dialog .dialog-close, .map-action-close { width: 44px; height: 44px; cursor: pointer; }
+.app-dialog h2, .map-action-popup h3 { overflow-wrap: anywhere; }
+.app-dialog form > h2 { padding-right: 30px; }
+#feedback-dialog, #email-verification-dialog { padding: 30px; }
+#feedback-dialog > form, #email-verification-dialog > form { padding: 0; margin-top: 20px; }
+#feedback-dialog > h2, #email-verification-dialog > h2 { padding-right: 30px; }
+#feedback-dialog > p, #email-verification-dialog > p { line-height: 1.6; }
+.app-dialog .terms-consent-label input[type="checkbox"] {
+  min-height: 18px;
+  padding: 0;
+}
+.app-dialog a:not([class]), .map-action-popup a:not([class]) { color: #694b8c; }
+.app-dialog :focus-visible, .chat-review-dialog :focus-visible, .map-action-popup :focus-visible {
+  outline: 2px solid var(--orchid);
+  outline-offset: 3px;
+}
+@media (max-width: 600px) {
+  .app-dialog form { padding: 22px; }
+  #feedback-dialog, #email-verification-dialog { padding: 22px; }
+  .app-dialog input:not([type="checkbox"]):not([type="radio"]),
+  .app-dialog textarea, .app-dialog select { font-size: 16px; }
+}
 
 </style>
   </head>
@@ -5155,6 +5202,12 @@ html[data-theme="light"] .chat-review-dialog .suggestion-target-field > span { c
         <div id="captcha-widget"></div>
         <p id="captcha-status" class="captcha-status" role="status"></p>
       </div>
+      <div id="registration-terms" class="hidden">
+        <label class="terms-consent-label"><input id="registration-terms-accepted" type="checkbox" disabled>
+          <span>I accept the <a id="registration-terms-link" href="/agb.html" target="_blank" rel="noopener">FeelY terms of use (AGB)</a>.</span>
+        </label>
+        <p id="registration-terms-status" role="status"></p>
+      </div>
       <button id="auth-submit" class="primary-button" type="submit">Login</button>
       <p id="auth-error" class="form-error" role="alert"></p>
     </form>
@@ -5162,6 +5215,7 @@ html[data-theme="light"] .chat-review-dialog .suggestion-target-field > span { c
     <p id="auth-status" class="auth-status" role="status"></p>
     <button id="activate-account-button" class="auth-link-button hidden" type="button">Activate account / enter email PIN</button>
     <p class="privacy-note">Your conversations remain connected to your private account.</p>
+    <p class="privacy-note"><a href="/agb.html" target="_blank" rel="noopener">FeelY terms of use (AGB)</a>. Published terms must be accepted before using FeelY.</p>
   </div>
 </section>
 
@@ -5376,7 +5430,7 @@ html[data-theme="light"] .chat-review-dialog .suggestion-target-field > span { c
       <div class="suggestion-heading">
         <div>
           <p class="eyebrow">Add to My Map?</p>
-          <span id="map-suggestion-category" class="suggestion-category"></span>
+          <label>Note category <select id="map-suggestion-category" aria-label="Note category"></select></label>
         </div>
         <span id="map-suggestion-topic" class="suggestion-topic"></span>
       </div>
@@ -5438,6 +5492,10 @@ html[data-theme="light"] .chat-review-dialog .suggestion-target-field > span { c
         </label>
       </div>
       <div id="topic-connections"></div>
+      <label id="topic-entry-category-field" class="topic-field hidden">
+        <span>Save the description as a note in this topic</span>
+        <select id="topic-entry-category" aria-label="Note category for existing topic"></select>
+      </label>
       <div class="topic-actions">
         <button id="topic-dismiss" class="secondary-button" type="button">Not this</button>
         <button id="topic-accept" class="primary-button small" type="button">Save topic</button>
@@ -5740,6 +5798,7 @@ html[data-theme="light"] .chat-review-dialog .suggestion-target-field > span { c
   </header>
 
   <div class="account-dialog-body">
+    <p><a href="/agb.html" target="_blank" rel="noopener">Read FeelY terms of use (AGB)</a></p>
     <form id="account-form" class="account-section" method="dialog">
       <div class="account-section-heading">
         <div>
@@ -6087,6 +6146,8 @@ const topicAccept = document.querySelector("#topic-accept");
 const topicDismiss = document.querySelector("#topic-dismiss");
 const topicRouting = document.querySelector("#topic-routing");
 const topicTarget = document.querySelector("#topic-target");
+const topicEntryCategoryField = document.querySelector("#topic-entry-category-field");
+const topicEntryCategory = document.querySelector("#topic-entry-category");
 const topicMatchBadge = document.querySelector("#topic-match-badge");
 const topicRouteHint = document.querySelector("#topic-route-hint");
 const topicParent = document.querySelector("#topic-parent");
@@ -6288,6 +6349,9 @@ async function api(path, options = {}) {
   }
 
   if (!response.ok) {
+    if (response.status === 423 && requestToken === state.token) {
+      ensureTermsAccepted().catch(renderInlineError);
+    }
     const detail = payload?.detail || (
       responseType.includes("text/html") || responseText.includes("trusted folder")
         ? "The FeelY page reached a file server instead of the backend. Check the API URL."
@@ -6316,6 +6380,9 @@ async function apiStream(path, options, onEvent) {
   }
   checkSessionResponse(response, requestToken);
   if (!response.ok || !response.body) {
+    if (response.status === 423 && requestToken === state.token) {
+      ensureTermsAccepted().catch(renderInlineError);
+    }
     let detail = "Request failed";
     try {
       detail = (await response.json()).detail || detail;
@@ -6882,6 +6949,69 @@ async function confirmEmailVerificationFromUrl() {
 
 
 </script>
+    <script data-app-source="js/dialogs.js">
+// App-styled confirmation with native modal focus management and safe cancellation.
+function confirmAction(message, requiredText = null) {
+  const returnFocus = document.activeElement;
+  const dialog = document.createElement("dialog");
+  dialog.className = "app-dialog confirm-dialog";
+  dialog.setAttribute("aria-label", "Confirm action");
+  const form = document.createElement("form");
+  form.method = "dialog";
+  const heading = document.createElement("h2");
+  heading.textContent = "Confirm action";
+  const copy = document.createElement("p");
+  copy.textContent = message;
+  const actions = document.createElement("div");
+  actions.className = "confirm-dialog-actions";
+  const cancel = document.createElement("button");
+  cancel.type = "submit";
+  cancel.value = "cancel";
+  cancel.className = "secondary-button";
+  cancel.textContent = "Cancel";
+  const confirm = document.createElement("button");
+  confirm.type = "submit";
+  confirm.value = "confirm";
+  confirm.className = "primary-button";
+  confirm.textContent = "Confirm";
+  actions.append(cancel, confirm);
+  form.append(heading, copy, actions);
+  if (requiredText) {
+    const label = document.createElement("label");
+    const caption = document.createElement("span");
+    caption.textContent = `Type ${requiredText} to confirm`;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.required = true;
+    input.autocomplete = "off";
+    confirm.disabled = true;
+    input.addEventListener("input", () => { confirm.disabled = input.value !== requiredText; });
+    form.addEventListener("submit", event => {
+      if (event.submitter === confirm && input.value !== requiredText) event.preventDefault();
+    });
+    cancel.formNoValidate = true;
+    label.append(caption, input);
+    form.insertBefore(label, actions);
+  }
+  dialog.append(form);
+  document.body.append(dialog);
+  dialog.addEventListener("keydown", event => {
+    // Escape dismisses this modal without also closing the underlying map form.
+    if (event.key === "Escape") event.stopPropagation();
+  });
+  return new Promise(resolve => {
+    dialog.addEventListener("close", () => {
+      const accepted = dialog.returnValue === "confirm";
+      dialog.remove();
+      if (returnFocus?.isConnected) returnFocus.focus();
+      resolve(accepted);
+    }, { once: true });
+    dialog.showModal();
+    cancel.focus();
+  });
+}
+
+</script>
     <script data-app-source="js/auth.js">
 // FeelY auth: see website/EDITING.md for file responsibilities and load order.
 
@@ -6957,6 +7087,10 @@ function setMode(mode) {
   usernameField.classList.toggle("hidden", isLogin);
   forgotPasswordButton.classList.toggle("hidden", !isLogin);
   usernameInput.required = !isLogin;
+  document.querySelector("#registration-terms").classList.toggle("hidden", isLogin);
+  document.querySelector("#registration-terms-accepted").checked = false;
+  document.querySelector("#registration-terms-accepted").required = !isLogin && Boolean(registrationTerms?.configured);
+  if (!isLogin) loadRegistrationTerms().catch(error => { authError.textContent = error.message; });
   passwordInput.autocomplete = isLogin ? "current-password" : "new-password";
   authHeading.textContent = isLogin ? "Return to your space" : "Create your private space";
   authSubmit.textContent = isLogin ? "Login" : "Create account";
@@ -7172,6 +7306,7 @@ function showAuth() {
 async function showChat({ startFreshChat = false } = {}) {
   scheduleSessionExpiry();
   if (!state.token) return;
+  if (!await ensureTermsAccepted()) return;
   if (startFreshChat) state.activeChatId = null;
   authView.classList.add("hidden");
   chatView.classList.remove("hidden");
@@ -7193,6 +7328,7 @@ async function showChat({ startFreshChat = false } = {}) {
 }
 
 async function registerAndLogin() {
+  const termsPayload = await registrationTermsPayload();
   const captchaIsEnabled = state.captcha.config.enabled;
   if (captchaIsEnabled && !state.captcha.token) {
     throw new Error("Please complete the verification before creating an account.");
@@ -7206,6 +7342,7 @@ async function registerAndLogin() {
       password: passwordInput.value,
       website: websiteInput?.value.trim() || "",
       captcha_token: captchaIsEnabled ? state.captcha.token : null,
+      ...termsPayload,
     }),
   });
   if (!registered.is_email_verified) {
@@ -7346,6 +7483,119 @@ function logout() {
 
 
 </script>
+    <script data-app-source="js/terms.js">
+// Mandatory review of the exact published version, after any sign-in method.
+let registrationTerms = null;
+
+async function loadRegistrationTerms() {
+  const current = await api("/terms/config");
+  const checkbox = document.querySelector("#registration-terms-accepted");
+  if (current.version !== registrationTerms?.version || current.document_sha256 !== registrationTerms?.document_sha256) {
+    checkbox.checked = false;
+  }
+  registrationTerms = current;
+  checkbox.disabled = !current.configured;
+  checkbox.required = state.mode === "register" && current.configured;
+  document.querySelector("#registration-terms-link").href = current.document_url || "/agb.html";
+  document.querySelector("#registration-terms-status").textContent = current.configured
+    ? (current.version.startsWith("test-")
+      ? `Unfinished test terms (${current.version}). You will need to accept the finished release terms separately.`
+      : `Version ${current.version}. Please read the terms and check the box yourself.`)
+    : "Terms are still being prepared. No acceptance is recorded for the draft.";
+}
+
+async function registrationTermsPayload() {
+  // Recheck before submitting; changed terms always reset the checkbox.
+  await loadRegistrationTerms();
+  if (!registrationTerms.configured) return {};
+  if (!document.querySelector("#registration-terms-accepted").checked) {
+    throw new Error("Please read and accept the FeelY terms before creating an account.");
+  }
+  return { terms_accepted: true, terms_version: registrationTerms.version,
+    terms_document_sha256: registrationTerms.document_sha256 };
+}
+
+async function ensureTermsAccepted() {
+  const token = state.token;
+  const result = await api("/terms/me", { headers: authHeaders() });
+  if (token !== state.token) return false;
+  const old = document.querySelector("#terms-review");
+  if (!result.current.enforced || result.accepted_current) {
+    old?.close();
+    old?.remove();
+    return true;
+  }
+  if (old?.open) return false;
+  old?.remove();
+  stopPolling();
+  const dialog = document.createElement("dialog");
+  dialog.id = "terms-review";
+  dialog.className = "app-dialog";
+  dialog.setAttribute("aria-labelledby", "terms-heading");
+  dialog.innerHTML = `<form class="terms-review-form">
+    <h2 id="terms-heading">FeelY terms of use (AGB)</h2>
+    <p>Please read and accept the current terms before continuing.</p>
+    <p><a id="terms-document" target="_blank" rel="noopener">Read / save the terms</a></p>
+    <label class="terms-consent-label"><input id="terms-consent" type="checkbox" required><span>I accept this version of the FeelY terms of use (AGB).</span></label>
+    <p id="terms-error" role="alert"></p>
+    <button class="primary-button" id="terms-continue" type="submit" disabled>Accept and continue</button>
+    <button class="secondary-button" id="terms-signout" type="button">Sign out</button>
+    <p>You can <button id="terms-account" type="button" class="auth-link-button">manage or delete your account</button>
+    or <button id="terms-billing" type="button" class="auth-link-button">manage your subscription</button> without accepting.</p>
+  </form>`;
+  document.body.append(dialog);
+  const link = dialog.querySelector("#terms-document");
+  link.href = result.current.document_url;
+  link.textContent = `Read / save the terms (${result.current.version})`;
+  const checkbox = dialog.querySelector("#terms-consent");
+  const submit = dialog.querySelector("#terms-continue");
+  const error = dialog.querySelector("#terms-error");
+  checkbox.addEventListener("change", () => { submit.disabled = !checkbox.checked; });
+  dialog.addEventListener("cancel", event => event.preventDefault());
+  dialog.querySelector("#terms-signout").addEventListener("click", logout);
+  dialog.querySelector("#terms-account").addEventListener("click", async () => {
+    try { await openAccountDialog(); } catch (failure) { error.textContent = failure.message; }
+  });
+  dialog.querySelector("#terms-billing").addEventListener("click", async () => {
+    try {
+      const portal = await api("/billing/portal", { method: "POST", headers: authHeaders() });
+      window.location.assign(portal.url);
+    } catch (failure) { error.textContent = failure.message; }
+  });
+  dialog.querySelector("form").addEventListener("submit", async event => {
+    event.preventDefault();
+    if (!checkbox.checked || submit.disabled || token !== state.token) return;
+    submit.disabled = true;
+    checkbox.disabled = true;
+    error.textContent = "";
+    try {
+      await api("/terms/accept", {
+        method: "POST", headers: authHeaders(),
+        body: JSON.stringify({ accepted: true, version: result.current.version,
+          document_sha256: result.current.document_sha256, client: "web" }),
+      });
+      if (token !== state.token) return;
+      dialog.close();
+      dialog.remove();
+      await showChat();
+    } catch (failure) {
+      error.textContent = failure.message;
+      if (failure.status === 409) {
+        dialog.close();
+        dialog.remove();
+        await ensureTermsAccepted();
+      }
+    } finally {
+      checkbox.disabled = false;
+      submit.disabled = !checkbox.checked;
+    }
+  });
+  dialog.showModal();
+  link.focus();
+  return false;
+}
+
+</script>
     <script data-app-source="js/chat.js">
 // FeelY chat: see website/EDITING.md for file responsibilities and load order.
 
@@ -7413,7 +7663,7 @@ async function loadChat(chatId) {
 
 async function deleteChat(chat) {
   const title = chat.title || "New conversation";
-  if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return;
+  if (!await confirmAction(`Delete "${title}"? This cannot be undone.`)) return;
 
   await api(`/llm/chats/${encodeURIComponent(chat.chat_id)}`, {
     method: "DELETE",
@@ -7739,6 +7989,7 @@ function updateTopicRoutePresentation() {
   });
 
   topicParentField.classList.toggle("hidden", Boolean(selectedSpace));
+  topicEntryCategoryField.classList.toggle("hidden", !selectedSpace);
   topicMatchBadge.classList.toggle("hidden", !isRecommended);
   topicNameLabel.textContent = selectedSpace ? "Detected aspect" : "New topic name";
   if (selectedSpace) {
@@ -7747,7 +7998,8 @@ function updateTopicRoutePresentation() {
       `${prefix}This chat will join “${selectedSpace.title}” ` +
       `(${topicContentsLabel(selectedSpace)}), so no extra map bubble is created. ` +
       "The same chat can also belong to other topics.";
-    topicAccept.textContent = "Connect chat";
+    topicRouteHint.textContent += " Your description will also be saved as a note in this topic.";
+    topicAccept.textContent = "Add to topic";
   } else {
     topicRouteHint.textContent =
       "This creates a new map topic and connects this chat to it. Its name is independent from the conversation name.";
@@ -7756,6 +8008,7 @@ function updateTopicRoutePresentation() {
 }
 
 function renderTopic(topic) {
+  document.querySelector("#topic-review-dialog .review-error")?.remove();
   state.pendingTopic = topic;
   updateChatReviewNotice("topic", Boolean(topic), topic ? `Review topic: ${topic.topic || "New topic"}` : "Review topic");
   topicCard.classList.toggle("hidden", !topic);
@@ -7771,6 +8024,7 @@ function renderTopic(topic) {
   }
   topicTitle.value = topic.topic || "";
   topicDescription.value = topic.description || "";
+  fillEntryCategorySelect(topicEntryCategory);
   topicCategory.value = topic.category || "other";
   topicConnections.replaceChildren(createTopicConnections(topic.related_topic_ids || []));
   const queueTotal = Number(topic.queue_total || 1);
@@ -7821,6 +8075,7 @@ function renderTopic(topic) {
 }
 
 function renderMapSuggestion(suggestion) {
+  document.querySelector("#map-suggestion-review-dialog .review-error")?.remove();
   if (!hasMyMapAccess()) suggestion = null;
   updateChatReviewNotice("map-suggestion", Boolean(suggestion), "Review map note");
   state.pendingMapSuggestion = suggestion;
@@ -7835,8 +8090,7 @@ function renderMapSuggestion(suggestion) {
     return;
   }
 
-  mapSuggestionCategory.textContent =
-    MAP_CATEGORY_LABELS[suggestion.category] || suggestion.category;
+  fillEntryCategorySelect(mapSuggestionCategory, suggestion.category);
   mapSuggestionTopic.textContent = suggestion.topic_title
     ? `Topic: ${suggestion.topic_title}`
     : "Not connected to a topic yet";
@@ -7992,6 +8246,19 @@ function upsertChat(chat) {
 
 function renderInlineError(error) {
   if (error instanceof ApiError && error.status === 401 && !state.token) return;
+  const review = document.querySelector("#topic-review-dialog[open], #map-suggestion-review-dialog[open]");
+  if (review) {
+    let alert = review.querySelector(".review-error");
+    if (!alert) {
+      alert = document.createElement("p");
+      alert.className = "review-error form-error";
+      alert.setAttribute("role", "alert");
+      review.append(alert);
+    }
+    alert.textContent = error instanceof Error ? error.message : String(error);
+    alert.scrollIntoView({ block: "nearest" });
+    return;
+  }
   if (!mapView.classList.contains("hidden")) {
     let alert = mapContent.querySelector(".map-feedback");
     if (!alert) {
@@ -8102,7 +8369,7 @@ function stopPolling() {
 }
 
 async function confirmTopic(accepted) {
-  if (!state.pendingTopic) return;
+  if (!state.pendingTopic || topicAccept.disabled) return;
   const topic = state.pendingTopic;
   const editedTopic = topicTitle.value.trim() || topic.topic;
   const editedDescription = topicDescription.value.trim() || topic.description;
@@ -8116,27 +8383,42 @@ async function confirmTopic(accepted) {
   const category = topicCategory.value;
   const relatedTopicIds = [...topicConnections.querySelectorAll("input:checked")]
     .map((input) => input.value).filter((id) => id !== existingTopicSpaceId);
-  renderTopic(null);
-  await api("/llm/topics/confirm", {
-    method: "POST",
-    headers: authHeaders(),
-    body: JSON.stringify({
-      chat_id: topic.chat_id,
-      topic: editedTopic,
-      description: editedDescription,
-      category,
-      related_topic_ids: relatedTopicIds,
-      accepted,
-      existing_topic_space_id: existingTopicSpaceId,
-      parent_topic_space_id: parentTopicSpaceId,
-    }),
-  });
-  if (hasMyMapAccess()) await loadMap();
-  await loadChats();
+  topicAccept.disabled = topicDismiss.disabled = true;
+  try {
+    const response = await api("/llm/topics/confirm", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({
+        chat_id: topic.chat_id,
+        require_map_access: true,
+        suggestion_id: topic.suggestion_id || null,
+        entry_category: topicEntryCategory.value || "own_perception",
+        topic: editedTopic,
+        description: editedDescription,
+        category,
+        related_topic_ids: relatedTopicIds,
+        accepted,
+        existing_topic_space_id: existingTopicSpaceId,
+        parent_topic_space_id: parentTopicSpaceId,
+      }),
+    });
+    renderTopic(null);
+    if (response.profile?.self_authorship_map) state.map = response.profile.self_authorship_map;
+    if (accepted && response.saved_topic_space_id) {
+      state.mapFilter = "all";
+      state.activeMapNodeId = response.saved_topic_space_id;
+      state.mapDetailOpen = true;
+      renderMap();
+    }
+    if (hasMyMapAccess()) await loadMap();
+    await loadChats();
+  } finally {
+    topicAccept.disabled = topicDismiss.disabled = false;
+  }
 }
 
 async function confirmMapSuggestion(accepted) {
-  if (!state.pendingMapSuggestion) return;
+  if (!state.pendingMapSuggestion || mapSuggestionAccept.disabled) return;
   const suggestion = state.pendingMapSuggestion;
   const text = mapSuggestionText.value.trim();
   if (accepted && !text) return;
@@ -8144,22 +8426,27 @@ async function confirmMapSuggestion(accepted) {
     ? suggestion.topic_space_id
     : mapSuggestionTarget.value || null;
 
-  renderMapSuggestion(null);
-  const response = await api("/llm/map-suggestions/confirm", {
-    method: "POST",
-    headers: authHeaders(),
-    body: JSON.stringify({
-      chat_id: suggestion.source_chat_id || state.activeChatId,
-      accepted,
-      category: suggestion.category,
-      text: text || suggestion.text,
-      reason: suggestion.reason,
-      topic_space_id: targetTopicSpaceId,
-    }),
-  });
-  state.map = response.map;
-  state.activeMapNodeId = targetTopicSpaceId || OVERALL_MAP_NODE_ID;
-  renderMap();
+  mapSuggestionAccept.disabled = mapSuggestionDismiss.disabled = true;
+  try {
+    const response = await api("/llm/map-suggestions/confirm", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({
+        chat_id: suggestion.source_chat_id || state.activeChatId,
+        accepted,
+        category: mapSuggestionCategory.value || suggestion.category,
+        text: text || suggestion.text,
+        reason: suggestion.reason,
+        topic_space_id: targetTopicSpaceId,
+      }),
+    });
+    renderMapSuggestion(null);
+    state.map = response.map;
+    state.activeMapNodeId = targetTopicSpaceId || OVERALL_MAP_NODE_ID;
+    renderMap();
+  } finally {
+    mapSuggestionAccept.disabled = mapSuggestionDismiss.disabled = false;
+  }
 }
 
 function updateChatReviewNotice(kind, available, label) {
@@ -8448,17 +8735,21 @@ function createJournalSuggestionCard(suggestion) {
     topicInput.name = "journal_topic_space_id";
     topicInput.setAttribute("aria-label", "Connect this journal page to a topic");
     journalTopicOptions(topicInput, "", `Create “${suggestion.title || "new topic"}”`);
-    card.append(topicInput);
+    categoryInput = document.createElement("select");
+    categoryInput.setAttribute("aria-label", "Note category for existing topic");
+    fillEntryCategorySelect(categoryInput);
+    categoryInput.hidden = true;
+    topicInput.addEventListener("change", () => {
+      const target = (state.map?.topic_spaces || []).find(space => space.id === topicInput.value);
+      categoryInput.hidden = !target;
+      topicCategoryInput.value = target ? topicCategoryOf(target) : suggestion.topic_category || "other";
+      topicCategoryInput.syncChoices();
+    });
+    card.append(topicInput, categoryInput);
   } else if (suggestion.kind === "map_entry") {
     categoryInput = document.createElement("select");
     categoryInput.name = "journal_map_category";
-    Object.entries(MAP_CATEGORY_LABELS).forEach(([value, label]) => {
-      const option = document.createElement("option");
-      option.value = value;
-      option.textContent = label;
-      option.selected = value === suggestion.category;
-      categoryInput.append(option);
-    });
+    fillEntryCategorySelect(categoryInput, suggestion.category);
     categoryInput.setAttribute("aria-label", "Map category");
     topicInput = document.createElement("select");
     topicInput.name = "journal_map_topic_space_id";
@@ -8483,18 +8774,27 @@ function createJournalSuggestionCard(suggestion) {
     accept.type = "button";
     accept.className = "primary-button small";
     accept.textContent = suggestion.kind === "topic" ? "Save topic" : "Add to map";
-    dismiss.addEventListener("click", () =>
-      decideJournalSuggestion(suggestion, false).catch(renderInlineError),
-    );
-    accept.addEventListener("click", () =>
-      decideJournalSuggestion(suggestion, true, {
-        title: titleInput?.value || null,
-        topic_category: topicCategoryInput?.value || null,
-        text: textInput.value,
-        category: categoryInput?.value || null,
-        topic_space_id: topicInput?.value || null,
-      }).catch(renderInlineError),
-    );
+    const submitDecision = async (accepted) => {
+      if (accept.disabled) return;
+      accept.disabled = true;
+      dismiss.disabled = true;
+      try {
+        await decideJournalSuggestion(suggestion, accepted, accepted ? {
+          title: titleInput?.value || null,
+          topic_category: topicCategoryInput?.value || null,
+          text: textInput.value,
+          category: categoryInput?.value || null,
+          topic_space_id: topicInput?.value || null,
+        } : {});
+      } catch (error) {
+        renderInlineError(error);
+      } finally {
+        accept.disabled = false;
+        dismiss.disabled = false;
+      }
+    };
+    dismiss.addEventListener("click", () => submitDecision(false));
+    accept.addEventListener("click", () => submitDecision(true));
     actions.append(dismiss, accept);
     card.append(actions);
   } else {
@@ -8526,6 +8826,16 @@ async function decideJournalSuggestion(suggestion, accepted, edits = {}) {
     },
   );
   state.map = response.map;
+  if (accepted) {
+    state.mapFilter = "all";
+    const savedTopic = (response.map?.topic_spaces || []).find(topic =>
+      topic.id === response.suggestion.saved_item_id ||
+      (topic.entries || []).some(entry => entry.id === response.suggestion.saved_item_id));
+    if (savedTopic) {
+      state.activeMapNodeId = savedTopic.id;
+      state.mapDetailOpen = true;
+    }
+  }
   const index = (state.journalEntry?.suggestions || []).findIndex(
     (item) => item.id === suggestion.id,
   );
@@ -8702,6 +9012,17 @@ const TOPIC_CATEGORIES = {
   experience: { label: "Experience", plural: "Experiences" },
   other: { label: "Other", plural: "Other" },
 };
+
+function fillEntryCategorySelect(select, selected = "own_perception") {
+  select.replaceChildren();
+  Object.entries(MAP_CATEGORY_LABELS).filter(([value]) => value !== "merged_topic").forEach(([value, label]) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    select.append(option);
+  });
+  select.value = Object.hasOwn(MAP_CATEGORY_LABELS, selected) && selected !== "merged_topic" ? selected : "own_perception";
+}
 
 function topicCategoryOf(topic) {
   return Object.hasOwn(TOPIC_CATEGORIES, topic.category) ? topic.category : "other";
@@ -8927,7 +9248,7 @@ async function updateMapEntry(entryId, payload) {
 }
 
 async function deleteMapEntry(entry) {
-  if (!window.confirm("Delete this map entry? This cannot be undone.")) return;
+  if (!await confirmAction("Delete this map entry? This cannot be undone.")) return;
   const response = await api(`/users/me/map/entries/${encodeURIComponent(entry.id)}`, {
     method: "DELETE",
     headers: authHeaders(),
@@ -9310,13 +9631,13 @@ function openMapTopicPopup(topic = null) {
     mergeTarget.addEventListener("change", () => {
       mergeButton.disabled = !mergeTarget.value;
     });
-    mergeButton.addEventListener("click", () => {
+    mergeButton.addEventListener("click", async () => {
       const target = (state.map?.topic_spaces || []).find(
         (space) => space.id === mergeTarget.value,
       );
       if (!target) return;
       if (
-        !window.confirm(
+        !await confirmAction(
           `Merge “${topic.title}” into “${target.title}”? The second topic will be kept.`,
         )
       ) {
@@ -9390,7 +9711,7 @@ async function updateMapTopic(topicId, payload) {
 
 async function disconnectMapTopicConnection(node, relationship, connectedTopic) {
   if (
-    !window.confirm(
+    !await confirmAction(
       `Disconnect “${node.title}” and “${connectedTopic.title}”? Both topics and their contents will be kept.`,
     )
   ) {
@@ -9435,7 +9756,7 @@ async function mergeMapTopic(sourceTopicId, targetTopicId) {
 
 async function deleteMapTopic(topic) {
   if (
-    !window.confirm(
+    !await confirmAction(
       "Delete this topic? Its entries will move to Overall instead of being deleted.",
     )
   ) {

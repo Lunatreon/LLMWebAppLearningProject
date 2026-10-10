@@ -45,6 +45,8 @@ from app.schemas.auth import (
     Token,
 )
 from app.schemas.user import UserCreate, UserRead
+from app.models.terms import TermsAcceptance
+from app.services.terms import terms_config
 
 router = APIRouter()
 
@@ -124,6 +126,13 @@ def register(
     request: Request,
     db: Session = Depends(get_db),
 ) -> User:
+    current_terms = terms_config()
+    if current_terms["configured"]:
+        if not payload.terms_accepted:
+            raise HTTPException(422, "Please explicitly accept the FeelY terms before creating an account.")
+        if (payload.terms_version != current_terms["version"] or
+                payload.terms_document_sha256 != current_terms["document_sha256"]):
+            raise HTTPException(409, "The terms changed. Read the current version and check the acceptance box again.")
     if payload.website and payload.website.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -166,6 +175,11 @@ def register(
     )
     db.add(user)
     try:
+        if current_terms["configured"]:
+            db.flush()
+            db.add(TermsAcceptance(user_id=user.id, version=current_terms["version"],
+                document_url=current_terms["document_url"], document_sha256=current_terms["document_sha256"],
+                client="api"))
         db.commit()
     except IntegrityError as exc:
         db.rollback()

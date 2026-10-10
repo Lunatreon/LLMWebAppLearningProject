@@ -30,6 +30,8 @@ in the APK. Use HTTPS. Native HTTP clients do not require a browser CORS origin.
 
 Registration uses the existing `/auth/register` endpoint with `email`, `username`,
 and `password`. If CAPTCHA is enabled, it still requires a valid `captcha_token`;
+when terms are published, registration also requires `terms_accepted: true`,
+`terms_version` and `terms_document_sha256` from `/terms/config`, after explicit user consent;
 native clients do not bypass it. Integrate the existing hosted registration flow
 or an appropriate browser-based Turnstile flow before shipping Android signup.
 Email verification uses the same six-digit PIN endpoints. Password reset links
@@ -53,12 +55,12 @@ still requires your package/signing configuration and a device test.
 See [Google's Android guide](https://codelabs.developers.google.com/sign-in-with-google-android)
 and [backend verification](https://developers.google.com/identity/sign-in/android/backend-auth).
 
-## Store acceptance of future AGB
+## AGB acceptance
 
-This change provides storage and API endpoints only. It does not publish legal
-text, add a checkbox to the website, or block access until acceptance. Existing
-users are never marked as having accepted automatically. Marketing consent and
-privacy-policy acknowledgement are not covered by this record.
+Edit and publish the document using [AGB_SETUP.md](AGB_SETUP.md). The website now
+requires explicit acceptance after sign-in once a document is configured. The
+backend also enforces acceptance for app features. Existing users are never marked
+as having accepted automatically. Privacy and marketing consent remain separate.
 
 After publishing an immutable document, configure:
 
@@ -77,8 +79,8 @@ independently validate the document at the URL.
 Client flow after sign-in (and email verification, if required):
 
 1. `GET /api/v1/terms/config` returns the current version, URL and hash, or
-   `configured=false` while publication is pending. `enforced=false` makes the
-   current storage-only behavior explicit.
+   `configured=false` while publication is pending. `enforced=true` when a
+   document is configured. Native clients must handle HTTP 423 by showing terms.
 2. `GET /api/v1/terms/me` with the user's bearer token returns their acceptance
    history and `accepted_current`.
 3. Display the document and an unchecked acceptance control. Only after explicit

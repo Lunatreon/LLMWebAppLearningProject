@@ -5023,3 +5023,50 @@ html[data-theme="light"] .chat-review-dialog .suggestion-target-field > span { c
 #feedback-form, #email-verification-form { display: grid; gap: 16px; }
 #feedback-message { width: 100%; resize: vertical; }
 #verification-pin { letter-spacing: .3em; font-size: 24px; }
+#terms-review { max-width: 640px; width: calc(100% - 32px); }
+.terms-review-form { display: grid; gap: 16px; padding: 16px; }
+.terms-consent-label { display: flex; align-items: center; gap: 8px; }
+.terms-consent-label input[type="checkbox"] {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+}
+.terms-consent-label > span { margin: 0; color: inherit; font: inherit; }
+
+/* Shared popup geometry; paper forms and conversation panels retain their surfaces. */
+.app-dialog, .chat-review-dialog, .map-action-popup {
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  max-height: calc(var(--app-height) - 32px - var(--safe-area-top) - var(--safe-area-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.app-dialog { border: 1px solid var(--line-light); color-scheme: light; }
+.map-action-popup { background: var(--paper); border-color: var(--line-light); color-scheme: light; }
+.app-dialog::backdrop, .chat-review-dialog::backdrop, .map-action-backdrop {
+  background: rgba(8, 7, 10, 0.76);
+}
+.app-dialog .dialog-close, .map-action-close { width: 44px; height: 44px; cursor: pointer; }
+.app-dialog h2, .map-action-popup h3 { overflow-wrap: anywhere; }
+.app-dialog form > h2 { padding-right: 30px; }
+#feedback-dialog, #email-verification-dialog { padding: 30px; }
+#feedback-dialog > form, #email-verification-dialog > form { padding: 0; margin-top: 20px; }
+#feedback-dialog > h2, #email-verification-dialog > h2 { padding-right: 30px; }
+#feedback-dialog > p, #email-verification-dialog > p { line-height: 1.6; }
+.app-dialog .terms-consent-label input[type="checkbox"] {
+  min-height: 18px;
+  padding: 0;
+}
+.app-dialog a:not([class]), .map-action-popup a:not([class]) { color: #694b8c; }
+.app-dialog :focus-visible, .chat-review-dialog :focus-visible, .map-action-popup :focus-visible {
+  outline: 2px solid var(--orchid);
+  outline-offset: 3px;
+}
+@media (max-width: 600px) {
+  .app-dialog form { padding: 22px; }
+  #feedback-dialog, #email-verification-dialog { padding: 22px; }
+  .app-dialog input:not([type="checkbox"]):not([type="radio"]),
+  .app-dialog textarea, .app-dialog select { font-size: 16px; }
+}

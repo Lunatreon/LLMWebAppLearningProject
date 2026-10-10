@@ -157,6 +157,17 @@ const TOPIC_CATEGORIES = {
   other: { label: "Other", plural: "Other" },
 };
 
+function fillEntryCategorySelect(select, selected = "own_perception") {
+  select.replaceChildren();
+  Object.entries(MAP_CATEGORY_LABELS).filter(([value]) => value !== "merged_topic").forEach(([value, label]) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    select.append(option);
+  });
+  select.value = Object.hasOwn(MAP_CATEGORY_LABELS, selected) && selected !== "merged_topic" ? selected : "own_perception";
+}
+
 function topicCategoryOf(topic) {
   return Object.hasOwn(TOPIC_CATEGORIES, topic.category) ? topic.category : "other";
 }
@@ -381,7 +392,7 @@ async function updateMapEntry(entryId, payload) {
 }
 
 async function deleteMapEntry(entry) {
-  if (!window.confirm("Delete this map entry? This cannot be undone.")) return;
+  if (!await confirmAction("Delete this map entry? This cannot be undone.")) return;
   const response = await api(`/users/me/map/entries/${encodeURIComponent(entry.id)}`, {
     method: "DELETE",
     headers: authHeaders(),
@@ -764,13 +775,13 @@ function openMapTopicPopup(topic = null) {
     mergeTarget.addEventListener("change", () => {
       mergeButton.disabled = !mergeTarget.value;
     });
-    mergeButton.addEventListener("click", () => {
+    mergeButton.addEventListener("click", async () => {
       const target = (state.map?.topic_spaces || []).find(
         (space) => space.id === mergeTarget.value,
       );
       if (!target) return;
       if (
-        !window.confirm(
+        !await confirmAction(
           `Merge “${topic.title}” into “${target.title}”? The second topic will be kept.`,
         )
       ) {
@@ -844,7 +855,7 @@ async function updateMapTopic(topicId, payload) {
 
 async function disconnectMapTopicConnection(node, relationship, connectedTopic) {
   if (
-    !window.confirm(
+    !await confirmAction(
       `Disconnect “${node.title}” and “${connectedTopic.title}”? Both topics and their contents will be kept.`,
     )
   ) {
@@ -889,7 +900,7 @@ async function mergeMapTopic(sourceTopicId, targetTopicId) {
 
 async function deleteMapTopic(topic) {
   if (
-    !window.confirm(
+    !await confirmAction(
       "Delete this topic? Its entries will move to Overall instead of being deleted.",
     )
   ) {

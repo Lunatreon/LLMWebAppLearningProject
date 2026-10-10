@@ -97,6 +97,12 @@
         <div id="captcha-widget"></div>
         <p id="captcha-status" class="captcha-status" role="status"></p>
       </div>
+      <div id="registration-terms" class="hidden">
+        <label class="terms-consent-label"><input id="registration-terms-accepted" type="checkbox" disabled>
+          <span>I accept the <a id="registration-terms-link" href="/agb.html" target="_blank" rel="noopener">FeelY terms of use (AGB)</a>.</span>
+        </label>
+        <p id="registration-terms-status" role="status"></p>
+      </div>
       <button id="auth-submit" class="primary-button" type="submit">Login</button>
       <p id="auth-error" class="form-error" role="alert"></p>
     </form>
@@ -104,5 +110,6 @@
     <p id="auth-status" class="auth-status" role="status"></p>
     <button id="activate-account-button" class="auth-link-button hidden" type="button">Activate account / enter email PIN</button>
     <p class="privacy-note">Your conversations remain connected to your private account.</p>
+    <p class="privacy-note"><a href="/agb.html" target="_blank" rel="noopener">FeelY terms of use (AGB)</a>. Published terms must be accepted before using FeelY.</p>
   </div>
 </section>

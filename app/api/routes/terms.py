@@ -1,6 +1,5 @@
 from datetime import timezone
 from typing import Literal
-from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, StrictBool
@@ -9,22 +8,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_user, get_db
-from app.core.config import settings
+from app.services.terms import terms_config
 from app.models.terms import TermsAcceptance
 from app.models.user import User
 
 router = APIRouter()
 
 
-def terms_config():
-    url = urlsplit(settings.terms_document_url)
-    configured = bool(settings.terms_version.strip() and settings.terms_document_sha256
-                      and url.scheme == "https" and url.hostname and not url.username
-                      and not url.password and len(settings.terms_document_url) <= 2048)
-    return {"configured": configured, "version": settings.terms_version if configured else None,
-            "document_url": settings.terms_document_url if configured else None,
-            "document_sha256": settings.terms_document_sha256 if configured else None,
-            "enforced": False}
 
 
 def acceptance_read(row):
@@ -54,6 +44,7 @@ def my_acceptances(user: User = Depends(get_current_user), db: Session = Depends
 class AcceptTerms(BaseModel):
     accepted: StrictBool
     version: str = Field(min_length=1, max_length=80)
+    document_sha256: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     client: Literal["web", "android", "api"] = "api"
 
 
@@ -66,6 +57,8 @@ def accept(payload: AcceptTerms, user: User = Depends(get_current_user), db: Ses
         raise HTTPException(400, "Explicit acceptance is required.")
     if payload.version != current["version"]:
         raise HTTPException(409, "The AGB version changed. Display the current document before accepting.")
+    if payload.document_sha256 is not None and payload.document_sha256 != current["document_sha256"]:
+        raise HTTPException(409, "The AGB document changed. Read the current document before accepting.")
     query = select(TermsAcceptance).where(TermsAcceptance.user_id == user.id,
                                         TermsAcceptance.version == payload.version)
     row = db.scalar(query)

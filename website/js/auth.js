@@ -72,6 +72,10 @@ function setMode(mode) {
   usernameField.classList.toggle("hidden", isLogin);
   forgotPasswordButton.classList.toggle("hidden", !isLogin);
   usernameInput.required = !isLogin;
+  document.querySelector("#registration-terms").classList.toggle("hidden", isLogin);
+  document.querySelector("#registration-terms-accepted").checked = false;
+  document.querySelector("#registration-terms-accepted").required = !isLogin && Boolean(registrationTerms?.configured);
+  if (!isLogin) loadRegistrationTerms().catch(error => { authError.textContent = error.message; });
   passwordInput.autocomplete = isLogin ? "current-password" : "new-password";
   authHeading.textContent = isLogin ? "Return to your space" : "Create your private space";
   authSubmit.textContent = isLogin ? "Login" : "Create account";
@@ -287,6 +291,7 @@ function showAuth() {
 async function showChat({ startFreshChat = false } = {}) {
   scheduleSessionExpiry();
   if (!state.token) return;
+  if (!await ensureTermsAccepted()) return;
   if (startFreshChat) state.activeChatId = null;
   authView.classList.add("hidden");
   chatView.classList.remove("hidden");
@@ -308,6 +313,7 @@ async function showChat({ startFreshChat = false } = {}) {
 }
 
 async function registerAndLogin() {
+  const termsPayload = await registrationTermsPayload();
   const captchaIsEnabled = state.captcha.config.enabled;
   if (captchaIsEnabled && !state.captcha.token) {
     throw new Error("Please complete the verification before creating an account.");
@@ -321,6 +327,7 @@ async function registerAndLogin() {
       password: passwordInput.value,
       website: websiteInput?.value.trim() || "",
       captcha_token: captchaIsEnabled ? state.captcha.token : null,
+      ...termsPayload,
     }),
   });
   if (!registered.is_email_verified) {

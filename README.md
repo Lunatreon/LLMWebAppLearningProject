@@ -34,6 +34,7 @@ per-user LLM requests, and persistent user profiles.
 - [Administration and editable prompts](docs/admin.md)
 - [Local webmail and reusable setup](WEBMAIL_SETUP.md)
 - [Android login and versioned AGB acceptance](docs/ANDROID_AND_TERMS.md)
+- [Edit and publish AGB / mandatory acceptance](docs/AGB_SETUP.md)
 - [Bright-theme design guide](docs/BRIGHT_DESIGN.md)
 
 See [docs/CODE_GUIDE.md](docs/CODE_GUIDE.md) for a walkthrough of how the code

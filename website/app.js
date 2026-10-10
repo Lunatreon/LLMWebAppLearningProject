@@ -166,6 +166,8 @@ const topicAccept = document.querySelector("#topic-accept");
 const topicDismiss = document.querySelector("#topic-dismiss");
 const topicRouting = document.querySelector("#topic-routing");
 const topicTarget = document.querySelector("#topic-target");
+const topicEntryCategoryField = document.querySelector("#topic-entry-category-field");
+const topicEntryCategory = document.querySelector("#topic-entry-category");
 const topicMatchBadge = document.querySelector("#topic-match-badge");
 const topicRouteHint = document.querySelector("#topic-route-hint");
 const topicParent = document.querySelector("#topic-parent");
@@ -367,6 +369,9 @@ async function api(path, options = {}) {
   }
 
   if (!response.ok) {
+    if (response.status === 423 && requestToken === state.token) {
+      ensureTermsAccepted().catch(renderInlineError);
+    }
     const detail = payload?.detail || (
       responseType.includes("text/html") || responseText.includes("trusted folder")
         ? "The FeelY page reached a file server instead of the backend. Check the API URL."
@@ -395,6 +400,9 @@ async function apiStream(path, options, onEvent) {
   }
   checkSessionResponse(response, requestToken);
   if (!response.ok || !response.body) {
+    if (response.status === 423 && requestToken === state.token) {
+      ensureTermsAccepted().catch(renderInlineError);
+    }
     let detail = "Request failed";
     try {
       detail = (await response.json()).detail || detail;

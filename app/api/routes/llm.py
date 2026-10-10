@@ -861,6 +861,9 @@ async def process_llm_message(
         )
         raise
 
+    # Generation may take minutes. Map edits committed during that wait must
+    # survive the conversation-memory update below.
+    db.refresh(profile)
     profile.data = record_conversation_memory(
         merge_llm_profile(profile.data, chat_result.profile),
         user_input=payload.input_text,
@@ -1026,14 +1029,25 @@ def confirm_topic(
     chat_info = dict(chat_session.info or {})
     queued_topics = pending_topic_queue(chat_info)
 
+    if payload.suggestion_id and not any(
+        item.get("suggestion_id") == payload.suggestion_id for item in queued_topics
+    ):
+        raise HTTPException(status_code=409, detail="This suggestion was already reviewed or replaced. Refresh the chat.")
+    if payload.accepted and (payload.require_map_access or payload.existing_topic_space_id) and not premium_access:
+        raise HTTPException(status_code=402, detail="My Map access is required to add to a topic.")
+
     if payload.accepted:
         accepted_topic_name = payload.topic
         if premium_access:
-            if payload.existing_topic_space_id:
+            existing_id = payload.existing_topic_space_id or next((
+                space["id"] for space in read_map(profile_data)["topic_spaces"]
+                if space["title"].strip().casefold() == payload.topic.casefold()
+            ), None)
+            if existing_id:
                 try:
                     profile_data, topic_space = link_chat_to_topic_space(
                         profile_data,
-                        topic_space_id=payload.existing_topic_space_id,
+                        topic_space_id=existing_id,
                         chat_id=payload.chat_id,
                     )
                 except LookupError as exc:
@@ -1058,7 +1072,7 @@ def confirm_topic(
                         detail=str(exc),
                     ) from exc
 
-            if payload.existing_topic_space_id and (
+            if existing_id and (
                 payload.related_topic_ids or "category" in payload.model_fields_set
             ):
                 try:
@@ -1071,6 +1085,13 @@ def confirm_topic(
                     )
                 except (LookupError, ValueError) as exc:
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+            if existing_id:
+                profile_data, _ = add_map_entry(
+                    profile_data, category=payload.entry_category,
+                    text=payload.description, topic_space_id=topic_space["id"],
+                    source_chat_id=payload.chat_id, reason=f"Saved from topic suggestion: {payload.topic}",
+                )
 
             topics = list(profile_data.get("topics", []))
             topic_entry = {
@@ -1107,7 +1128,9 @@ def confirm_topic(
             accepted_topic_names.append(accepted_topic_name)
         chat_info["accepted_topic_names"] = accepted_topic_names
     if queued_topics:
-        set_pending_topic_queue(chat_info, queued_topics[1:])
+        remaining = ([item for item in queued_topics if item.get("suggestion_id") != payload.suggestion_id]
+                     if payload.suggestion_id else queued_topics[1:])
+        set_pending_topic_queue(chat_info, remaining)
     else:
         set_pending_topic_queue(chat_info, [])
     chat_info["updated_at"] = current_timestamp()
@@ -1117,6 +1140,7 @@ def confirm_topic(
 
     return TopicConfirmationResponse(
         accepted=payload.accepted,
+        saved_topic_space_id=topic_space["id"] if payload.accepted and premium_access else None,
         profile=profile_data_for_access(
             profile.data,
             premium_access=premium_access,

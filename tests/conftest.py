@@ -27,6 +27,7 @@ from app.main import create_app
 
 @pytest.fixture(autouse=True)
 def reset_security_test_state(monkeypatch):
+    monkeypatch.setattr(settings, "terms_version", "")
     monkeypatch.setattr(settings, "basic_auth_enabled", False)
     monkeypatch.setattr(settings, "captcha_enabled", False)
     monkeypatch.setattr(settings, "google_auth_enabled", False)

@@ -229,7 +229,7 @@ def create_or_link_topic_space(
     title: str,
     description: str,
     chat_id: str,
-    category: str = "other",
+    category: str | None = None,
     related_topic_ids: list[str] | None = None,
     parent_topic_id: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -251,6 +251,8 @@ def create_or_link_topic_space(
             )
         if description.strip() and not space.get("description"):
             space["description"] = description.strip()
+        if category is not None:
+            space["category"] = normalize_topic_category(category)
         if parent_topic_id is not None:
             validate_parent_topic(
                 map_data,

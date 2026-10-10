@@ -257,17 +257,21 @@ function createJournalSuggestionCard(suggestion) {
     topicInput.name = "journal_topic_space_id";
     topicInput.setAttribute("aria-label", "Connect this journal page to a topic");
     journalTopicOptions(topicInput, "", `Create “${suggestion.title || "new topic"}”`);
-    card.append(topicInput);
+    categoryInput = document.createElement("select");
+    categoryInput.setAttribute("aria-label", "Note category for existing topic");
+    fillEntryCategorySelect(categoryInput);
+    categoryInput.hidden = true;
+    topicInput.addEventListener("change", () => {
+      const target = (state.map?.topic_spaces || []).find(space => space.id === topicInput.value);
+      categoryInput.hidden = !target;
+      topicCategoryInput.value = target ? topicCategoryOf(target) : suggestion.topic_category || "other";
+      topicCategoryInput.syncChoices();
+    });
+    card.append(topicInput, categoryInput);
   } else if (suggestion.kind === "map_entry") {
     categoryInput = document.createElement("select");
     categoryInput.name = "journal_map_category";
-    Object.entries(MAP_CATEGORY_LABELS).forEach(([value, label]) => {
-      const option = document.createElement("option");
-      option.value = value;
-      option.textContent = label;
-      option.selected = value === suggestion.category;
-      categoryInput.append(option);
-    });
+    fillEntryCategorySelect(categoryInput, suggestion.category);
     categoryInput.setAttribute("aria-label", "Map category");
     topicInput = document.createElement("select");
     topicInput.name = "journal_map_topic_space_id";
@@ -292,18 +296,27 @@ function createJournalSuggestionCard(suggestion) {
     accept.type = "button";
     accept.className = "primary-button small";
     accept.textContent = suggestion.kind === "topic" ? "Save topic" : "Add to map";
-    dismiss.addEventListener("click", () =>
-      decideJournalSuggestion(suggestion, false).catch(renderInlineError),
-    );
-    accept.addEventListener("click", () =>
-      decideJournalSuggestion(suggestion, true, {
-        title: titleInput?.value || null,
-        topic_category: topicCategoryInput?.value || null,
-        text: textInput.value,
-        category: categoryInput?.value || null,
-        topic_space_id: topicInput?.value || null,
-      }).catch(renderInlineError),
-    );
+    const submitDecision = async (accepted) => {
+      if (accept.disabled) return;
+      accept.disabled = true;
+      dismiss.disabled = true;
+      try {
+        await decideJournalSuggestion(suggestion, accepted, accepted ? {
+          title: titleInput?.value || null,
+          topic_category: topicCategoryInput?.value || null,
+          text: textInput.value,
+          category: categoryInput?.value || null,
+          topic_space_id: topicInput?.value || null,
+        } : {});
+      } catch (error) {
+        renderInlineError(error);
+      } finally {
+        accept.disabled = false;
+        dismiss.disabled = false;
+      }
+    };
+    dismiss.addEventListener("click", () => submitDecision(false));
+    accept.addEventListener("click", () => submitDecision(true));
     actions.append(dismiss, accept);
     card.append(actions);
   } else {
@@ -335,6 +348,16 @@ async function decideJournalSuggestion(suggestion, accepted, edits = {}) {
     },
   );
   state.map = response.map;
+  if (accepted) {
+    state.mapFilter = "all";
+    const savedTopic = (response.map?.topic_spaces || []).find(topic =>
+      topic.id === response.suggestion.saved_item_id ||
+      (topic.entries || []).some(entry => entry.id === response.suggestion.saved_item_id));
+    if (savedTopic) {
+      state.activeMapNodeId = savedTopic.id;
+      state.mapDetailOpen = true;
+    }
+  }
   const index = (state.journalEntry?.suggestions || []).findIndex(
     (item) => item.id === suggestion.id,
   );
