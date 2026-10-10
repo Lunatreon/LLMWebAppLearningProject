@@ -2204,7 +2204,7 @@ textarea {
   left: 43%;
   top: 57%;
   transform: translate(-50%, -50%);
-  animation: map-orbit 9s ease-in-out infinite alternate;
+  /*animation: map-orbit 9s ease-in-out infinite alternate;*/
 }
 
 .map-concept-board::after {
@@ -2212,7 +2212,7 @@ textarea {
   height: 280px;
   right: -120px;
   bottom: -120px;
-  animation: map-orbit 11s ease-in-out infinite alternate-reverse;
+  /*animation: map-orbit 11s ease-in-out infinite alternate-reverse;*/
 }
 
 .map-connection-layer {
