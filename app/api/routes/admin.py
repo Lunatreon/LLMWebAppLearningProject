@@ -20,9 +20,9 @@ from app.schemas.admin import (
     AdminStatus,
     AdminSubscriptionReset,
     AdminToken,
+    AdminUserCreate,
     AdminUserRead,
     AdminUserUpdate,
-    AdminUserCreate,
 )
 from app.services.billing import (
     BillingNotConfiguredError,
@@ -31,7 +31,11 @@ from app.services.billing import (
     normalize_subscription,
     remove_subscription_for_admin,
 )
-from app.services.llm import PromptConfigurationError, read_system_prompt, write_system_prompt
+from app.services.prompts import (
+    PromptConfigurationError,
+    read_system_prompt,
+    write_system_prompt,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -180,8 +184,7 @@ def reset_admin_user_password(
 ) -> AdminUserRead:
     user = admin_target_user(db, user_id)
     user.hashed_password = hash_password(payload.new_password)
-    if "password" not in user.auth_provider:
-        user.auth_provider = f"{user.auth_provider},password"
+    user.auth_provider = "password"
     db.commit()
     db.refresh(user)
     logger.info("Administrator %s reset password for user %s", admin_username, user.id)

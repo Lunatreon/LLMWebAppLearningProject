@@ -102,7 +102,6 @@ mapSidebarAddTopic.addEventListener("click", () => {
   closeSidebar();
   openMapTopicPopup();
 });
-practiceForm.addEventListener("submit", (event) => createPractice(event).catch(renderInlineError));
 reflectionForm.addEventListener("submit", (event) =>
   completePractice(event).catch(renderInlineError),
 );
@@ -245,7 +244,7 @@ authForm.addEventListener("submit", async (event) => {
 async function init() {
   const savedToken = state.token;
   scheduleSessionExpiry();
-  await Promise.all([loadCaptchaConfig(), loadGoogleConfig(), loadEmailConfig(), loadFeedbackConfig()]);
+  await Promise.all([loadCaptchaConfig(), loadEmailConfig(), loadFeedbackConfig()]);
   const requestedMode = new URLSearchParams(window.location.search).get("mode");
   setMode(!savedToken && requestedMode === "register" ? "register" : "login");
   renderUser();

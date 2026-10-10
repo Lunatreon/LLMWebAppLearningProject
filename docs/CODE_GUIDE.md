@@ -52,7 +52,23 @@ app/
     billing.py             Billing request/response schemas
   services/
     billing.py             Stripe calls and normalized subscription policy
-    llm.py                 LLM provider abstraction and implementations
+    conversation_summary.py Pure extractive summaries and chat metadata updates
+    chat_usage.py          Persistent daily message quotas
+    map_suggestions.py     Suggestion deduplication and cooldown policy
+    topic_matching.py      Conservative reuse of existing topics
+    prompts.py             Editable system-prompt loading and saving
+    llm/
+      types.py             Provider contracts and result types
+      factory.py           Provider selection and credential checks
+      context.py           Bounded chat, topic, and journal request payloads
+      responses.py         Structured response schemas and validation
+      openai.py            OpenAI SDK integration
+      anthropic.py         Anthropic SDK integration
+      ollama.py            Ollama HTTP calls, scheduling, and retries
+      local.py             Deterministic development responses
+      journal.py           Journal analysis orchestration
+      streaming.py         Partial JSON assistant-text decoding
+      json_response.py     Complete JSON decoding and upstream errors
 tests/
   conftest.py              Test app and temporary test database setup
   test_auth_and_llm.py     Basic register, login, and LLM flow test
@@ -225,7 +241,13 @@ Response body:
 
 ## LLM Service Design
 
-The LLM abstraction lives in `app/services/llm.py`.
+The LLM package lives in `app/services/llm/`. Provider implementations depend on
+shared contracts, context builders, and response validators. Those shared modules
+do not import providers or HTTP routes. Provider selection lives in `factory.py`;
+editable prompt files are handled by `app/services/prompts.py`.
+
+FastAPI, Pydantic, SQLAlchemy, and the official provider SDKs remain the framework
+boundaries. Adding a feature does not require a new framework or a provider rewrite.
 
 The important interfaces are:
 
@@ -237,6 +259,8 @@ class ChatLLMClient(Protocol):
         profile: dict[str, Any],
         chat_info: dict[str, Any],
         chat_id: str,
+        *,
+        on_text_chunk: TextChunkCallback | None = None,
     ) -> ChatLLMResult:
         ...
 
@@ -247,6 +271,7 @@ class TopicLLMClient(Protocol):
         chat_info: dict[str, Any],
         matched_patterns: list[str],
         topic_hint: str | None = None,
+        available_topics: list[dict[str, Any]] | None = None,
     ) -> TopicLLMResult:
         ...
 ```
@@ -274,7 +299,34 @@ Each role currently has four provider implementations:
 
 The local mock is useful because developers can build and test app flows without
 paying for or configuring a real LLM. Ollama provides generated responses from
-a model running on the developer's own computer.
+a model running on the developer's own computer. OpenAI API-key settings and
+per-role model overrides remain supported; local development does not need a key.
+
+## Changing Chat Summaries
+
+The existing summary is a compact memory for future model requests, not a
+separate user-facing summary feature. Its implementation is now isolated in
+`app/services/conversation_summary.py`:
+
+1. `summarize_conversation(messages)` produces bounded, verbatim excerpts from
+   older user messages. It excludes assistant interpretations and the most recent
+   two user turns, and returns `None` when there is nothing to summarize.
+2. `update_conversation_summary(chat_info)` returns updated metadata without
+   modifying the input or removing full message history.
+3. `process_llm_message()` in the chat route calls the updater after saving an
+   exchange to memory and before committing the chat to the database.
+4. `llm/context.py` includes the saved summary when building model requests.
+
+To change summary selection or wording, edit the pure summarizer and run
+`tests/test_conversation_summary.py`. Provider credentials, streaming, prompts,
+and database code do not need to change. If you add an asynchronous model-based
+summary, put that orchestration in its own service and await it explicitly from
+the request flow or a background task; do not hide network calls in the pure
+summarizer. Keep user ownership checks in any new API endpoint that exposes it.
+
+For other features, keep HTTP parsing and authentication in `app/api/routes`,
+business rules in `app/services`, and request/response models in `app/schemas`.
+Import helpers from their owning modules so dependencies remain visible.
 
 ## How To Add A New API Function
 
@@ -443,8 +495,8 @@ def create_note(payload: NoteCreate, db: Session = Depends(get_db)):
 
 ## How To Add A New LLM Provider
 
-Add a new class in `app/services/llm.py` or split providers into separate files
-if the file becomes large.
+Add a provider module under `app/services/llm/`. Reuse the contracts in `types.py`,
+payload builders in `context.py`, and validators in `responses.py`.
 
 Implement either the chat protocol, topic protocol, or both. A chat provider
 must implement:
@@ -456,6 +508,8 @@ async def respond(
     profile: dict[str, Any],
     chat_info: dict[str, Any],
     chat_id: str,
+    *,
+    on_text_chunk: TextChunkCallback | None = None,
 ) -> ChatLLMResult:
     ...
 ```
@@ -463,13 +517,18 @@ async def respond(
 Example:
 
 ```python
+from app.services.llm.types import ChatLLMResult
+
+
 class MyLLMClient:
-    async def respond(self, user_input, profile, chat_info, chat_id):
+    async def respond(self, user_input, profile, chat_info, chat_id, *, on_text_chunk=None):
         assistant_message = "Generated message"
         updated_profile = {
             **profile,
             "last_user_message": user_input,
         }
+        if on_text_chunk is not None:
+            await on_text_chunk(assistant_message)
         return ChatLLMResult(
             assistant_message=assistant_message,
             profile=updated_profile,
@@ -477,7 +536,7 @@ class MyLLMClient:
         )
 ```
 
-Then update the matching factory:
+Then update the matching factory in `app/services/llm/factory.py`:
 
 ```python
 def get_chat_llm_client() -> ChatLLMClient:

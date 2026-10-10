@@ -95,61 +95,6 @@ function renderMapSidebar() {
   });
 }
 
-function createMapEntryElement(entry) {
-  const item = document.createElement("article");
-  item.className = "map-entry";
-  item.dataset.category = entry.category;
-
-  const label = document.createElement("span");
-  label.className = "map-entry-label";
-  label.textContent = MAP_CATEGORY_LABELS[entry.category] || entry.category;
-
-  const text = document.createElement("p");
-  text.textContent = entry.text;
-  item.append(label, text);
-
-  if (entry.category === "practice") {
-    const status = document.createElement("span");
-    status.className = "practice-status";
-    status.textContent = entry.status || "active";
-    item.append(status);
-
-    const controls = document.createElement("div");
-    controls.className = "practice-controls";
-    if (entry.status !== "completed") {
-      const toggle = document.createElement("button");
-      toggle.type = "button";
-      toggle.textContent = entry.status === "paused" ? "Resume" : "Pause";
-      toggle.addEventListener("click", () => {
-        updatePractice(entry.id, entry.status === "paused" ? "active" : "paused").catch(
-          renderInlineError,
-        );
-      });
-
-      const complete = document.createElement("button");
-      complete.type = "button";
-      complete.textContent = "Reflect and complete";
-      complete.addEventListener("click", () => openReflectionDialog(entry.id));
-      controls.append(toggle, complete);
-    } else {
-      const reactivate = document.createElement("button");
-      reactivate.type = "button";
-      reactivate.textContent = "Practice again";
-      reactivate.addEventListener("click", () => updatePractice(entry.id, "active").catch(renderInlineError));
-      controls.append(reactivate);
-    }
-    item.append(controls);
-
-    if (entry.reflection) {
-      const reflection = document.createElement("p");
-      reflection.className = "practice-reflection";
-      reflection.textContent = entry.reflection;
-      item.append(reflection);
-    }
-  }
-  return item;
-}
-
 const TOPIC_CATEGORIES = {
   person: { label: "Person", plural: "People" },
   trait: { label: "Trait", plural: "Traits" },
@@ -1602,23 +1547,6 @@ function renderMap() {
   mapContent.append(layout);
 }
 
-function openPracticeDialog() {
-  practiceText.value = "";
-  practiceTopic.replaceChildren();
-  const unassigned = document.createElement("option");
-  unassigned.value = "";
-  unassigned.textContent = OVERALL_MAP_TITLE;
-  practiceTopic.append(unassigned);
-  (state.map?.topic_spaces || []).forEach((space) => {
-    const option = document.createElement("option");
-    option.value = space.id;
-    option.textContent = space.title;
-    practiceTopic.append(option);
-  });
-  practiceDialog.showModal();
-  practiceText.focus();
-}
-
 function openReflectionDialog(entryId) {
   state.completingPracticeId = entryId;
   practiceReflection.value = "";
@@ -1629,25 +1557,6 @@ function openReflectionDialog(entryId) {
   }
   reflectionDialog.showModal();
   practiceReflection.focus();
-}
-
-async function createPractice(event) {
-  event.preventDefault();
-  const text = practiceText.value.trim();
-  if (!text) return;
-  const response = await api("/users/me/map/entries", {
-    method: "POST",
-    headers: authHeaders(),
-    body: JSON.stringify({
-      category: "practice",
-      text,
-      topic_space_id: practiceTopic.value || null,
-      source_chat_id: state.activeChatId,
-    }),
-  });
-  state.map = response.map;
-  renderMap();
-  practiceDialog.close();
 }
 
 async function updatePractice(entryId, status, reflection = null) {

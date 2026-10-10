@@ -1,7 +1,9 @@
 import json
 from copy import deepcopy
 
-from app.services.llm import chat_request_payload
+from app.services.llm.context import (
+    chat_request_payload,
+)
 from app.services.self_authorship import merge_llm_profile, profile_data_for_access
 
 

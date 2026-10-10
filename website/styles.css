@@ -110,28 +110,6 @@ a:focus-visible {
   font-size: 12px;
 }
 
-.google-auth-field {
-  display: grid;
-  gap: 12px;
-  justify-items: stretch;
-}
-
-.auth-divider {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 10px;
-  color: #8c7d76;
-  font-size: 12px;
-}
-
-.auth-divider::before,
-.auth-divider::after {
-  height: 1px;
-  background: var(--line-light);
-  content: "";
-}
-
 .auth-status {
   min-height: 18px;
   color: #6f625d;
@@ -3053,75 +3031,6 @@ textarea {
   font-weight: 700;
 }
 
-.map-entry-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 20px;
-}
-
-.map-entry {
-  min-width: 0;
-  border-top: 2px solid #d5c8f0;
-  border-radius: 6px;
-  background: #f5f1f8;
-  padding: 12px;
-}
-
-.map-entry[data-category="inherited_script"] { border-color: var(--coral); background: #fbf0ec; }
-.map-entry[data-category="own_perception"] { border-color: var(--orchid); background: #f3eefb; }
-.map-entry[data-category="value"] { border-color: #c5a657; background: #f8f3e8; }
-.map-entry[data-category="body_signal"] { border-color: var(--mint); background: #edf6f3; }
-.map-entry[data-category="practice"] { border-color: #78649d; background: #f0ecf6; }
-.map-entry[data-category="evidence"] { border-color: #c5a657; background: #f8f3e8; }
-
-.map-entry-label {
-  color: #79669f;
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-
-.map-entry p {
-  margin: 7px 0 0;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.practice-status {
-  display: inline-block;
-  margin-top: 9px;
-  color: #736a76;
-  font-size: 10px;
-  text-transform: uppercase;
-}
-
-.practice-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
-}
-
-.practice-controls button {
-  min-height: 30px;
-  border: 1px solid var(--line-light);
-  border-radius: 6px;
-  background: var(--white);
-  color: var(--ink);
-  padding: 0 9px;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.practice-reflection {
-  margin-top: 9px !important;
-  border-left: 2px solid var(--mint);
-  color: #665e67;
-  padding-left: 8px;
-  font-size: 11px !important;
-}
-
 .unassigned-section {
   margin-top: 22px;
   border-top: 1px solid var(--line-light);
@@ -3858,8 +3767,7 @@ textarea {
     max-width: 100%;
   }
 
-  .lens-panel,
-  .map-entry-grid {
+  .lens-panel {
     grid-template-columns: 1fr;
   }
 

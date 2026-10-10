@@ -15,11 +15,6 @@ from app.core.email_verification import (
     hash_email_verification_pin,
     send_email_verification_message,
 )
-from app.core.google_auth import (
-    google_email_is_authoritative,
-    google_public_config,
-    verify_google_credential,
-)
 from app.core.password_reset import (
     create_password_reset_token,
     hash_password_reset_token,
@@ -35,8 +30,6 @@ from app.schemas.auth import (
     EmailVerificationConfirmResponse,
     EmailVerificationRequest,
     EmailVerificationRequestResponse,
-    GoogleAuthConfig,
-    GoogleLoginRequest,
     LoginRequest,
     PasswordResetConfirmRequest,
     PasswordResetConfirmResponse,
@@ -68,44 +61,23 @@ def token_for_user(user: User, db: Session) -> Token:
     return Token(access_token=create_access_token(subject=str(user.id)))
 
 
-def unique_google_username(db: Session, email: str, name: str | None) -> str:
-    base = (name or email.split("@", 1)[0]).strip().lower()
-    base = "".join(character if character.isalnum() else "_" for character in base)
-    base = "_".join(part for part in base.split("_") if part)[:40] or "google_user"
-
-    candidate = base
-    suffix = 1
-    while db.scalar(select(User).where(func.lower(User.username) == candidate.lower())):
-        suffix += 1
-        candidate = f"{base}_{suffix}"[:80]
-    return candidate
-
-
 @router.get("/captcha/config", response_model=CaptchaConfig)
 def read_captcha_config() -> CaptchaConfig:
     return CaptchaConfig(**captcha_public_config())
-
-
-@router.get("/google/config", response_model=GoogleAuthConfig)
-def read_google_config() -> GoogleAuthConfig:
-    return GoogleAuthConfig(**google_public_config())
 
 
 @router.get("/android/config")
 def read_android_config():
     """Public discovery metadata, not proof of an app's identity or authorization."""
     enabled = settings.android_app_enabled
-    google_enabled = bool(enabled and settings.google_auth_enabled and settings.google_client_id)
     return {
         "enabled": enabled,
         "package_name": settings.android_package_name or None,
         "password_login_enabled": enabled,
-        "google": {"enabled": google_enabled,
-                   "server_client_id": settings.google_client_id if google_enabled else None},
         "token_type": "bearer",
         "access_token_expires_in_seconds": settings.access_token_expire_minutes * 60,
         "endpoints": {name: settings.api_v1_prefix + path for name, path in {
-            "register": "/auth/register", "login": "/auth/login", "google": "/auth/google",
+            "register": "/auth/register", "login": "/auth/login",
             "captcha_config": "/auth/captcha/config", "email_config": "/auth/email/config",
             "verify_email": "/auth/email-verification/confirm",
             "password_reset_request": "/auth/password-reset/request",
@@ -227,81 +199,6 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> Token:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Please verify your email before logging in.",
         )
-
-    return token_for_user(user, db)
-
-
-@router.post("/google", response_model=Token, dependencies=[Depends(rate_limit_auth)])
-def login_with_google(
-    payload: GoogleLoginRequest,
-    db: Session = Depends(get_db),
-) -> Token:
-    google_payload = verify_google_credential(payload.credential)
-    google_sub = str(google_payload["sub"])
-    email = str(google_payload["email"]).strip().lower()
-    name = google_payload.get("name")
-    picture = google_payload.get("picture")
-    email_verified = bool(google_payload.get("email_verified"))
-
-    user = db.scalar(select(User).where(User.google_sub == google_sub))
-    if user is None:
-        user = db.scalar(select(User).where(User.email == email))
-        if user is not None:
-            if not user.is_active:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Could not validate credentials",
-                )
-            if not google_email_is_authoritative(google_payload):
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Use your existing login before connecting this Google account.",
-                )
-            if user.google_sub and user.google_sub != google_sub:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="This email is already connected to another Google account.",
-                )
-            user.google_sub = google_sub
-            user.auth_provider = "google"
-        else:
-            user = User(
-                email=email,
-                username=unique_google_username(db, email, str(name) if name else None),
-                display_name=str(name).strip() if name else None,
-                avatar_url=str(picture).strip() if picture else None,
-                hashed_password="",
-                auth_provider="google",
-                google_sub=google_sub,
-                is_email_verified=email_verified,
-                email_verified_at=utc_now() if email_verified else None,
-                profile=UserProfile(data={}),
-            )
-            db.add(user)
-    elif not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-        )
-
-    if name and not user.display_name:
-        user.display_name = str(name).strip()
-    if picture and not user.avatar_url:
-        user.avatar_url = str(picture).strip()
-    if email_verified and user.email == email and not user.is_email_verified:
-        user.is_email_verified = True
-        user.email_verified_at = utc_now()
-        user.email_verification_token_hash = None
-        user.email_verification_sent_at = None
-
-    try:
-        db.flush()
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Could not connect this Google account.",
-        ) from exc
 
     return token_for_user(user, db)
 
@@ -448,10 +345,9 @@ def confirm_password_reset(
             detail="Password reset link is invalid or expired.",
         )
 
-    provider = user.auth_provider if "password" in user.auth_provider else f"{user.auth_provider},password"
     changed = db.execute(update(User).where(
         User.id == user.id, User.is_active.is_(True), User.password_reset_token_hash == token_hash,
-    ).values(hashed_password=hash_password(payload.new_password), auth_provider=provider,
+    ).values(hashed_password=hash_password(payload.new_password), auth_provider="password",
              password_reset_token_hash=None, password_reset_sent_at=None))
     if not changed.rowcount:
         db.rollback()

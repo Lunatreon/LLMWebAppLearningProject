@@ -26,7 +26,6 @@ class User(Base):
     bio: Mapped[str | None] = mapped_column(String(500), nullable=True)
     avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     auth_provider: Mapped[str] = mapped_column(String(40), default="password", nullable=False)
-    google_sub: Mapped[str | None] = mapped_column(String(255), unique=True, index=True, nullable=True)
     is_email_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     email_verification_token_hash: Mapped[str | None] = mapped_column(

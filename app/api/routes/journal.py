@@ -17,8 +17,8 @@ from app.schemas.journal import (
     JournalSuggestionDecision,
     JournalSuggestionDecisionResponse,
 )
-from app.services.llm import analyse_journal_text
 from app.services.billing import has_premium_feature_access
+from app.services.llm.journal import analyse_journal_text
 from app.services.self_authorship import (
     ENTRY_CATEGORIES,
     add_map_entry,

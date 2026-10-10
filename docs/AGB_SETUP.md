@@ -5,7 +5,7 @@
 At the operator's request, `test-2026-10-05-v2` contains unfinished test terms.
 Its immutable snapshot is `website/legal/agb/test-2026-10-05-v2.html`.
 New email/password accounts must explicitly accept it at registration; existing
-and Google accounts use the acceptance screen before app use. The signup screen
+accounts use the acceptance screen before app use. The signup screen
 labels this as unfinished test text. This applies to everyone using this deployment,
 not only accounts with the `test` role. Acceptance tests the workflow, not legal adequacy.
 
@@ -52,8 +52,7 @@ clients. Terms review, sign-out, account management/deletion and the billing por
 remain available. Email/password registration also requires an unchecked checkbox
 before account creation when terms are published. The API requires `terms_accepted: true`,
 `terms_version`, and `terms_document_sha256` and records acceptance in the same
-transaction as the account. Google sign-in requires acceptance at the post-login
-gate before app use. Until publication, signup remains available and the draft
+transaction as the account. Until publication, signup remains available and the draft
 checkbox is disabled; no draft acceptance is recorded. This is not a full legal checkout flow.
 
 Acceptance records include account ID, version, document URL, document hash,

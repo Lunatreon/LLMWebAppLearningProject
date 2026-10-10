@@ -11,7 +11,7 @@ from sqlalchemy import select
 from app.api.dependencies import get_db
 from app.api.routes import auth as auth_routes
 from app.api.routes import llm as llm_routes
-from app.api.routes.llm import (
+from app.services.map_suggestions import (
     remember_map_suggestion_event,
     should_surface_map_suggestion,
 )
@@ -21,28 +21,50 @@ from app.core.rate_limit import rate_limiter
 from app.main import create_app
 from app.models.billing import BillingSubscription
 from app.models.user import User
-from app.services.llm import (
+from app.services.conversation_summary import (
+    update_conversation_summary,
+)
+from app.services.llm.anthropic import (
     AnthropicChatLLMClient,
     AnthropicTopicLLMClient,
-    LocalChatLLMClient,
-    LocalTopicLLMClient,
-    OllamaChatLLMClient,
-    OllamaTopicLLMClient,
-    TopicLLMResult,
-    assistant_message_prefix_from_json,
-    best_existing_topic_match,
-    chat_result_from_payload,
+)
+from app.services.llm.context import (
     focused_chat_context,
     focused_profile_context,
+    topic_chat_context,
+)
+from app.services.llm.factory import (
     get_chat_llm_client,
     get_topic_llm_client,
-    infer_local_freeform_topic,
-    is_scam_abuse_request,
+)
+from app.services.llm.json_response import (
     parse_json_response,
-    read_system_prompt,
-    topic_chat_context,
+)
+from app.services.llm.local import (
+    LocalChatLLMClient,
+    LocalTopicLLMClient,
+    is_scam_abuse_request,
+)
+from app.services.llm.ollama import (
+    OllamaChatLLMClient,
+    OllamaTopicLLMClient,
+)
+from app.services.llm.responses import (
+    chat_result_from_payload,
     topic_result_from_payload,
-    update_conversation_summary,
+)
+from app.services.llm.streaming import (
+    assistant_message_prefix_from_json,
+)
+from app.services.llm.types import (
+    TopicLLMResult,
+)
+from app.services.prompts import (
+    read_system_prompt,
+)
+from app.services.topic_matching import (
+    best_existing_topic_match,
+    infer_local_freeform_topic,
 )
 from app.services.pattern_recognition import ChatAnalyser
 from app.services.self_authorship import merge_llm_profile
@@ -600,40 +622,11 @@ def test_user_can_edit_account_change_password_and_delete_account(client):
     assert client.get("/api/v1/users/me", headers=headers).status_code == 401
 
 
-def test_google_login_can_create_account(client, monkeypatch):
-    monkeypatch.setattr(settings, "google_auth_enabled", True)
-    monkeypatch.setattr(settings, "google_client_id", "google-client-id.apps.googleusercontent.com")
-    monkeypatch.setattr(
-        auth_routes,
-        "verify_google_credential",
-        lambda credential: {
-            "sub": "google-sub-123",
-            "email": "google-user@gmail.com",
-            "email_verified": True,
-            "name": "Google User",
-            "picture": "https://example.com/google.png",
-        },
-    )
-
-    config_response = client.get("/api/v1/auth/google/config")
-    assert config_response.status_code == 200
-    assert config_response.json()["client_id"] == "google-client-id.apps.googleusercontent.com"
-
-    login_response = client.post(
-        "/api/v1/auth/google",
-        json={"credential": "header.payload.signature-from-google"},
-    )
-    assert login_response.status_code == 200
-    token = login_response.json()["access_token"]
-    account_response = client.get(
-        "/api/v1/users/me/account",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    account = account_response.json()
-    assert account["email"] == "google-user@gmail.com"
-    assert account["google_connected"] is True
-    assert account["is_email_verified"] is True
-    assert account["has_password"] is False
+def test_google_sign_in_endpoints_are_removed(client):
+    assert client.get("/api/v1/auth/google/config").status_code == 404
+    assert client.post(
+        "/api/v1/auth/google", json={"credential": "unused-credential"}
+    ).status_code == 404
 
 
 def test_email_verification_request_and_confirm(client, monkeypatch):
@@ -1685,7 +1678,7 @@ def test_system_prompts_are_general_and_avoid_over_interpreting():
     assert "turn a fear, prediction, or hypothesis into fact" in chat_system_prompt
     assert "Preserve uncertainty, mixed feelings" in chat_system_prompt
     assert "do not repeat them" in chat_system_prompt
-    assert "Do not default to breathing" in chat_system_prompt
+    assert "Do not turn every reply into a breathing exercise" in chat_system_prompt
     assert "Do not generate profile updates, topics, or map suggestions" in chat_system_prompt
     assert "An observation does not require a new topic" in topic_system_prompt
     assert "Refuse harmful deception" in chat_system_prompt
@@ -2218,7 +2211,9 @@ def test_topic_categories_and_connections_survive_suggestion_confirmation(monkey
 
 
 def test_typed_topic_parsing_is_backward_compatible_and_matching_keeps_people_distinct():
-    from app.services.llm import TOPIC_RESPONSE_SCHEMA
+    from app.services.llm.responses import (
+        TOPIC_RESPONSE_SCHEMA,
+    )
     from app.services.self_authorship import read_map
 
     legacy = topic_result_from_payload({'topic': 'Music', 'description': 'You enjoy playing.'})

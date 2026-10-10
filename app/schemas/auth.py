@@ -23,15 +23,6 @@ class CaptchaConfig(BaseModel):
     action: str | None = None
 
 
-class GoogleAuthConfig(BaseModel):
-    enabled: bool
-    client_id: str | None = None
-
-
-class GoogleLoginRequest(BaseModel):
-    credential: str = Field(min_length=20, max_length=8192)
-
-
 class EmailVerificationRequest(BaseModel):
     email: EmailStr
 

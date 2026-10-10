@@ -19,17 +19,19 @@ def test_website_root_is_the_shell():
 
 def test_feely_favicon_is_used_by_every_browser_tab():
     favicon = ROOT_DIR / "website" / "assets" / "feely-favicon.png"
-    favicon_reference = (
-        'rel="icon" type="image/png" sizes="64x64" '
-        'href="assets/feely-favicon.png?v=20260902-2"'
-    )
+
 
     assert favicon.is_file()
     assert favicon.stat().st_size > 0
     assert favicon.read_bytes()[25] == 6  # PNG RGBA color type, including transparency.
     for page_name in ("index.html", "admin.html"):
         page = (ROOT_DIR / "website" / page_name).read_text(encoding="utf-8")
-        assert favicon_reference in page
+        icon = re.search(r'<link\b[^>]*rel="icon"[^>]*>', page)
+        assert icon is not None
+        assert re.search(r'href="assets/feely-favicon\.png(?:\?[^" ]*)?"', icon.group())
+        width = int.from_bytes(favicon.read_bytes()[16:20], "big")
+        height = int.from_bytes(favicon.read_bytes()[20:24], "big")
+        assert f'sizes="{width}x{height}"' in icon.group()
 
 
 def test_auth_form_cannot_fall_back_to_credentials_in_query_string():
@@ -73,7 +75,7 @@ def test_new_chat_is_only_listed_after_its_first_saved_message():
     assert "function startNewChat()" in javascript
     assert "state.activeChatId = null;" in javascript
     assert "async function showChat({ startFreshChat = false } = {})" in javascript
-    assert javascript.count("await showChat({ startFreshChat: true });") == 3
+    assert javascript.count("await showChat({ startFreshChat: true });") == 2
     assert 'data-app-source="app.js"' in assembled_chat_html()
     assert "await createChat();" not in javascript
     assert "chat_id: state.activeChatId" in javascript
@@ -115,7 +117,9 @@ def test_my_map_is_visible_but_guarded_by_the_premium_entitlement():
 def test_topic_suggestions_are_not_hidden_by_the_map_paywall():
     javascript = read_frontend_javascript()
 
-    assert "function renderTopic(topic) {\n  state.pendingTopic = topic;" in javascript
+    render_topic = javascript.split("function renderTopic(topic) {", 1)[1].split("function renderMapSuggestion", 1)[0]
+    assert "state.pendingTopic = topic;" in render_topic
+    assert 'topicCard.classList.toggle("hidden", !topic);' in render_topic
     assert "if (hasMyMapAccess()) await loadMap();" in javascript
 
 
@@ -129,7 +133,7 @@ def test_topic_confirmation_can_edit_and_reuse_a_recommended_thread():
     assert 'id="topic-match-badge"' in html
     assert 'id="topic-queue-status"' in html
     assert "function updateTopicRoutePresentation()" in javascript
-    assert 'topicAccept.textContent = "Connect chat"' in javascript
+    assert 'topicAccept.textContent = "Add to topic"' in javascript
     assert "payload.suggestions?.[0]" in javascript
     assert '"The same chat can also belong to other topics."' in javascript
     assert "topic: editedTopic" in javascript

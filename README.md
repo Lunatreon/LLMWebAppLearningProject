@@ -396,20 +396,6 @@ Non-local environments refuse to start unless CAPTCHA is enabled with real
 keys; the backend also rejects Cloudflare test keys in production. Restrict the
 production widget to the website's real hostname in the Cloudflare dashboard.
 
-Google account sign-in is optional. Create a Google OAuth Web Client ID for the
-website origin, then enable it:
-
-```env
-GOOGLE_AUTH_ENABLED=true
-GOOGLE_CLIENT_ID="your-google-web-client-id"
-GOOGLE_ALLOWED_HOSTED_DOMAIN=""
-```
-
-The frontend loads Google Identity Services only when enabled. It sends the
-Google ID token to `POST /api/v1/auth/google`; the backend verifies the token,
-checks the configured client ID, and links the account through Google's stable
-subject ID.
-
 ### Email activation and password reset
 
 The email setup guide is [EMAIL_SETUP.md](EMAIL_SETUP.md). Configure a real
@@ -421,8 +407,8 @@ six-digit email PIN before logging in. PINs expire after 15 minutes by default,
 allow five attempts, and can only be used once. Resending replaces the old PIN.
 Users can reopen **Activate account / enter email PIN** on the login page or
 request a code through Account settings. Already-issued verification links
-remain valid until their original expiry. Google-verified addresses do not need
-another PIN. Existing accounts already marked verified remain verified.
+remain valid until their original expiry. Existing accounts already marked verified
+remain verified.
 
 `PASSWORD_RESET_ENABLED=true` enables **Forgot your password?** emails through
 the same SMTP connection. Links point to `PUBLIC_APP_URL`, expire after 60
@@ -473,10 +459,8 @@ configuration.
 
 - `GET /api/v1/health`
 - `GET /api/v1/auth/captcha/config`
-- `GET /api/v1/auth/google/config`
 - `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
-- `POST /api/v1/auth/google`
 - `POST /api/v1/auth/email-verification/request`
 - `POST /api/v1/auth/email-verification/confirm`
 - `POST /api/v1/auth/password-reset/request`

@@ -78,20 +78,19 @@ def test_unpublished_terms_do_not_record_acceptance(client, monkeypatch):
     assert client.post('/api/v1/terms/accept',headers=h,json={'accepted':True,'version':'v1'}).status_code == 503
 
 
-def test_android_discovery_reuses_verified_google_audience(client, monkeypatch):
+def test_android_discovery_exposes_password_login(client, monkeypatch):
     monkeypatch.setattr(settings,'android_app_enabled',True)
     monkeypatch.setattr(settings,'android_package_name','com.example.feely')
-    monkeypatch.setattr(settings,'google_auth_enabled',True)
-    monkeypatch.setattr(settings,'google_client_id','web-client.apps.googleusercontent.com')
     config = client.get('/api/v1/auth/android/config').json()
-    assert config['google']['server_client_id'] == settings.google_client_id
+    assert 'google' not in config
+    assert 'google' not in config['endpoints']
     assert config['password_login_enabled'] is True
     assert config['package_name'] == 'com.example.feely'
     for path in config['endpoints'].values():
         assert path in client.app.openapi()['paths']
     monkeypatch.setattr(settings,'android_app_enabled',False)
     disabled = client.get('/api/v1/auth/android/config').json()
-    assert disabled['google'] == {'enabled':False,'server_client_id':None}
+    assert disabled['password_login_enabled'] is False
 
 
 def test_published_terms_gate_features_and_revisions(client, monkeypatch, document):

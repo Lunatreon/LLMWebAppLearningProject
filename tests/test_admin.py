@@ -2,7 +2,10 @@ from app.core.config import settings
 from app.core.security import hash_password
 import pytest
 
-from app.services.llm import PromptConfigurationError, read_system_prompt
+from app.services.prompts import (
+    PromptConfigurationError,
+    read_system_prompt,
+)
 
 
 def register_and_login(client, email: str, username: str, password: str = "secure-pass"):

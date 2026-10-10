@@ -36,7 +36,6 @@ class UserRead(BaseModel):
 
 class UserAccountRead(UserRead):
     auth_provider: str = "password"
-    google_connected: bool = False
     has_password: bool = True
     email_verified_at: datetime | None = None
     last_login_at: datetime | None = None

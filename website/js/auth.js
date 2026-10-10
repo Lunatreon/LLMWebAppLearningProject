@@ -83,9 +83,6 @@ function setMode(mode) {
   renderCaptcha().catch((error) => {
     captchaStatus.textContent = error instanceof Error ? error.message : String(error);
   });
-  renderGoogleAuth().catch((error) => {
-    if (authStatus) authStatus.textContent = error instanceof Error ? error.message : String(error);
-  });
 }
 
 async function loadCaptchaConfig() {
@@ -161,71 +158,6 @@ async function renderCaptcha() {
     resetCaptchaWidget();
   }
   captchaStatus.textContent = "";
-}
-
-async function loadGoogleConfig() {
-  try {
-    state.google.config = await api("/auth/google/config");
-  } catch {
-    state.google.config = { enabled: false, client_id: null };
-  }
-}
-
-function loadGoogleScript() {
-  if (window.google?.accounts?.id) return Promise.resolve();
-  if (googleScriptPromise) return googleScriptPromise;
-
-  googleScriptPromise = new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = "https://accounts.google.com/gsi/client";
-    script.async = true;
-    script.defer = true;
-    script.onload = resolve;
-    script.onerror = () => reject(new Error("Could not load Google sign-in."));
-    document.head.append(script);
-  });
-  return googleScriptPromise;
-}
-
-async function renderGoogleAuth() {
-  if (!googleAuthField || !googleButton) return;
-  const enabled = state.google.config.enabled && state.google.config.client_id;
-  googleAuthField.classList.toggle("hidden", !enabled);
-  if (!enabled || state.google.buttonRendered) return;
-
-  await loadGoogleScript();
-  window.google.accounts.id.initialize({
-    client_id: state.google.config.client_id,
-    callback: handleGoogleCredential,
-  });
-  window.google.accounts.id.renderButton(googleButton, {
-    theme: "outline",
-    size: "large",
-    width: googleButton.offsetWidth || 320,
-    text: state.mode === "register" ? "signup_with" : "signin_with",
-  });
-  state.google.buttonRendered = true;
-}
-
-async function handleGoogleCredential(response) {
-  if (!response?.credential) return;
-  if (authStatus) authStatus.textContent = "Signing in with Google...";
-  try {
-    const payload = await api("/auth/google", {
-      method: "POST",
-      body: JSON.stringify({ credential: response.credential }),
-    });
-    state.token = payload.access_token;
-    localStorage.setItem("feely_token", state.token);
-    if (authStatus) authStatus.textContent = "";
-    await showChat({ startFreshChat: true });
-  } catch (error) {
-    authError.textContent = error instanceof Error ? error.message : String(error);
-    if (error.status === 403 && error.message.includes("verify your email")) {
-      openEmailVerification("", "Enter your email and request a PIN to activate your account.");
-    }
-    if (authStatus) authStatus.textContent = "";
-  }
 }
 
 let sessionExpiryTimer = null;

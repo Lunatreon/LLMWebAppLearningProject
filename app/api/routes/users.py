@@ -72,7 +72,6 @@ def account_read(user: User) -> UserAccountRead:
         role=user.role,
         created_at=user.created_at,
         auth_provider=user.auth_provider,
-        google_connected=bool(user.google_sub),
         has_password=bool(user.hashed_password),
         email_verified_at=user.email_verified_at,
         last_login_at=user.last_login_at,
@@ -157,8 +156,7 @@ def change_current_user_password(
         )
 
     current_user.hashed_password = hash_password(payload.new_password)
-    if current_user.auth_provider == "google":
-        current_user.auth_provider = "google,password"
+    current_user.auth_provider = "password"
     db.commit()
     db.refresh(current_user)
     return account_read(current_user)

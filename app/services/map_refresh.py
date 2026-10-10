@@ -5,14 +5,12 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from app.services.llm import (
-    AnthropicBaseClient,
-    OllamaBaseClient,
-    OpenAIBaseClient,
-    get_topic_llm_client,
-    parse_json_response,
-    read_system_prompt,
-)
+from app.services.llm.anthropic import AnthropicBaseClient
+from app.services.llm.factory import get_topic_llm_client
+from app.services.llm.json_response import parse_json_response
+from app.services.llm.ollama import OllamaBaseClient
+from app.services.llm.openai import OpenAIBaseClient
+from app.services.prompts import read_system_prompt
 from app.services.self_authorship import MAP_KEY, TOPIC_CATEGORIES, read_map, write_map
 
 

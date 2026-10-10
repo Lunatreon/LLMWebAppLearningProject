@@ -3,7 +3,6 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from hashlib import sha256
-from urllib.parse import quote
 
 from fastapi import HTTPException, status
 
@@ -44,11 +43,6 @@ def email_verification_is_expired(sent_at: datetime | None) -> bool:
         sent_at = sent_at.replace(tzinfo=timezone.utc)
     expires_at = sent_at + timedelta(hours=settings.email_verification_token_expire_hours)
     return current_timestamp() > expires_at
-
-
-def email_verification_link(token: str) -> str:
-    app_url = settings.public_app_url.rstrip("/")
-    return f"{app_url}/?verify_email_token={quote(token)}"
 
 
 def send_email_verification_message(user: User, token: str) -> None:

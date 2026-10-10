@@ -9,7 +9,7 @@ from app.api.routes import auth as auth_routes
 from app.core.config import settings
 from app.models.billing import BillingSubscription
 from app.models.user import User
-from app.services import llm as llm_service
+from app.services.llm import journal as llm_service
 
 
 def register_and_login(client, email: str, username: str):

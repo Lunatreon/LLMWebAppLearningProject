@@ -18,7 +18,6 @@ def ensure_sqlite_user_columns() -> None:
         "bio": "VARCHAR(500)",
         "avatar_url": "VARCHAR(500)",
         "auth_provider": "VARCHAR(40) NOT NULL DEFAULT 'password'",
-        "google_sub": "VARCHAR(255)",
         "is_email_verified": "BOOLEAN NOT NULL DEFAULT 0",
         "email_verified_at": "DATETIME",
         "email_verification_token_hash": "VARCHAR(128)",
@@ -41,9 +40,6 @@ def ensure_sqlite_user_columns() -> None:
                 connection.exec_driver_sql(
                     f"ALTER TABLE users ADD COLUMN {column_name} {definition}"
                 )
-        connection.exec_driver_sql(
-            "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_google_sub ON users (google_sub)"
-        )
         connection.exec_driver_sql(
             "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email_verification_token_hash "
             "ON users (email_verification_token_hash)"

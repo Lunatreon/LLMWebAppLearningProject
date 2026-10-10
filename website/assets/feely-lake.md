@@ -1,9 +1,8 @@
 # FeelY login landscape
 
 Asset: `website/assets/feely-lake.png` (1536 × 1024).
-Generated with the built-in image generation tool. The original desert photograph
-is retained as `feely-landscape.jpg`. The login layout and dark text overlay are
-unchanged.
+Generated with the built-in image generation tool. The login layout uses a dark
+text overlay for readability.
 
 Final prompt:
 

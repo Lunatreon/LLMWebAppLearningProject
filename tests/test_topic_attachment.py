@@ -1,6 +1,8 @@
 from sqlalchemy import select
 from app.api.routes import llm as llm_routes
-from app.services.llm import ChatLLMResult
+from app.services.llm.types import (
+    ChatLLMResult,
+)
 from app.services.self_authorship import create_topic_space
 
 from app.models.user import ChatSession, JournalEntry, User

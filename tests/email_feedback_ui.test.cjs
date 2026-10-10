@@ -29,6 +29,7 @@ test("registration opens PIN entry without logging in; activation returns to log
     verificationDialog: element(), verificationEmail: element(), verificationPin: element(),
     verificationStatus: element(), verificationResend: element(), authStatus: element(),
     verificationForm: { querySelector() { return element(); } },
+    registrationTermsPayload: async () => ({}),
   });
   const requests = [];
   context.api = async (path, options) => {

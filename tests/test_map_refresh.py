@@ -8,7 +8,9 @@ from app.api.dependencies import get_db
 from app.api.routes import users
 from app.models.user import User, UserProfile
 from app.services import map_refresh
-from app.services.llm import OllamaBaseClient
+from app.services.llm.ollama import (
+    OllamaBaseClient,
+)
 from test_auth_and_llm import grant_premium_access
 
 

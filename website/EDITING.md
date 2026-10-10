@@ -104,7 +104,8 @@ in `assets/feely-lake.md`. The existing dark overlay keeps the white text readab
 
 - `prompts/chat_system.txt`: conversation only. The chat still receives a small read-only selection of confirmed observations from topics linked to the chat.
 - `prompts/topic_system.txt`: background topic and observation proposals. An observation can be suggested without creating a new topic. All map changes still require review.
-- `app/services/llm.py`: model contracts and bounded context; `app/api/routes/llm.py`: scheduling, access checks, suggestion storage and confirmation.
+- `app/services/llm/types.py`: model contracts; `app/services/llm/context.py`: bounded context; `app/services/conversation_summary.py`: extractive chat memory.
+- `app/api/routes/llm.py`: scheduling, access checks, suggestion storage and confirmation. Suggestion cooldown rules live in `app/services/map_suggestions.py`.
 - `website/js/chat.js`: polls for both kinds of suggestion after a reply and displays the Review buttons.
 
 `OLLAMA_TOPIC_MAX_TOKENS` now defaults to 768 to fit topics plus an observation. Restart the backend after changing environment settings. This split reduces the chat output contract; actual response latency depends on the models and hardware.

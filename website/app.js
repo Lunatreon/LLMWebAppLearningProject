@@ -113,10 +113,6 @@ const state = {
     token: "",
     widgetId: null,
   },
-  google: {
-    config: { enabled: false, client_id: null },
-    buttonRendered: false,
-  },
   account: null,
   subscription: null,
   journalEntries: [],
@@ -143,8 +139,6 @@ const websiteInput = document.querySelector("#website");
 const captchaField = document.querySelector("#captcha-field");
 const captchaWidget = document.querySelector("#captcha-widget");
 const captchaStatus = document.querySelector("#captcha-status");
-const googleAuthField = document.querySelector("#google-auth-field");
-const googleButton = document.querySelector("#google-button");
 const logoutButton = document.querySelector("#logout-button");
 const accountButton = document.querySelector("#account-button");
 const newChatButton = document.querySelector("#new-chat-button");
@@ -227,10 +221,6 @@ const journalSidebarAccess = document.querySelector("#journal-sidebar-access");
 const journalSidebarLocked = document.querySelector("#journal-sidebar-locked");
 const journalSuggestions = document.querySelector("#journal-suggestions");
 const journalSuggestionList = document.querySelector("#journal-suggestion-list");
-const practiceDialog = document.querySelector("#practice-dialog");
-const practiceForm = document.querySelector("#practice-form");
-const practiceText = document.querySelector("#practice-text");
-const practiceTopic = document.querySelector("#practice-topic");
 const reflectionDialog = document.querySelector("#reflection-dialog");
 const reflectionForm = document.querySelector("#reflection-form");
 const practiceReflection = document.querySelector("#practice-reflection");
@@ -306,7 +296,6 @@ const TOPIC_POLL_DELAYS = [700, 1800, 4000, 8000];
 
 let lastAuthSubmitAt = 0;
 let turnstileScriptPromise = null;
-let googleScriptPromise = null;
 let billingResultTimer = null;
 let journalSaveTimer = null;
 

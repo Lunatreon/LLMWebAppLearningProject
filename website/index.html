@@ -137,28 +137,6 @@ a:focus-visible {
   font-size: 12px;
 }
 
-.google-auth-field {
-  display: grid;
-  gap: 12px;
-  justify-items: stretch;
-}
-
-.auth-divider {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 10px;
-  color: #8c7d76;
-  font-size: 12px;
-}
-
-.auth-divider::before,
-.auth-divider::after {
-  height: 1px;
-  background: var(--line-light);
-  content: "";
-}
-
 .auth-status {
   min-height: 18px;
   color: #6f625d;
@@ -3080,75 +3058,6 @@ textarea {
   font-weight: 700;
 }
 
-.map-entry-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 20px;
-}
-
-.map-entry {
-  min-width: 0;
-  border-top: 2px solid #d5c8f0;
-  border-radius: 6px;
-  background: #f5f1f8;
-  padding: 12px;
-}
-
-.map-entry[data-category="inherited_script"] { border-color: var(--coral); background: #fbf0ec; }
-.map-entry[data-category="own_perception"] { border-color: var(--orchid); background: #f3eefb; }
-.map-entry[data-category="value"] { border-color: #c5a657; background: #f8f3e8; }
-.map-entry[data-category="body_signal"] { border-color: var(--mint); background: #edf6f3; }
-.map-entry[data-category="practice"] { border-color: #78649d; background: #f0ecf6; }
-.map-entry[data-category="evidence"] { border-color: #c5a657; background: #f8f3e8; }
-
-.map-entry-label {
-  color: #79669f;
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-
-.map-entry p {
-  margin: 7px 0 0;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.practice-status {
-  display: inline-block;
-  margin-top: 9px;
-  color: #736a76;
-  font-size: 10px;
-  text-transform: uppercase;
-}
-
-.practice-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
-}
-
-.practice-controls button {
-  min-height: 30px;
-  border: 1px solid var(--line-light);
-  border-radius: 6px;
-  background: var(--white);
-  color: var(--ink);
-  padding: 0 9px;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.practice-reflection {
-  margin-top: 9px !important;
-  border-left: 2px solid var(--mint);
-  color: #665e67;
-  padding-left: 8px;
-  font-size: 11px !important;
-}
-
 .unassigned-section {
   margin-top: 22px;
   border-top: 1px solid var(--line-light);
@@ -3885,8 +3794,7 @@ textarea {
     max-width: 100%;
   }
 
-  .lens-panel,
-  .map-entry-grid {
+  .lens-panel {
     grid-template-columns: 1fr;
   }
 
@@ -5152,10 +5060,6 @@ html[data-theme="light"] .chat-review-dialog .suggestion-target-field > span { c
     </div>
 
     <form id="auth-form" class="auth-form" method="post">
-      <div id="google-auth-field" class="google-auth-field hidden">
-        <div id="google-button"></div>
-        <div class="auth-divider"><span>or</span></div>
-      </div>
       <label>
         <span>Email</span>
         <input
@@ -5747,23 +5651,6 @@ html[data-theme="light"] .chat-review-dialog .suggestion-target-field > span { c
 </dialog>
 
 
-    <dialog id="practice-dialog" class="app-dialog">
-  <form id="practice-form" method="dialog">
-    <button class="dialog-close" type="button" data-close-dialog="practice-dialog" aria-label="Close">&times;</button>
-    <p class="eyebrow">A repeatable choice</p>
-    <h2>Add a practice</h2>
-    <label>
-      <span>What would you like to try?</span>
-      <textarea id="practice-text" rows="4" required></textarea>
-    </label>
-    <label>
-      <span>Connect it to a topic</span>
-      <select id="practice-topic"></select>
-    </label>
-    <button class="primary-button" type="submit">Save practice</button>
-  </form>
-</dialog>
-
 
     <dialog id="reflection-dialog" class="app-dialog">
   <form id="reflection-form" method="dialog">
@@ -6093,10 +5980,6 @@ const state = {
     token: "",
     widgetId: null,
   },
-  google: {
-    config: { enabled: false, client_id: null },
-    buttonRendered: false,
-  },
   account: null,
   subscription: null,
   journalEntries: [],
@@ -6123,8 +6006,6 @@ const websiteInput = document.querySelector("#website");
 const captchaField = document.querySelector("#captcha-field");
 const captchaWidget = document.querySelector("#captcha-widget");
 const captchaStatus = document.querySelector("#captcha-status");
-const googleAuthField = document.querySelector("#google-auth-field");
-const googleButton = document.querySelector("#google-button");
 const logoutButton = document.querySelector("#logout-button");
 const accountButton = document.querySelector("#account-button");
 const newChatButton = document.querySelector("#new-chat-button");
@@ -6207,10 +6088,6 @@ const journalSidebarAccess = document.querySelector("#journal-sidebar-access");
 const journalSidebarLocked = document.querySelector("#journal-sidebar-locked");
 const journalSuggestions = document.querySelector("#journal-suggestions");
 const journalSuggestionList = document.querySelector("#journal-suggestion-list");
-const practiceDialog = document.querySelector("#practice-dialog");
-const practiceForm = document.querySelector("#practice-form");
-const practiceText = document.querySelector("#practice-text");
-const practiceTopic = document.querySelector("#practice-topic");
 const reflectionDialog = document.querySelector("#reflection-dialog");
 const reflectionForm = document.querySelector("#reflection-form");
 const practiceReflection = document.querySelector("#practice-reflection");
@@ -6286,7 +6163,6 @@ const TOPIC_POLL_DELAYS = [700, 1800, 4000, 8000];
 
 let lastAuthSubmitAt = 0;
 let turnstileScriptPromise = null;
-let googleScriptPromise = null;
 let billingResultTimer = null;
 let journalSaveTimer = null;
 
@@ -7098,9 +6974,6 @@ function setMode(mode) {
   renderCaptcha().catch((error) => {
     captchaStatus.textContent = error instanceof Error ? error.message : String(error);
   });
-  renderGoogleAuth().catch((error) => {
-    if (authStatus) authStatus.textContent = error instanceof Error ? error.message : String(error);
-  });
 }
 
 async function loadCaptchaConfig() {
@@ -7176,71 +7049,6 @@ async function renderCaptcha() {
     resetCaptchaWidget();
   }
   captchaStatus.textContent = "";
-}
-
-async function loadGoogleConfig() {
-  try {
-    state.google.config = await api("/auth/google/config");
-  } catch {
-    state.google.config = { enabled: false, client_id: null };
-  }
-}
-
-function loadGoogleScript() {
-  if (window.google?.accounts?.id) return Promise.resolve();
-  if (googleScriptPromise) return googleScriptPromise;
-
-  googleScriptPromise = new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = "https://accounts.google.com/gsi/client";
-    script.async = true;
-    script.defer = true;
-    script.onload = resolve;
-    script.onerror = () => reject(new Error("Could not load Google sign-in."));
-    document.head.append(script);
-  });
-  return googleScriptPromise;
-}
-
-async function renderGoogleAuth() {
-  if (!googleAuthField || !googleButton) return;
-  const enabled = state.google.config.enabled && state.google.config.client_id;
-  googleAuthField.classList.toggle("hidden", !enabled);
-  if (!enabled || state.google.buttonRendered) return;
-
-  await loadGoogleScript();
-  window.google.accounts.id.initialize({
-    client_id: state.google.config.client_id,
-    callback: handleGoogleCredential,
-  });
-  window.google.accounts.id.renderButton(googleButton, {
-    theme: "outline",
-    size: "large",
-    width: googleButton.offsetWidth || 320,
-    text: state.mode === "register" ? "signup_with" : "signin_with",
-  });
-  state.google.buttonRendered = true;
-}
-
-async function handleGoogleCredential(response) {
-  if (!response?.credential) return;
-  if (authStatus) authStatus.textContent = "Signing in with Google...";
-  try {
-    const payload = await api("/auth/google", {
-      method: "POST",
-      body: JSON.stringify({ credential: response.credential }),
-    });
-    state.token = payload.access_token;
-    localStorage.setItem("feely_token", state.token);
-    if (authStatus) authStatus.textContent = "";
-    await showChat({ startFreshChat: true });
-  } catch (error) {
-    authError.textContent = error instanceof Error ? error.message : String(error);
-    if (error.status === 403 && error.message.includes("verify your email")) {
-      openEmailVerification("", "Enter your email and request a PIN to activate your account.");
-    }
-    if (authStatus) authStatus.textContent = "";
-  }
 }
 
 let sessionExpiryTimer = null;
@@ -8951,61 +8759,6 @@ function renderMapSidebar() {
   });
 }
 
-function createMapEntryElement(entry) {
-  const item = document.createElement("article");
-  item.className = "map-entry";
-  item.dataset.category = entry.category;
-
-  const label = document.createElement("span");
-  label.className = "map-entry-label";
-  label.textContent = MAP_CATEGORY_LABELS[entry.category] || entry.category;
-
-  const text = document.createElement("p");
-  text.textContent = entry.text;
-  item.append(label, text);
-
-  if (entry.category === "practice") {
-    const status = document.createElement("span");
-    status.className = "practice-status";
-    status.textContent = entry.status || "active";
-    item.append(status);
-
-    const controls = document.createElement("div");
-    controls.className = "practice-controls";
-    if (entry.status !== "completed") {
-      const toggle = document.createElement("button");
-      toggle.type = "button";
-      toggle.textContent = entry.status === "paused" ? "Resume" : "Pause";
-      toggle.addEventListener("click", () => {
-        updatePractice(entry.id, entry.status === "paused" ? "active" : "paused").catch(
-          renderInlineError,
-        );
-      });
-
-      const complete = document.createElement("button");
-      complete.type = "button";
-      complete.textContent = "Reflect and complete";
-      complete.addEventListener("click", () => openReflectionDialog(entry.id));
-      controls.append(toggle, complete);
-    } else {
-      const reactivate = document.createElement("button");
-      reactivate.type = "button";
-      reactivate.textContent = "Practice again";
-      reactivate.addEventListener("click", () => updatePractice(entry.id, "active").catch(renderInlineError));
-      controls.append(reactivate);
-    }
-    item.append(controls);
-
-    if (entry.reflection) {
-      const reflection = document.createElement("p");
-      reflection.className = "practice-reflection";
-      reflection.textContent = entry.reflection;
-      item.append(reflection);
-    }
-  }
-  return item;
-}
-
 const TOPIC_CATEGORIES = {
   person: { label: "Person", plural: "People" },
   trait: { label: "Trait", plural: "Traits" },
@@ -10458,23 +10211,6 @@ function renderMap() {
   mapContent.append(layout);
 }
 
-function openPracticeDialog() {
-  practiceText.value = "";
-  practiceTopic.replaceChildren();
-  const unassigned = document.createElement("option");
-  unassigned.value = "";
-  unassigned.textContent = OVERALL_MAP_TITLE;
-  practiceTopic.append(unassigned);
-  (state.map?.topic_spaces || []).forEach((space) => {
-    const option = document.createElement("option");
-    option.value = space.id;
-    option.textContent = space.title;
-    practiceTopic.append(option);
-  });
-  practiceDialog.showModal();
-  practiceText.focus();
-}
-
 function openReflectionDialog(entryId) {
   state.completingPracticeId = entryId;
   practiceReflection.value = "";
@@ -10485,25 +10221,6 @@ function openReflectionDialog(entryId) {
   }
   reflectionDialog.showModal();
   practiceReflection.focus();
-}
-
-async function createPractice(event) {
-  event.preventDefault();
-  const text = practiceText.value.trim();
-  if (!text) return;
-  const response = await api("/users/me/map/entries", {
-    method: "POST",
-    headers: authHeaders(),
-    body: JSON.stringify({
-      category: "practice",
-      text,
-      topic_space_id: practiceTopic.value || null,
-      source_chat_id: state.activeChatId,
-    }),
-  });
-  state.map = response.map;
-  renderMap();
-  practiceDialog.close();
 }
 
 async function updatePractice(entryId, status, reflection = null) {
@@ -10759,7 +10476,6 @@ mapSidebarAddTopic.addEventListener("click", () => {
   closeSidebar();
   openMapTopicPopup();
 });
-practiceForm.addEventListener("submit", (event) => createPractice(event).catch(renderInlineError));
 reflectionForm.addEventListener("submit", (event) =>
   completePractice(event).catch(renderInlineError),
 );
@@ -10902,7 +10618,7 @@ authForm.addEventListener("submit", async (event) => {
 async function init() {
   const savedToken = state.token;
   scheduleSessionExpiry();
-  await Promise.all([loadCaptchaConfig(), loadGoogleConfig(), loadEmailConfig(), loadFeedbackConfig()]);
+  await Promise.all([loadCaptchaConfig(), loadEmailConfig(), loadFeedbackConfig()]);
   const requestedMode = new URLSearchParams(window.location.search).get("mode");
   setMode(!savedToken && requestedMode === "register" ? "register" : "login");
   renderUser();

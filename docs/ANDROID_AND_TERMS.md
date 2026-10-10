@@ -37,24 +37,6 @@ or an appropriate browser-based Turnstile flow before shipping Android signup.
 Email verification uses the same six-digit PIN endpoints. Password reset links
 currently open `PUBLIC_APP_URL` in the website; Android app links are not configured.
 
-For Google sign-in:
-
-1. Register an Android OAuth client in the Google project using the actual package
-   name and signing SHA-1 certificate (including Play App Signing for release).
-2. Use the project's **Web OAuth client ID** as `GOOGLE_CLIENT_ID` in the backend.
-   Set `GOOGLE_AUTH_ENABLED=true` after configuring the project.
-3. With Android Credential Manager, pass the returned `google.server_client_id`
-   to `GetGoogleIdOption.Builder().setServerClientId(...)`.
-4. Send the resulting Google **ID token** as `{"credential":"..."}` to
-   `/api/v1/auth/google`. The backend verifies it with the configured audience and
-   returns the regular FeelY access token. Do not send a Google access token or
-   simply trust an email address supplied by the app.
-
-No Android-specific JWT or weaker login endpoint is needed. Real Google login
-still requires your package/signing configuration and a device test.
-See [Google's Android guide](https://codelabs.developers.google.com/sign-in-with-google-android)
-and [backend verification](https://developers.google.com/identity/sign-in/android/backend-auth).
-
 ## AGB acceptance
 
 Edit and publish the document using [AGB_SETUP.md](AGB_SETUP.md). The website now

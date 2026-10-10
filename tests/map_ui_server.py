@@ -27,7 +27,7 @@ from app.models.user import ChatSession, JournalEntry, User, UserProfile
 
 
 def create_fixture_app():
-    for setting in ("basic_auth_enabled", "captcha_enabled", "google_auth_enabled",
+    for setting in ("basic_auth_enabled", "captcha_enabled",
                     "email_verification_enabled", "email_verification_required", "stripe_enabled",
                     "rate_limit_enabled", "ollama_prewarm"):
         setattr(settings, setting, False)

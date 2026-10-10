@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
@@ -15,26 +15,27 @@ from app.api.dependencies import get_current_user, get_db
 from app.core.config import settings
 from app.core.rate_limit import enforce_rate_limit
 from app.db.session import SessionLocal
-from app.models.user import ChatSession, DailyLLMUsage, User, UserProfile
+from app.models.user import ChatSession, User, UserProfile
 from app.schemas.llm import (
     ChatCreateRequest,
-    ReplyReactionRequest,
     ChatRead,
     LLMRequest,
     LLMResponse,
     MapSuggestionConfirmationRequest,
     MapSuggestionConfirmationResponse,
+    ReplyReactionRequest,
     TopicConfirmationRequest,
     TopicConfirmationResponse,
     TopicSuggestionResponse,
 )
 from app.services.billing import has_premium_feature_access
-from app.services.llm import (
-    TextChunkCallback,
-    best_existing_topic_match,
-    get_chat_llm_client,
-    get_topic_llm_client,
-    update_conversation_summary,
+from app.services.chat_usage import release_daily_message, reserve_daily_message
+from app.services.conversation_summary import update_conversation_summary
+from app.services.llm.factory import get_chat_llm_client, get_topic_llm_client
+from app.services.llm.types import TextChunkCallback
+from app.services.map_suggestions import (
+    remember_map_suggestion_event,
+    should_surface_map_suggestion,
 )
 from app.services.pattern_recognition import ChatAnalyser
 from app.services.self_authorship import (
@@ -48,6 +49,7 @@ from app.services.self_authorship import (
     record_conversation_memory,
     update_topic_space,
 )
+from app.services.topic_matching import best_existing_topic_match
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -60,117 +62,10 @@ GENERIC_TOPIC_TITLES = {
     "mood",
     "feelings",
 }
-MAP_SUGGESTION_REPEAT_COOLDOWN_TURNS = 5
-MAP_SUGGESTION_HISTORY_KEYS = (
-    "last_surface_map_suggestion",
-    "last_saved_map_suggestion",
-    "last_dismissed_map_suggestion",
-)
-MAP_SUGGESTION_TOKEN_PATTERN = re.compile(r"\w+", re.UNICODE)
 
 
 def current_timestamp() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def _message_date(value: Any) -> str | None:
-    if not isinstance(value, str) or not value:
-        return None
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc).date().isoformat()
-
-
-def saved_user_messages_for_date(db: Session, user_id: int, usage_date: str) -> int:
-    """Count saved messages when initializing quotas for existing installations."""
-
-    chat_infos = db.execute(
-        select(ChatSession.info).where(ChatSession.user_id == user_id)
-    ).scalars()
-    return sum(
-        1
-        for info in chat_infos
-        for message in (info or {}).get("messages", [])
-        if message.get("role") == "user"
-        and _message_date(message.get("created_at")) == usage_date
-    )
-
-
-def reserve_daily_message(
-    db: Session,
-    *,
-    user_id: int,
-    daily_limit: int,
-    premium_access: bool,
-) -> str | None:
-    """Reserve one persistent daily message slot and return its UTC date."""
-
-    if not settings.rate_limit_enabled or daily_limit <= 0:
-        return None
-
-    now = datetime.now(timezone.utc)
-    usage_date = now.date().isoformat()
-    usage = db.execute(
-        select(DailyLLMUsage).where(
-            DailyLLMUsage.user_id == user_id,
-            DailyLLMUsage.usage_date == usage_date,
-        )
-    ).scalar_one_or_none()
-    saved_count = saved_user_messages_for_date(db, user_id, usage_date)
-    used_messages = max(usage.message_count if usage else 0, saved_count)
-    if used_messages >= daily_limit:
-        tomorrow = datetime.combine(
-            now.date() + timedelta(days=1),
-            datetime.min.time(),
-            tzinfo=timezone.utc,
-        )
-        retry_after = max(1, int((tomorrow - now).total_seconds()))
-        detail = (
-            "Daily message limit reached. Please try again tomorrow."
-            if premium_access
-            else (
-                f"You have reached today's {daily_limit} free messages. "
-                "Subscribe to Premium for more messages, or continue tomorrow."
-            )
-        )
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=detail,
-            headers={"Retry-After": str(retry_after)},
-        )
-
-    if usage is None:
-        usage = DailyLLMUsage(
-            user_id=user_id,
-            usage_date=usage_date,
-            message_count=used_messages + 1,
-        )
-        db.add(usage)
-    else:
-        usage.message_count = used_messages + 1
-    db.commit()
-    return usage_date
-
-
-def release_daily_message(db: Session, *, user_id: int, usage_date: str | None) -> None:
-    """Return a reserved slot when no assistant response was saved."""
-
-    if usage_date is None:
-        return
-    db.rollback()
-    usage = db.execute(
-        select(DailyLLMUsage).where(
-            DailyLLMUsage.user_id == user_id,
-            DailyLLMUsage.usage_date == usage_date,
-        )
-    ).scalar_one_or_none()
-    if usage is not None and usage.message_count > 0:
-        usage.message_count -= 1
-        db.commit()
 
 
 def is_generic_topic(topic: Any) -> bool:
@@ -213,111 +108,6 @@ def set_pending_topic_queue(
     chat_info.pop("pending_topics", None)
     chat_info.pop("pending_topic", None)
     chat_info["analysis_status"] = "idle"
-
-
-def normalized_map_suggestion_text(value: Any) -> str:
-    return " ".join(str(value or "").strip().lower().split())
-
-
-def map_suggestion_tokens(value: Any) -> set[str]:
-    return {
-        token
-        for token in MAP_SUGGESTION_TOKEN_PATTERN.findall(normalized_map_suggestion_text(value))
-        if len(token) > 3
-    }
-
-
-def map_suggestion_signature(suggestion: dict[str, Any] | None) -> str:
-    if not isinstance(suggestion, dict):
-        return ""
-    category = str(suggestion.get("category") or "").strip().lower()
-    text = normalized_map_suggestion_text(suggestion.get("text"))
-    return f"{category}:{text[:220]}"
-
-
-def map_suggestions_are_similar(
-    first: dict[str, Any] | None,
-    second: dict[str, Any] | None,
-) -> bool:
-    if not isinstance(first, dict) or not isinstance(second, dict):
-        return False
-    if str(first.get("category") or "").lower() != str(second.get("category") or "").lower():
-        return False
-
-    first_text = normalized_map_suggestion_text(first.get("text"))
-    second_text = normalized_map_suggestion_text(second.get("text"))
-    if not first_text or not second_text:
-        return False
-    if first_text == second_text or first_text in second_text or second_text in first_text:
-        return True
-
-    first_tokens = map_suggestion_tokens(first_text)
-    second_tokens = map_suggestion_tokens(second_text)
-    if min(len(first_tokens), len(second_tokens)) < 3:
-        return False
-    overlap = len(first_tokens & second_tokens) / min(len(first_tokens), len(second_tokens))
-    return overlap >= 0.7
-
-
-def map_suggestion_marker(
-    suggestion: dict[str, Any],
-    *,
-    message_count: int,
-) -> dict[str, Any]:
-    return {
-        "category": suggestion.get("category"),
-        "text": normalized_map_suggestion_text(suggestion.get("text"))[:220],
-        "signature": map_suggestion_signature(suggestion),
-        "message_count": message_count,
-        "created_at": current_timestamp(),
-    }
-
-
-def map_suggestion_from_marker(marker: Any) -> dict[str, Any] | None:
-    if not isinstance(marker, dict):
-        return None
-    return {
-        "category": marker.get("category"),
-        "text": marker.get("text"),
-    }
-
-
-def should_surface_map_suggestion(
-    chat_info: dict[str, Any],
-    user_input: str,
-    suggestion: dict[str, Any] | None,
-) -> bool:
-    if not suggestion:
-        return False
-
-    next_message_count = int((chat_info or {}).get("message_count", 0)) + 1
-    for key in MAP_SUGGESTION_HISTORY_KEYS:
-        marker = (chat_info or {}).get(key)
-        if not isinstance(marker, dict):
-            continue
-        marker_count = int(marker.get("message_count", 0))
-        if next_message_count - marker_count >= MAP_SUGGESTION_REPEAT_COOLDOWN_TURNS:
-            continue
-        if map_suggestions_are_similar(suggestion, map_suggestion_from_marker(marker)):
-            return False
-
-    # The map model assesses whether the content supports a useful proposal.
-    # Short, explicit insights should not require extra turns to become visible.
-    return bool(user_input.strip() and str(suggestion.get("text") or "").strip())
-
-
-
-def remember_map_suggestion_event(
-    chat_info: dict[str, Any],
-    key: str,
-    suggestion: dict[str, Any],
-) -> dict[str, Any]:
-    next_info = dict(chat_info)
-    next_info[key] = map_suggestion_marker(
-        suggestion,
-        message_count=int(next_info.get("message_count", 0)),
-    )
-    return next_info
 
 
 def default_chat_info(user_id: int, chat_id: str, title: str | None = None) -> dict[str, Any]:

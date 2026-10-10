@@ -68,14 +68,11 @@ class Settings(BaseSettings):
     turnstile_action: str = "register"
     turnstile_verify_url: str = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
     turnstile_timeout_seconds: float = 5.0
-    google_auth_enabled: bool = False
-    google_client_id: str | None = None
     android_app_enabled: bool = False
     android_package_name: str = ""
     terms_version: str = Field(default="", max_length=80)
     terms_document_url: str = ""
     terms_document_sha256: str = Field(default="", pattern=r"^$|^[a-f0-9]{64}$")
-    google_allowed_hosted_domain: str | None = None
     email_verification_enabled: bool = False
     email_verification_required: bool = False
     email_verification_token_expire_hours: int = 24
@@ -174,8 +171,6 @@ class Settings(BaseSettings):
             raise RuntimeError("Cloudflare Turnstile test keys cannot be used in production.")
         if not self.turnstile_action.strip():
             raise RuntimeError("TURNSTILE_ACTION must be configured.")
-        if self.google_auth_enabled and not self.google_client_id:
-            raise RuntimeError("GOOGLE_CLIENT_ID must be configured when Google auth is enabled.")
         if self.email_verification_required and not self.email_verification_enabled:
             raise RuntimeError(
                 "EMAIL_VERIFICATION_ENABLED must be true when email verification is required."
