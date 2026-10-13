@@ -11,7 +11,7 @@ from sqlalchemy import select
 from app.api.dependencies import get_db
 from app.api.routes import auth as auth_routes
 from app.api.routes import llm as llm_routes
-from app.services.map_suggestions import (
+from app.llm.tasks.map_suggestions import (
     remember_map_suggestion_event,
     should_surface_map_suggestion,
 )
@@ -21,52 +21,52 @@ from app.core.rate_limit import rate_limiter
 from app.main import create_app
 from app.models.billing import BillingSubscription
 from app.models.user import User
-from app.services.conversation_summary import (
+from app.llm.tasks.conversation_summary import (
     update_conversation_summary,
 )
-from app.services.llm.providers.anthropic import (
+from app.llm.providers.anthropic import (
     AnthropicChatLLMClient,
     AnthropicTopicLLMClient,
 )
-from app.services.llm.context import (
+from app.llm.context import (
     focused_chat_context,
     focused_profile_context,
     topic_chat_context,
 )
-from app.services.llm.providers.factory import (
+from app.llm.providers.factory import (
     get_chat_llm_client,
     get_topic_llm_client,
 )
-from app.services.llm.json_response import (
+from app.llm.json_response import (
     parse_json_response,
 )
-from app.services.llm.providers.local import (
+from app.llm.providers.local import (
     LocalChatLLMClient,
     LocalTopicLLMClient,
     is_scam_abuse_request,
 )
-from app.services.llm.providers.ollama import (
+from app.llm.providers.ollama import (
     OllamaChatLLMClient,
     OllamaTopicLLMClient,
 )
-from app.services.llm.responses import (
+from app.llm.responses import (
     chat_result_from_payload,
     topic_result_from_payload,
 )
-from app.services.llm.streaming import (
+from app.llm.streaming import (
     assistant_message_prefix_from_json,
 )
-from app.services.llm.types import (
+from app.llm.types import (
     TopicLLMResult,
 )
-from app.services.prompts import (
+from app.llm.prompts import (
     read_system_prompt,
 )
-from app.services.topic_matching import (
+from app.llm.tasks.topic_matching import (
     best_existing_topic_match,
     infer_local_freeform_topic,
 )
-from app.services.pattern_recognition import ChatAnalyser
+from app.llm.tasks.pattern_recognition import ChatAnalyser
 from app.services.self_authorship import merge_llm_profile
 
 
@@ -125,8 +125,9 @@ def test_local_website_cors_preflight(client):
             "Access-Control-Request-Headers": "content-type",
         },
     )
-    assert local_file_response.status_code == 200
-    assert local_file_response.headers["access-control-allow-origin"] == "null"
+    # The existing CORS policy rejects opaque/file origins.
+    assert local_file_response.status_code == 400
+    assert "access-control-allow-origin" not in local_file_response.headers
 
     for public_origin in (
         "https://feel-y.com",
@@ -324,9 +325,7 @@ def test_llm_stream_acknowledges_work_and_returns_result(client):
     assert response.headers["content-type"].startswith("application/x-ndjson")
     events = [json.loads(line) for line in response.text.splitlines()]
     assert events[0] == {"type": "status", "message": "Connected to FeelY"}
-    streamed_text = "".join(
-        event["text"] for event in events if event["type"] == "text_delta"
-    )
+    streamed_text = "".join(event["text"] for event in events if event["type"] == "text_delta")
     assert events[-1]["type"] == "result"
     assert streamed_text == events[-1]["data"]["assistant_message"]
 
@@ -417,7 +416,11 @@ def test_free_chat_daily_allowance_prompts_for_premium(monkeypatch, client):
 def test_free_user_can_receive_and_accept_topic_without_map_access(client):
     client.post(
         "/api/v1/auth/register",
-        json={"email": "free-topic@example.com", "username": "free_topic", "password": "secret-pass"},
+        json={
+            "email": "free-topic@example.com",
+            "username": "free_topic",
+            "password": "secret-pass",
+        },
     )
     token = client.post(
         "/api/v1/auth/login",
@@ -607,10 +610,13 @@ def test_user_can_edit_account_change_password_and_delete_account(client):
     assert password_response.status_code == 200
     assert password_response.json()["has_password"] is True
 
-    assert client.post(
-        "/api/v1/auth/login",
-        json={"email_or_username": "new_account_user", "password": "new-secret-123"},
-    ).status_code == 200
+    assert (
+        client.post(
+            "/api/v1/auth/login",
+            json={"email_or_username": "new_account_user", "password": "new-secret-123"},
+        ).status_code
+        == 200
+    )
 
     delete_response = client.request(
         "DELETE",
@@ -624,9 +630,10 @@ def test_user_can_edit_account_change_password_and_delete_account(client):
 
 def test_google_sign_in_endpoints_are_removed(client):
     assert client.get("/api/v1/auth/google/config").status_code == 404
-    assert client.post(
-        "/api/v1/auth/google", json={"credential": "unused-credential"}
-    ).status_code == 404
+    assert (
+        client.post("/api/v1/auth/google", json={"credential": "unused-credential"}).status_code
+        == 404
+    )
 
 
 def test_email_verification_request_and_confirm(client, monkeypatch):
@@ -743,7 +750,9 @@ def test_user_can_confirm_map_suggestion_and_complete_practice(client):
     assert message_response.status_code == 200
     body = message_response.json()
     assert body["map_suggestion"] is None
-    analysis_response = client.get(f"/api/v1/llm/chats/{body['chat_id']}/topic-suggestion", headers=headers)
+    analysis_response = client.get(
+        f"/api/v1/llm/chats/{body['chat_id']}/topic-suggestion", headers=headers
+    )
     suggestion = analysis_response.json()["map_suggestion"]
     assert suggestion["category"] == "inherited_script"
     assert analysis_response.json()["analysis_status"] in {"idle", "topic_ready"}
@@ -1191,9 +1200,10 @@ def test_one_chat_can_be_connected_to_multiple_detected_topics(monkeypatch, clie
         topic["id"] for topic in map_data["topic_spaces"] if chat_id in topic["chat_ids"]
     ]
     assert set(connected_topics) == {relationships["id"], work["id"]}
-    assert client.get(f"/api/v1/llm/chats/{chat_id}", headers=headers).json()[
-        "title"
-    ] == suggestions[0]["topic"]
+    assert (
+        client.get(f"/api/v1/llm/chats/{chat_id}", headers=headers).json()["title"]
+        == suggestions[0]["topic"]
+    )
 
 
 def test_topic_payload_can_return_additional_distinct_topics():
@@ -1370,9 +1380,18 @@ def test_relationship_and_self_struggle_text_gets_semantic_topic_hint():
 def test_healthcare_chat_gets_general_topic_hint():
     chat_info = {
         "messages": [
-            {"role": "user", "content": "I am applying for bottom surgery and the waiting feels heavy."},
-            {"role": "user", "content": "Testosterone changes and dysphoria have affected intimacy."},
-            {"role": "user", "content": "I want gender-affirming care and closeness with my girlfriend."},
+            {
+                "role": "user",
+                "content": "I am applying for bottom surgery and the waiting feels heavy.",
+            },
+            {
+                "role": "user",
+                "content": "Testosterone changes and dysphoria have affected intimacy.",
+            },
+            {
+                "role": "user",
+                "content": "I want gender-affirming care and closeness with my girlfriend.",
+            },
         ]
     }
 
@@ -1588,10 +1607,13 @@ def test_user_can_delete_only_their_own_chat(client):
         headers=owner_headers,
     )
     assert delete_response.status_code == 204
-    assert client.get(
-        f"/api/v1/llm/chats/{chat['chat_id']}",
-        headers=owner_headers,
-    ).status_code == 404
+    assert (
+        client.get(
+            f"/api/v1/llm/chats/{chat['chat_id']}",
+            headers=owner_headers,
+        ).status_code
+        == 404
+    )
 
 
 def test_local_chat_responses_focus_on_each_new_message():
@@ -1728,9 +1750,7 @@ class RecordingAnthropicMessages:
     async def create(self, **kwargs):
         self.requests.append(kwargs)
         return SimpleNamespace(
-            content=[
-                SimpleNamespace(type="text", text=json.dumps(self.response_payload))
-            ]
+            content=[SimpleNamespace(type="text", text=json.dumps(self.response_payload))]
         )
 
 
@@ -1907,9 +1927,7 @@ def test_ollama_clients_use_local_chat_api_and_structured_json_contract():
     assert chat_body["format"]["required"] == ["assistant_message"]
     assert chat_body["options"]["num_ctx"] == 8192
     assert chat_body["options"]["num_gpu"] == 0
-    assert json.loads(chat_body["messages"][1]["content"])["chat_id"] == (
-        "chat-local"
-    )
+    assert json.loads(chat_body["messages"][1]["content"])["chat_id"] == ("chat-local")
 
     topic_client = make_ollama_client(
         OllamaTopicLLMClient,
@@ -1947,7 +1965,7 @@ def test_partial_json_extractor_only_returns_decoded_assistant_text():
     partial = '{"profile":{},"assistant_message":"Line one\\nEmoji: \\ud83d'
     complete = partial + '\\ude42","map_suggestion":null}'
     nested_decoy = (
-        '{"profile":{"note":"\\\"assistant_message\\\":\\\"private\\\""},'
+        '{"profile":{"note":"\\"assistant_message\\":\\"private\\""},'
         '"assistant_message":"Visible reply'
     )
 
@@ -1966,8 +1984,7 @@ def test_ollama_chat_streams_only_assistant_text_from_structured_response():
         }
     )
     generated_chunks = [
-        generated_json[index : index + 7]
-        for index in range(0, len(generated_json), 7)
+        generated_json[index : index + 7] for index in range(0, len(generated_json), 7)
     ]
     chat_client = make_ollama_client(OllamaChatLLMClient, {})
     chat_client.client = RecordingOllamaStreamHttpClient(generated_chunks)
@@ -2004,8 +2021,7 @@ def test_ollama_chat_keeps_streamed_message_when_final_json_is_invalid():
         }
     )[:-1]
     generated_chunks = [
-        generated_json[index : index + 7]
-        for index in range(0, len(generated_json), 7)
+        generated_json[index : index + 7] for index in range(0, len(generated_json), 7)
     ]
     chat_client = make_ollama_client(OllamaChatLLMClient, {})
     chat_client.client = RecordingOllamaStreamHttpClient(generated_chunks)
@@ -2035,25 +2051,40 @@ def test_ollama_does_not_save_unfinished_streamed_reply(tail):
     from fastapi import HTTPException
 
     chat_client = make_ollama_client(OllamaChatLLMClient, {})
-    chat_client.client = RecordingOllamaStreamHttpClient([
-        '{"assistant_message": "How much of this is ' + tail,
-    ])
+    chat_client.client = RecordingOllamaStreamHttpClient(
+        [
+            '{"assistant_message": "How much of this is ' + tail,
+        ]
+    )
 
     async def collect_text(chunk):
         pass
 
     with pytest.raises(HTTPException, match="cut short"):
-        asyncio.run(chat_client.request_json_stream(
-            system_prompt="Return JSON", user_payload="I feel overwhelmed.",
-            response_schema={}, temperature=0.5,
-            on_text_chunk=collect_text,
-        ))
+        asyncio.run(
+            chat_client.request_json_stream(
+                system_prompt="Return JSON",
+                user_payload="I feel overwhelmed.",
+                response_schema={},
+                temperature=0.5,
+                on_text_chunk=collect_text,
+            )
+        )
 
 
 @pytest.mark.parametrize("offer_topic", [False, True])
 def test_background_map_observations_do_not_require_a_new_topic(client, monkeypatch, offer_topic):
-    client.post("/api/v1/auth/register", json={"email": "background@example.com", "username": "background", "password": "secret-pass"})
-    token = client.post("/api/v1/auth/login", json={"email_or_username": "background", "password": "secret-pass"}).json()["access_token"]
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "background@example.com",
+            "username": "background",
+            "password": "secret-pass",
+        },
+    )
+    token = client.post(
+        "/api/v1/auth/login", json={"email_or_username": "background", "password": "secret-pass"}
+    ).json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
     grant_premium_access(client, "background@example.com")
     calls = []
@@ -2062,21 +2093,41 @@ def test_background_map_observations_do_not_require_a_new_topic(client, monkeypa
         async def create_topic(self, **kwargs):
             calls.append(kwargs)
             return TopicLLMResult(
-                topic="Family" if offer_topic else "", description="Your family expectations." if offer_topic else "",
-                map_suggestion={"category": "value", "text": "I value making my own choices.", "reason": "You described this clearly."},
+                topic="Family" if offer_topic else "",
+                description="Your family expectations." if offer_topic else "",
+                map_suggestion={
+                    "category": "value",
+                    "text": "I value making my own choices.",
+                    "reason": "You described this clearly.",
+                },
             )
 
     monkeypatch.setattr(llm_routes, "get_topic_llm_client", MapClient)
-    monkeypatch.setattr(llm_routes, "ChatAnalyser", lambda: SimpleNamespace(analyse=lambda _: SimpleNamespace(
-        should_create_topic=False, matched_patterns=[], topic_hint=None, confidence=0.8)))
-    first = client.post("/api/v1/llm/message", headers=headers, json={"context": "Making my own choices matters to me."}).json()
+    monkeypatch.setattr(
+        llm_routes,
+        "ChatAnalyser",
+        lambda: SimpleNamespace(
+            analyse=lambda _: SimpleNamespace(
+                should_create_topic=False, matched_patterns=[], topic_hint=None, confidence=0.8
+            )
+        ),
+    )
+    first = client.post(
+        "/api/v1/llm/message",
+        headers=headers,
+        json={"context": "Making my own choices matters to me."},
+    ).json()
     assert first["map_suggestion"] is None
     assert calls[0]["chat_info"]["suggest_topics"] is True
     poll_url = f"/api/v1/llm/chats/{first['chat_id']}/topic-suggestion"
     result = client.get(poll_url, headers=headers).json()
     assert result["map_suggestion"]["category"] == "value"
     assert bool(result["suggestions"]) == offer_topic
-    client.post("/api/v1/llm/message", headers=headers, json={"chat_id": first["chat_id"], "context": "I want to reflect on that."})
+    client.post(
+        "/api/v1/llm/message",
+        headers=headers,
+        json={"chat_id": first["chat_id"], "context": "I want to reflect on that."},
+    )
     after = client.get(poll_url, headers=headers).json()
     assert len(calls) == 2  # Continue analysis even with a pending topic.
     assert after["suggestions"] == result["suggestions"]
@@ -2119,268 +2170,419 @@ def test_topic_provider_can_avoid_a_second_external_model_call(monkeypatch):
 
 
 def test_json_parser_accepts_markdown_fenced_provider_output():
-    assert parse_json_response('```json\n{"topic": "Autonomy"}\n```') == {
-        "topic": "Autonomy"
-    }
+    assert parse_json_response('```json\n{"topic": "Autonomy"}\n```') == {"topic": "Autonomy"}
 
 
 def test_topic_categories_and_connections_survive_suggestion_confirmation(monkeypatch, client):
-    client.post('/api/v1/auth/register', json={
-        'email': 'typed-map@example.com', 'username': 'typed_map', 'password': 'super-secret',
-    })
-    token = client.post('/api/v1/auth/login', json={
-        'email_or_username': 'typed_map', 'password': 'super-secret',
-    }).json()['access_token']
-    headers = {'Authorization': f'Bearer {token}'}
-    grant_premium_access(client, 'typed-map@example.com')
-    healing = client.post('/api/v1/users/me/map/topics', headers=headers, json={
-        'title': 'Healing', 'category': 'experience', 'description': 'You are finding your footing again.',
-    }).json()['topic']
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "typed-map@example.com",
+            "username": "typed_map",
+            "password": "super-secret",
+        },
+    )
+    token = client.post(
+        "/api/v1/auth/login",
+        json={
+            "email_or_username": "typed_map",
+            "password": "super-secret",
+        },
+    ).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    grant_premium_access(client, "typed-map@example.com")
+    healing = client.post(
+        "/api/v1/users/me/map/topics",
+        headers=headers,
+        json={
+            "title": "Healing",
+            "category": "experience",
+            "description": "You are finding your footing again.",
+        },
+    ).json()["topic"]
 
     class PersonalTopicClient:
         async def create_topic(self, **kwargs):
-            assert kwargs['available_topics'][0]['category'] == 'experience'
+            assert kwargs["available_topics"][0]["category"] == "experience"
             return TopicLLMResult(
-                topic='Girlfriend', category='person',
-                description='You feel supported by her as you find your footing again.',
-                related_topic_ids=[healing['id'], 'invented-id'],
-                additional_topics=[TopicLLMResult(
-                    topic='Steady', category='trait', description='You describe staying calm when things change.',
-                )],
+                topic="Girlfriend",
+                category="person",
+                description="You feel supported by her as you find your footing again.",
+                related_topic_ids=[healing["id"], "invented-id"],
+                additional_topics=[
+                    TopicLLMResult(
+                        topic="Steady",
+                        category="trait",
+                        description="You describe staying calm when things change.",
+                    )
+                ],
             )
 
-    monkeypatch.setattr(llm_routes, 'get_topic_llm_client', PersonalTopicClient)
-    monkeypatch.setattr(llm_routes, 'ChatAnalyser', lambda: SimpleNamespace(
-        analyse=lambda _: SimpleNamespace(should_create_topic=True, matched_patterns=['support'],
-                                         topic_hint='support', confidence=0.9),
-    ))
-    message = client.post('/api/v1/llm/message', headers=headers, json={
-        'context': 'My girlfriend supports me as I heal. I also stay calm when things change.',
-    }).json()
-    chat_id = message['chat_id']
-    suggestions = client.get(f'/api/v1/llm/chats/{chat_id}/topic-suggestion', headers=headers).json()['suggestions']
-    assert [s['category'] for s in suggestions] == ['person', 'trait']
-    assert suggestions[0]['related_topic_ids'] == [healing['id']]
+    monkeypatch.setattr(llm_routes, "get_topic_llm_client", PersonalTopicClient)
+    monkeypatch.setattr(
+        llm_routes,
+        "ChatAnalyser",
+        lambda: SimpleNamespace(
+            analyse=lambda _: SimpleNamespace(
+                should_create_topic=True,
+                matched_patterns=["support"],
+                topic_hint="support",
+                confidence=0.9,
+            ),
+        ),
+    )
+    message = client.post(
+        "/api/v1/llm/message",
+        headers=headers,
+        json={
+            "context": "My girlfriend supports me as I heal. I also stay calm when things change.",
+        },
+    ).json()
+    chat_id = message["chat_id"]
+    suggestions = client.get(
+        f"/api/v1/llm/chats/{chat_id}/topic-suggestion", headers=headers
+    ).json()["suggestions"]
+    assert [s["category"] for s in suggestions] == ["person", "trait"]
+    assert suggestions[0]["related_topic_ids"] == [healing["id"]]
     for suggestion in suggestions:
-        response = client.post('/api/v1/llm/topics/confirm', headers=headers, json={
-            'chat_id': chat_id, 'topic': suggestion['topic'], 'description': suggestion['description'],
-            'category': suggestion['category'], 'related_topic_ids': suggestion['related_topic_ids'],
-        })
+        response = client.post(
+            "/api/v1/llm/topics/confirm",
+            headers=headers,
+            json={
+                "chat_id": chat_id,
+                "topic": suggestion["topic"],
+                "description": suggestion["description"],
+                "category": suggestion["category"],
+                "related_topic_ids": suggestion["related_topic_ids"],
+            },
+        )
         assert response.status_code == 200
-    saved = client.get('/api/v1/users/me/map', headers=headers).json()['topic_spaces']
-    by_title = {topic['title']: topic for topic in saved}
-    girlfriend = by_title['Girlfriend']
-    assert girlfriend['category'] == 'person'
-    assert by_title['Steady']['category'] == 'trait'
-    assert girlfriend['related_topic_ids'] == [healing['id']]
-    assert by_title['Healing']['related_topic_ids'] == [girlfriend['id']]
+    saved = client.get("/api/v1/users/me/map", headers=headers).json()["topic_spaces"]
+    by_title = {topic["title"]: topic for topic in saved}
+    girlfriend = by_title["Girlfriend"]
+    assert girlfriend["category"] == "person"
+    assert by_title["Steady"]["category"] == "trait"
+    assert girlfriend["related_topic_ids"] == [healing["id"]]
+    assert by_title["Healing"]["related_topic_ids"] == [girlfriend["id"]]
     # Editing a description must preserve its type and links.
     url = f"/api/v1/users/me/map/topics/{girlfriend['id']}"
-    edited = client.patch(url, headers=headers, json={'description': 'You feel heard by her.'}).json()['topic']
-    assert edited['category'] == 'person'
-    assert edited['related_topic_ids'] == [healing['id']]
-    assert client.patch(url, headers=headers, json={'category': 'invalid'}).status_code == 422
-    assert client.patch(url, headers=headers, json={'category': 'other'}).json()['topic']['category'] == 'other'
+    edited = client.patch(
+        url, headers=headers, json={"description": "You feel heard by her."}
+    ).json()["topic"]
+    assert edited["category"] == "person"
+    assert edited["related_topic_ids"] == [healing["id"]]
+    assert client.patch(url, headers=headers, json={"category": "invalid"}).status_code == 422
+    assert (
+        client.patch(url, headers=headers, json={"category": "other"}).json()["topic"]["category"]
+        == "other"
+    )
     # Choosing a type while connecting to an existing topic must save it too.
-    connected = client.post('/api/v1/llm/topics/confirm', headers=headers, json={
-        'chat_id': chat_id, 'topic': 'A detected aspect', 'description': 'A suggestion.',
-        'existing_topic_space_id': girlfriend['id'], 'category': 'person',
-    })
+    connected = client.post(
+        "/api/v1/llm/topics/confirm",
+        headers=headers,
+        json={
+            "chat_id": chat_id,
+            "topic": "A detected aspect",
+            "description": "A suggestion.",
+            "existing_topic_space_id": girlfriend["id"],
+            "category": "person",
+        },
+    )
     assert connected.status_code == 200
-    saved = client.get('/api/v1/users/me/map', headers=headers).json()['topic_spaces']
-    restored = next(topic for topic in saved if topic['id'] == girlfriend['id'])
-    assert restored['category'] == 'person'
-    assert restored['title'] == 'Girlfriend'
-    assert restored['description'] == 'You feel heard by her.'
-    assert restored['related_topic_ids'] == [healing['id']]
+    saved = client.get("/api/v1/users/me/map", headers=headers).json()["topic_spaces"]
+    restored = next(topic for topic in saved if topic["id"] == girlfriend["id"])
+    assert restored["category"] == "person"
+    assert restored["title"] == "Girlfriend"
+    assert restored["description"] == "You feel heard by her."
+    assert restored["related_topic_ids"] == [healing["id"]]
     # Older clients that omit category must not reset a saved type to Other.
-    connected = client.post('/api/v1/llm/topics/confirm', headers=headers, json={
-        'chat_id': chat_id, 'topic': 'Another aspect', 'description': 'A suggestion.',
-        'existing_topic_space_id': girlfriend['id'], 'related_topic_ids': [healing['id']],
-    })
+    connected = client.post(
+        "/api/v1/llm/topics/confirm",
+        headers=headers,
+        json={
+            "chat_id": chat_id,
+            "topic": "Another aspect",
+            "description": "A suggestion.",
+            "existing_topic_space_id": girlfriend["id"],
+            "related_topic_ids": [healing["id"]],
+        },
+    )
     assert connected.status_code == 200
-    saved = client.get('/api/v1/users/me/map', headers=headers).json()['topic_spaces']
-    assert next(topic for topic in saved if topic['id'] == girlfriend['id'])['category'] == 'person'
+    saved = client.get("/api/v1/users/me/map", headers=headers).json()["topic_spaces"]
+    assert next(topic for topic in saved if topic["id"] == girlfriend["id"])["category"] == "person"
     # A bad connection cannot partially save a new topic.
-    invalid = client.post('/api/v1/llm/topics/confirm', headers=headers, json={
-        'chat_id': chat_id, 'topic': 'New topic', 'description': 'A description.',
-        'related_topic_ids': ['missing'],
-    })
+    invalid = client.post(
+        "/api/v1/llm/topics/confirm",
+        headers=headers,
+        json={
+            "chat_id": chat_id,
+            "topic": "New topic",
+            "description": "A description.",
+            "related_topic_ids": ["missing"],
+        },
+    )
     assert invalid.status_code == 400
-    assert len(client.get('/api/v1/users/me/map', headers=headers).json()['topic_spaces']) == 3
+    assert len(client.get("/api/v1/users/me/map", headers=headers).json()["topic_spaces"]) == 3
 
 
 def test_typed_topic_parsing_is_backward_compatible_and_matching_keeps_people_distinct():
-    from app.services.llm.responses import (
+    from app.llm.responses import (
         TOPIC_RESPONSE_SCHEMA,
     )
     from app.services.self_authorship import read_map
 
-    legacy = topic_result_from_payload({'topic': 'Music', 'description': 'You enjoy playing.'})
-    assert legacy.category == 'other'
+    legacy = topic_result_from_payload({"topic": "Music", "description": "You enjoy playing."})
+    assert legacy.category == "other"
     assert legacy.related_topic_ids == []
-    parsed = topic_result_from_payload({
-        'topic': 'Dad', 'description': 'You feel close.', 'category': 'person',
-        'related_topic_ids': ['one', 'one', None, 12],
-        'additional_topics': [{'topic': 'Curious', 'description': 'You enjoy exploring.', 'category': 'trait'}],
-    })
-    assert parsed.category == 'person'
-    assert parsed.related_topic_ids == ['one']
-    assert parsed.additional_topics[0].category == 'trait'
-    assert topic_result_from_payload({'topic': 'Music', 'description': 'You enjoy it.', 'category': []}).category == 'other'
-    profile = {'self_authorship_map': {'topic_spaces': [{'id': 'legacy', 'title': 'Music'}]}}
-    assert read_map(profile)['topic_spaces'][0]['category'] == 'other'
-    assert 'category' not in profile['self_authorship_map']['topic_spaces'][0]
-    assert best_existing_topic_match('Slow to trust', 'Trust comes slowly.', [{
-        'id': 'person', 'title': 'Slow to trust', 'description': 'Trust comes slowly.', 'category': 'person',
-    }], category='trait') is None
-    for schema in [TOPIC_RESPONSE_SCHEMA, TOPIC_RESPONSE_SCHEMA['properties']['additional_topics']['items']]:
-        assert len(schema['required']) == len(set(schema['required']))
-        assert set(schema['required']) == set(schema['properties'])
+    parsed = topic_result_from_payload(
+        {
+            "topic": "Dad",
+            "description": "You feel close.",
+            "category": "person",
+            "related_topic_ids": ["one", "one", None, 12],
+            "additional_topics": [
+                {"topic": "Curious", "description": "You enjoy exploring.", "category": "trait"}
+            ],
+        }
+    )
+    assert parsed.category == "person"
+    assert parsed.related_topic_ids == ["one"]
+    assert parsed.additional_topics[0].category == "trait"
+    assert (
+        topic_result_from_payload(
+            {"topic": "Music", "description": "You enjoy it.", "category": []}
+        ).category
+        == "other"
+    )
+    profile = {"self_authorship_map": {"topic_spaces": [{"id": "legacy", "title": "Music"}]}}
+    assert read_map(profile)["topic_spaces"][0]["category"] == "other"
+    assert "category" not in profile["self_authorship_map"]["topic_spaces"][0]
+    assert (
+        best_existing_topic_match(
+            "Slow to trust",
+            "Trust comes slowly.",
+            [
+                {
+                    "id": "person",
+                    "title": "Slow to trust",
+                    "description": "Trust comes slowly.",
+                    "category": "person",
+                }
+            ],
+            category="trait",
+        )
+        is None
+    )
+    for schema in [
+        TOPIC_RESPONSE_SCHEMA,
+        TOPIC_RESPONSE_SCHEMA["properties"]["additional_topics"]["items"],
+    ]:
+        assert len(schema["required"]) == len(set(schema["required"]))
+        assert set(schema["required"]) == set(schema["properties"])
 
-@pytest.mark.parametrize('recover', [True, False])
+
+@pytest.mark.parametrize("recover", [True, False])
 def test_topic_model_retries_malformed_json_once_with_more_room(monkeypatch, recover):
     from fastapi import HTTPException
+
     budgets = []
+
     async def request(self, **kwargs):
         budgets.append(self.max_tokens)
         if len(budgets) == 1 or not recover:
-            raise HTTPException(502, 'LLM returned invalid JSON')
-        return {'topic': 'Pressure', 'description': 'You feel pressure to finish.', 'map_suggestion': None}
-    monkeypatch.setattr(OllamaTopicLLMClient, 'request_json', request)
+            raise HTTPException(502, "LLM returned invalid JSON")
+        return {
+            "topic": "Pressure",
+            "description": "You feel pressure to finish.",
+            "map_suggestion": None,
+        }
+
+    monkeypatch.setattr(OllamaTopicLLMClient, "request_json", request)
     model = make_ollama_client(OllamaTopicLLMClient, {})
     model.max_tokens = 768
     if recover:
-        result = asyncio.run(model.create_topic({'messages': []}, []))
-        assert result.topic == 'Pressure'
+        result = asyncio.run(model.create_topic({"messages": []}, []))
+        assert result.topic == "Pressure"
     else:
         with pytest.raises(HTTPException):
-            asyncio.run(model.create_topic({'messages': []}, []))
+            asyncio.run(model.create_topic({"messages": []}, []))
     assert budgets == [768, 1536]
     assert model.max_tokens == 768
 
 
 def test_failed_map_analysis_can_be_retried_without_resending_chat(client, monkeypatch):
     from fastapi import HTTPException
-    client.post('/api/v1/auth/register', json={'email':'retrymap@example.com','username':'retrymap','password':'secret-pass'})
-    token = client.post('/api/v1/auth/login', json={'email_or_username':'retrymap','password':'secret-pass'}).json()['access_token']
-    headers = {'Authorization':f'Bearer {token}'}
+
+    client.post(
+        "/api/v1/auth/register",
+        json={"email": "retrymap@example.com", "username": "retrymap", "password": "secret-pass"},
+    )
+    token = client.post(
+        "/api/v1/auth/login", json={"email_or_username": "retrymap", "password": "secret-pass"}
+    ).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
     class Broken:
         async def create_topic(self, **kwargs):
-            raise HTTPException(502, 'LLM returned invalid JSON')
+            raise HTTPException(502, "LLM returned invalid JSON")
+
     class Working:
         async def create_topic(self, **kwargs):
-            return TopicLLMResult(topic='Pressure', description='You feel pressure to finish your work.')
-    monkeypatch.setattr(llm_routes,'get_topic_llm_client',Broken)
-    result = client.post('/api/v1/llm/message',headers=headers,json={'context':'I feel pressure to finish my work.'}).json()
-    url = f"/api/v1/llm/chats/{result['chat_id']}/topic-suggestion"
-    assert client.get(url,headers=headers).json()['analysis_status'] == 'error'
-    monkeypatch.setattr(llm_routes,'get_topic_llm_client',Working)
-    assert client.post(url+'/retry',headers=headers).status_code == 202
-    suggestion = client.get(url,headers=headers).json()
-    assert suggestion['analysis_status'] == 'topic_ready'
-    assert suggestion['suggestion']['topic'] == 'Pressure'
-    assert client.post(url+'/retry').status_code == 401
+            return TopicLLMResult(
+                topic="Pressure", description="You feel pressure to finish your work."
+            )
 
-@pytest.mark.parametrize('streaming', [True, False])
-@pytest.mark.parametrize('recover', [True, False])
-def test_chat_recovers_once_without_joining_partial_and_replacement(monkeypatch, streaming, recover):
+    monkeypatch.setattr(llm_routes, "get_topic_llm_client", Broken)
+    result = client.post(
+        "/api/v1/llm/message",
+        headers=headers,
+        json={"context": "I feel pressure to finish my work."},
+    ).json()
+    url = f"/api/v1/llm/chats/{result['chat_id']}/topic-suggestion"
+    assert client.get(url, headers=headers).json()["analysis_status"] == "error"
+    monkeypatch.setattr(llm_routes, "get_topic_llm_client", Working)
+    assert client.post(url + "/retry", headers=headers).status_code == 202
+    suggestion = client.get(url, headers=headers).json()
+    assert suggestion["analysis_status"] == "topic_ready"
+    assert suggestion["suggestion"]["topic"] == "Pressure"
+    assert client.post(url + "/retry").status_code == 401
+
+
+@pytest.mark.parametrize("streaming", [True, False])
+@pytest.mark.parametrize("recover", [True, False])
+def test_chat_recovers_once_without_joining_partial_and_replacement(
+    monkeypatch, streaming, recover
+):
     from fastapi import HTTPException
+
     model = make_ollama_client(OllamaChatLLMClient, {})
     model.max_tokens = 1536
     attempts = []
     visible = []
+
     async def collect(chunk):
         visible.append(chunk)
+
     async def stream(self, **kwargs):
         attempts.append(self.max_tokens)
-        await kwargs['on_text_chunk']('An unfinished answer that')
-        raise HTTPException(502, 'The reply was cut short before it finished. Please try again.')
+        await kwargs["on_text_chunk"]("An unfinished answer that")
+        raise HTTPException(502, "The reply was cut short before it finished. Please try again.")
+
     async def request(self, **kwargs):
         attempts.append(self.max_tokens)
         if len(attempts) == 1 or not recover:
-            raise HTTPException(502, 'LLM returned invalid JSON')
-        assert 'I feel pressure.' in kwargs['user_payload']
-        assert 'unfinished answer' not in kwargs['user_payload']
-        return {'assistant_message': 'You feel pressure to finish. What matters most to you now?'}
-    monkeypatch.setattr(OllamaChatLLMClient, 'request_json_stream', stream)
-    monkeypatch.setattr(OllamaChatLLMClient, 'request_json', request)
+            raise HTTPException(502, "LLM returned invalid JSON")
+        assert "I feel pressure." in kwargs["user_payload"]
+        assert "unfinished answer" not in kwargs["user_payload"]
+        return {"assistant_message": "You feel pressure to finish. What matters most to you now?"}
+
+    monkeypatch.setattr(OllamaChatLLMClient, "request_json_stream", stream)
+    monkeypatch.setattr(OllamaChatLLMClient, "request_json", request)
+
     async def run():
-        return await model.respond('I feel pressure.', {}, {}, 'recovery-test', on_text_chunk=collect if streaming else None)
+        return await model.respond(
+            "I feel pressure.",
+            {},
+            {},
+            "recovery-test",
+            on_text_chunk=collect if streaming else None,
+        )
+
     if recover:
         result = asyncio.run(run())
-        assert result.assistant_message.startswith('You feel pressure')
+        assert result.assistant_message.startswith("You feel pressure")
     else:
         with pytest.raises(HTTPException):
             asyncio.run(run())
     assert attempts == [1536, 3072]
     assert model.max_tokens == 1536
-    assert visible == (['An unfinished answer that'] if streaming else [])
+    assert visible == (["An unfinished answer that"] if streaming else [])
 
 
 def test_chat_does_not_retry_connection_failures(monkeypatch):
     from fastapi import HTTPException
+
     model = make_ollama_client(OllamaChatLLMClient, {})
     calls = []
+
     async def request(self, **kwargs):
         calls.append(1)
-        raise HTTPException(503, 'Could not connect to Ollama')
-    monkeypatch.setattr(OllamaChatLLMClient, 'request_json', request)
+        raise HTTPException(503, "Could not connect to Ollama")
+
+    monkeypatch.setattr(OllamaChatLLMClient, "request_json", request)
     with pytest.raises(HTTPException):
-        asyncio.run(model.respond('Hello', {}, {}, 'offline'))
+        asyncio.run(model.respond("Hello", {}, {}, "offline"))
     assert len(calls) == 1
 
 
 def test_complete_streamed_reply_with_literal_newlines_is_not_called_truncated():
     model = make_ollama_client(OllamaChatLLMClient, {})
-    model.client = RecordingOllamaStreamHttpClient([
-        '{"assistant_message":"You feel pressure.\n\nWhat would help?"}',
-    ])
+    model.client = RecordingOllamaStreamHttpClient(
+        [
+            '{"assistant_message":"You feel pressure.\n\nWhat would help?"}',
+        ]
+    )
     visible = []
+
     async def collect(chunk):
         visible.append(chunk)
-    result = asyncio.run(model.respond('Pressure', {}, {}, 'newline-test', on_text_chunk=collect))
-    assert result.assistant_message == 'You feel pressure.\n\nWhat would help?'
-    assert ''.join(visible) == result.assistant_message
+
+    result = asyncio.run(model.respond("Pressure", {}, {}, "newline-test", on_text_chunk=collect))
+    assert result.assistant_message == "You feel pressure.\n\nWhat would help?"
+    assert "".join(visible) == result.assistant_message
 
 
 def test_chat_plain_text_recovery_does_not_require_json():
     model = make_ollama_client(OllamaChatLLMClient, {})
     calls = []
+
     class Response:
         def raise_for_status(self):
             pass
+
         def json(self):
             if len(calls) == 1:
-                return {'message': {'content': '{"assistant_message":"unfinished'}}
-            return {'message': {'content': 'It sounds like the deadline is weighing on you.\n\nWhat feels most urgent?'}, 'done_reason': 'stop'}
+                return {"message": {"content": '{"assistant_message":"unfinished'}}
+            return {
+                "message": {
+                    "content": "It sounds like the deadline is weighing on you.\n\nWhat feels most urgent?"
+                },
+                "done_reason": "stop",
+            }
+
     class Client:
         async def post(self, path, json):
             calls.append(json)
             return Response()
+
     model.client = Client()
-    result = asyncio.run(model.respond('I feel pressure.', {}, {}, 'plain-recovery'))
-    assert result.assistant_message.endswith('What feels most urgent?')
+    result = asyncio.run(model.respond("I feel pressure.", {}, {}, "plain-recovery"))
+    assert result.assistant_message.endswith("What feels most urgent?")
     assert len(calls) == 2
-    assert 'format' in calls[0]
-    assert 'format' not in calls[1]
-    assert calls[1]['think'] is False
+    assert "format" in calls[0]
+    assert "format" not in calls[1]
+    assert calls[1]["think"] is False
     assert result.profile == {}
     assert result.map_suggestion is None
 
 
-@pytest.mark.parametrize('content,reason', [('', 'stop'), ('An unfinished thought', 'length')])
+@pytest.mark.parametrize("content,reason", [("", "stop"), ("An unfinished thought", "length")])
 def test_plain_text_recovery_rejects_empty_or_token_limited_reply(content, reason):
     from fastapi import HTTPException
+
     model = make_ollama_client(OllamaChatLLMClient, {})
+
     class Response:
         def raise_for_status(self):
             pass
+
         def json(self):
-            return {'message': {'content': content}, 'done_reason': reason}
+            return {"message": {"content": content}, "done_reason": reason}
+
     class Client:
         async def post(self, *args, **kwargs):
             return Response()
+
     model.client = Client()
     with pytest.raises(HTTPException):
-        asyncio.run(model.request_json('Reply briefly', 'Hello', None, 0.2))
+        asyncio.run(model.request_json("Reply briefly", "Hello", None, 0.2))

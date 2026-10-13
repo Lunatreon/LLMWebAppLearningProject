@@ -4,15 +4,15 @@ from email.utils import formatdate, make_msgid, parseaddr
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_admin, get_db
 from app.core.config import settings
-from app.core.mail import send_mail
+from app.integrations.email import send_mail
 from app.core.rate_limit import enforce_rate_limit
 from app.models.mail_message import MailMessage
+from app.schemas.webmail import Compose
 from app.services.webmail import parse_mail, sync_state
 
 
@@ -32,7 +32,10 @@ def find(db, message_id):
 
 
 def summary(row):
-    return {k: getattr(row, k) for k in ("id", "folder", "sender", "recipient", "subject", "is_read", "created_at")}
+    return {
+        k: getattr(row, k)
+        for k in ("id", "folder", "sender", "recipient", "subject", "is_read", "created_at")
+    }
 
 
 @router.get("/status")
@@ -41,8 +44,11 @@ def status():
 
 
 @router.get("/messages")
-def listing(folder: Literal["inbox", "sent", "pending", "uncertain", "trash"] = "inbox",
-            before: int | None = Query(None, gt=0), db: Session = Depends(get_db)):
+def listing(
+    folder: Literal["inbox", "sent", "pending", "uncertain", "trash"] = "inbox",
+    before: int | None = Query(None, gt=0),
+    db: Session = Depends(get_db),
+):
     query = select(MailMessage).where(MailMessage.folder == folder)
     if before:
         query = query.where(MailMessage.id < before)
@@ -55,16 +61,27 @@ def detail(message_id: int, db: Session = Depends(get_db)):
     msg, _ = parse_mail(row.raw)
     row.is_read = True
     db.commit()
-    return {**summary(row), "body": row.body,
-            "reply_to": parseaddr(str(msg.get("Reply-To") or msg.get("From") or ""))[1],
-            "attachments": [{"index": i, "name": p.get_filename() or "attachment"}
-                            for i, p in enumerate(msg.iter_attachments())]}
+    return {
+        **summary(row),
+        "body": row.body,
+        "reply_to": parseaddr(str(msg.get("Reply-To") or msg.get("From") or ""))[1],
+        "attachments": [
+            {"index": i, "name": p.get_filename() or "attachment"}
+            for i, p in enumerate(msg.iter_attachments())
+        ],
+    }
 
 
 @router.get("/messages/{message_id}/raw")
 def raw_message(message_id: int, db: Session = Depends(get_db)):
-    return Response(find(db, message_id).raw, media_type="application/octet-stream",
-                    headers={"Content-Disposition": 'attachment; filename="message.eml"', "Cache-Control": "no-store"})
+    return Response(
+        find(db, message_id).raw,
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": 'attachment; filename="message.eml"',
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @router.get("/messages/{message_id}/attachments/{index}")
@@ -76,8 +93,14 @@ def attachment(message_id: int, index: int, db: Session = Depends(get_db)):
     data = parts[index].get_payload(decode=True)
     if data is None:
         data = parts[index].as_bytes()
-    return Response(data, media_type="application/octet-stream",
-                    headers={"Content-Disposition": 'attachment; filename="attachment.bin"', "Cache-Control": "no-store"})
+    return Response(
+        data,
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": 'attachment; filename="attachment.bin"',
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @router.post("/messages/{message_id}/trash")
@@ -86,20 +109,6 @@ def trash(message_id: int, db: Session = Depends(get_db)):
     row.folder = "trash"
     db.commit()
     return {"ok": True}
-
-
-class Compose(BaseModel):
-    to: EmailStr
-    subject: str = Field(max_length=300)
-    body: str = Field(min_length=1, max_length=30000)
-    reply_to_id: int | None = None
-
-    @field_validator("subject")
-    @classmethod
-    def no_header_injection(cls, value):
-        if "\r" in value or "\n" in value:
-            raise ValueError("Subject must be one line")
-        return value
 
 
 @router.post("/send")
@@ -118,9 +127,16 @@ def send(payload: Compose, admin: str = Depends(get_current_admin), db: Session 
             message["In-Reply-To"] = msg_id
             message["References"] = msg_id
     message.set_content(payload.body)
-    row = MailMessage(delivery_key=str(uuid.uuid4()), folder="pending", sender=settings.webmail_address,
-                      recipient=str(payload.to), subject=payload.subject, body=payload.body,
-                      raw=message.as_bytes(), is_read=True)
+    row = MailMessage(
+        delivery_key=str(uuid.uuid4()),
+        folder="pending",
+        sender=settings.webmail_address,
+        recipient=str(payload.to),
+        subject=payload.subject,
+        body=payload.body,
+        raw=message.as_bytes(),
+        is_read=True,
+    )
     db.add(row)
     db.commit()
     try:
@@ -128,7 +144,10 @@ def send(payload: Compose, admin: str = Depends(get_current_admin), db: Session 
     except Exception:
         row.folder = "uncertain"
         db.commit()
-        raise HTTPException(502, "Sending was not confirmed. Your message is saved in Unconfirmed; check delivery before resending.") from None
+        raise HTTPException(
+            502,
+            "Sending was not confirmed. Your message is saved in Unconfirmed; check delivery before resending.",
+        ) from None
     row.folder = "sent"
     db.commit()
     return {"id": row.id, "detail": "Accepted by the outgoing mail server."}

@@ -93,9 +93,7 @@ def validated_portal_return_url(requested_url: str | None = None) -> str:
         *settings.cors_origins,
     ]
     trusted_origins = {
-        origin
-        for value in trusted_values
-        if (origin := _url_origin(value)) is not None
+        origin for value in trusted_values if (origin := _url_origin(value)) is not None
     }
     if candidate_origin not in trusted_origins:
         raise InvalidBillingReturnUrlError("The Stripe return URL is not trusted.")
@@ -139,9 +137,7 @@ def available_plans() -> list[str]:
 
 
 def get_subscription(db: Session, user: User) -> BillingSubscription | None:
-    return db.scalar(
-        select(BillingSubscription).where(BillingSubscription.user_id == user.id)
-    )
+    return db.scalar(select(BillingSubscription).where(BillingSubscription.user_id == user.id))
 
 
 def normalized_status(value: str | None) -> SubscriptionStatus:
@@ -199,17 +195,9 @@ def normalize_subscription(
     if premium:
         monthly_price_id = _configured(settings.stripe_price_monthly)
         yearly_price_id = _configured(settings.stripe_price_yearly)
-        if (
-            subscription
-            and monthly_price_id
-            and subscription.stripe_price_id == monthly_price_id
-        ):
+        if subscription and monthly_price_id and subscription.stripe_price_id == monthly_price_id:
             plan = "monthly"
-        elif (
-            subscription
-            and yearly_price_id
-            and subscription.stripe_price_id == yearly_price_id
-        ):
+        elif subscription and yearly_price_id and subscription.stripe_price_id == yearly_price_id:
             plan = "yearly"
         else:
             plan = "premium"
@@ -232,9 +220,7 @@ def normalize_subscription(
         "billing_available": bool(configured_plans),
         "available_plans": configured_plans,
         "management_available": bool(
-            settings.stripe_portal_configured
-            and subscription
-            and subscription.stripe_customer_id
+            settings.stripe_portal_configured and subscription and subscription.stripe_customer_id
         ),
         "can_resume": bool(
             settings.stripe_enabled
@@ -315,9 +301,7 @@ def sync_checkout_session(
 
     stripe_subscription_id = _stripe_id(_value(checkout_session, "subscription"))
     if not stripe_subscription_id:
-        raise StripeWebhookProcessingError(
-            "Stripe Checkout has not created a subscription yet."
-        )
+        raise StripeWebhookProcessingError("Stripe Checkout has not created a subscription yet.")
 
     subscription = _sync_subscription_from_stripe(
         db,
@@ -342,9 +326,7 @@ def create_customer_portal_session(
     if not settings.stripe_portal_configured:
         raise BillingNotConfiguredError("Stripe billing is not configured.")
     if subscription is None or not subscription.stripe_customer_id:
-        raise BillingAccountUnavailableError(
-            "No Stripe customer is associated with this account."
-        )
+        raise BillingAccountUnavailableError("No Stripe customer is associated with this account.")
 
     return_url = validated_portal_return_url(requested_return_url)
 
@@ -511,9 +493,7 @@ def _find_or_create_subscription(
     resolved_user_id = user_id or _metadata_user_id(stripe_object)
     if subscription is None and resolved_user_id is not None:
         subscription = db.scalar(
-            select(BillingSubscription).where(
-                BillingSubscription.user_id == resolved_user_id
-            )
+            select(BillingSubscription).where(BillingSubscription.user_id == resolved_user_id)
         )
     if subscription is not None:
         return subscription
@@ -545,9 +525,7 @@ def _apply_subscription_object(
 
     items = _nested(stripe_subscription, "items", "data") or []
     first_item = items[0] if items else None
-    price_id = _stripe_id(_value(first_item, "price")) or _stripe_id(
-        _value(first_item, "plan")
-    )
+    price_id = _stripe_id(_value(first_item, "price")) or _stripe_id(_value(first_item, "plan"))
     if price_id:
         subscription.stripe_price_id = price_id
 
@@ -685,9 +663,7 @@ def process_stripe_webhook(
     except IntegrityError:
         db.rollback()
         duplicate = db.scalar(
-            select(ProcessedStripeEvent).where(
-                ProcessedStripeEvent.stripe_event_id == event_id
-            )
+            select(ProcessedStripeEvent).where(ProcessedStripeEvent.stripe_event_id == event_id)
         )
         if duplicate is not None:
             return False

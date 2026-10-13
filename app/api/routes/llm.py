@@ -30,14 +30,14 @@ from app.schemas.llm import (
 )
 from app.services.billing import has_premium_feature_access
 from app.services.chat_usage import release_daily_message, reserve_daily_message
-from app.services.conversation_summary import update_conversation_summary
-from app.services.llm.providers.factory import get_chat_llm_client, get_topic_llm_client
-from app.services.llm.types import TextChunkCallback
-from app.services.map_suggestions import (
+from app.llm.tasks.conversation_summary import update_conversation_summary
+from app.llm.providers.factory import get_chat_llm_client, get_topic_llm_client
+from app.llm.types import TextChunkCallback
+from app.llm.tasks.map_suggestions import (
     remember_map_suggestion_event,
     should_surface_map_suggestion,
 )
-from app.services.pattern_recognition import ChatAnalyser
+from app.llm.tasks.pattern_recognition import ChatAnalyser
 from app.services.self_authorship import (
     add_map_entry,
     create_or_link_topic_space,
@@ -49,7 +49,7 @@ from app.services.self_authorship import (
     record_conversation_memory,
     update_topic_space,
 )
-from app.services.topic_matching import best_existing_topic_match
+from app.llm.tasks.topic_matching import best_existing_topic_match
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -258,10 +258,10 @@ async def analyse_chat_for_topic(
         replaced_generic_topic = False
         raw_pending_topic = info.get("pending_topic")
         raw_pending_topics = info.get("pending_topics")
-        if not queued_topics and ((
-            isinstance(raw_pending_topic, dict)
-            and raw_pending_topic.get("status") == "pending"
-        ) or isinstance(raw_pending_topics, list)):
+        if not queued_topics and (
+            (isinstance(raw_pending_topic, dict) and raw_pending_topic.get("status") == "pending")
+            or isinstance(raw_pending_topics, list)
+        ):
             set_pending_topic_queue(info, [])
             replaced_generic_topic = True
 
@@ -296,13 +296,19 @@ async def analyse_chat_for_topic(
                 "category": space.get("category", "other"),
                 "description": space.get("description", ""),
                 "parent_topic_id": space.get("parent_topic_id"),
-                "observations": [{"category": entry.get("category"), "text": str(entry.get("text") or "")[:240]} for entry in space.get("entries", [])[-5:]],
+                "observations": [
+                    {"category": entry.get("category"), "text": str(entry.get("text") or "")[:240]}
+                    for entry in space.get("entries", [])[-5:]
+                ],
             }
             for space in visible_map.get("topic_spaces", [])[:40]
         ]
         topic_result = await get_topic_llm_client().create_topic(
-            chat_info={**info, "suggest_topics": not queued_topics,
-                       "suggest_observations": premium_access and not info.get("pending_map_suggestion")},
+            chat_info={
+                **info,
+                "suggest_topics": not queued_topics,
+                "suggest_observations": premium_access and not info.get("pending_map_suggestion"),
+            },
             matched_patterns=analysis.matched_patterns,
             topic_hint=analysis.topic_hint,
             available_topics=available_topics,
@@ -314,17 +320,41 @@ async def analyse_chat_for_topic(
             return
         info["analysed_message_count"] = message_count
         queued_topics = pending_topic_queue(info)
-        if premium_access and topic_result.map_suggestion and not info.get("pending_map_suggestion"):
-            newest_input = next((str(m.get("content") or "") for m in reversed(info.get("messages", [])) if m.get("role") == "user"), "")
+        if (
+            premium_access
+            and topic_result.map_suggestion
+            and not info.get("pending_map_suggestion")
+        ):
+            newest_input = next(
+                (
+                    str(m.get("content") or "")
+                    for m in reversed(info.get("messages", []))
+                    if m.get("role") == "user"
+                ),
+                "",
+            )
             suggestion = dict(topic_result.map_suggestion)
-            target = next((space for space in visible_map.get("topic_spaces", []) if space.get("id") == topic_result.existing_topic_id), None)
+            target = next(
+                (
+                    space
+                    for space in visible_map.get("topic_spaces", [])
+                    if space.get("id") == topic_result.existing_topic_id
+                ),
+                None,
+            )
             if target is None:
                 target = find_topic_space_for_chat(profile.data if profile else {}, chat_id)
-            suggestion.update(source_chat_id=chat_id, topic_space_id=target.get("id") if target else None, topic_title=target.get("title") if target else None)
+            suggestion.update(
+                source_chat_id=chat_id,
+                topic_space_id=target.get("id") if target else None,
+                topic_title=target.get("title") if target else None,
+            )
             policy_info = {**info, "message_count": message_count - 1}
             if should_surface_map_suggestion(policy_info, newest_input, suggestion):
                 info["pending_map_suggestion"] = suggestion
-                info = remember_map_suggestion_event(info, "last_surface_map_suggestion", suggestion)
+                info = remember_map_suggestion_event(
+                    info, "last_surface_map_suggestion", suggestion
+                )
         if queued_topics:
             info["analysis_status"] = "topic_ready" if queued_topics else "idle"
             chat_session.info = info
@@ -332,9 +362,7 @@ async def analyse_chat_for_topic(
             return
         available_topic_ids = {topic.get("id") for topic in available_topics}
         accepted_topic_names = {
-            normalized_topic(topic)
-            for topic in info.get("accepted_topic_names", [])
-            if topic
+            normalized_topic(topic) for topic in info.get("accepted_topic_names", []) if topic
         }
         pending_topics: list[dict[str, Any]] = []
         seen_targets: set[tuple[str, str]] = set()
@@ -388,7 +416,8 @@ async def analyse_chat_for_topic(
                     "description": result.description,
                     "category": result.category,
                     "related_topic_ids": [
-                        topic_id for topic_id in result.related_topic_ids
+                        topic_id
+                        for topic_id in result.related_topic_ids
                         if topic_id in available_topic_ids and topic_id != result.existing_topic_id
                     ],
                     "confidence": analysis.confidence,
@@ -411,9 +440,8 @@ async def analyse_chat_for_topic(
             # Keep deliberately supplied and already-established chat names stable.
             # For a new automatic chat, the first strong topic is a better title
             # than the opening message excerpt. Later analyses must not rename it.
-            can_use_initial_topic = (
-                info.get("title_source") != "provided"
-                and not info.get("accepted_topic_names")
+            can_use_initial_topic = info.get("title_source") != "provided" and not info.get(
+                "accepted_topic_names"
             )
             if can_use_initial_topic:
                 initial_topic_title = str(pending_topics[0].get("topic") or "").strip()
@@ -429,7 +457,8 @@ async def analyse_chat_for_topic(
         logger.warning(
             "Background map analysis failed: provider=%s status=%s error_type=%s",
             settings.topic_llm_provider or settings.llm_provider,
-            getattr(exc, "status_code", None), type(exc).__name__,
+            getattr(exc, "status_code", None),
+            type(exc).__name__,
         )
         db.rollback()
         chat_session = db.execute(
@@ -468,8 +497,7 @@ def list_chats(
         .order_by(ChatSession.updated_at.desc())
     ).scalars()
     return [
-        chat_read(chat_session, premium_access=premium_access)
-        for chat_session in chat_sessions
+        chat_read(chat_session, premium_access=premium_access) for chat_session in chat_sessions
     ]
 
 
@@ -515,7 +543,15 @@ def react_to_reply(
         raise HTTPException(status_code=404, detail="Chat not found")
     info = dict(chat.info or {})
     messages = [dict(message) for message in info.get("messages", [])]
-    target = next((message for message in messages if message.get("role") == "assistant" and message.get("created_at") == payload.created_at), None)
+    target = next(
+        (
+            message
+            for message in messages
+            if message.get("role") == "assistant"
+            and message.get("created_at") == payload.created_at
+        ),
+        None,
+    )
     if target is None:
         raise HTTPException(status_code=404, detail="Reply not found")
     target["reaction"] = payload.reaction
@@ -553,7 +589,11 @@ def read_topic_suggestion(
         suggestion=suggestions[0] if suggestions else None,
         suggestions=suggestions,
         chat_title=str((chat_session.info or {}).get("title") or "New chat"),
-        map_suggestion=(chat_session.info or {}).get("pending_map_suggestion") if has_premium_feature_access(db, current_user) else None,
+        map_suggestion=(
+            (chat_session.info or {}).get("pending_map_suggestion")
+            if has_premium_feature_access(db, current_user)
+            else None
+        ),
         analysis_status=str((chat_session.info or {}).get("analysis_status") or "idle"),
     )
 
@@ -772,7 +812,11 @@ async def stream_message_to_llm(
             result = await task
             yield json.dumps({"type": "result", "data": result.model_dump(mode="json")}) + "\n"
         except HTTPException as exc:
-            logger.warning("Chat stream failed: status=%s provider=%s", exc.status_code, settings.chat_llm_provider or settings.llm_provider)
+            logger.warning(
+                "Chat stream failed: status=%s provider=%s",
+                exc.status_code,
+                settings.chat_llm_provider or settings.llm_provider,
+            )
             stream_db.rollback()
             yield json.dumps(
                 {"type": "error", "message": str(exc.detail), "status": exc.status_code}
@@ -822,17 +866,28 @@ def confirm_topic(
     if payload.suggestion_id and not any(
         item.get("suggestion_id") == payload.suggestion_id for item in queued_topics
     ):
-        raise HTTPException(status_code=409, detail="This suggestion was already reviewed or replaced. Refresh the chat.")
-    if payload.accepted and (payload.require_map_access or payload.existing_topic_space_id) and not premium_access:
+        raise HTTPException(
+            status_code=409,
+            detail="This suggestion was already reviewed or replaced. Refresh the chat.",
+        )
+    if (
+        payload.accepted
+        and (payload.require_map_access or payload.existing_topic_space_id)
+        and not premium_access
+    ):
         raise HTTPException(status_code=402, detail="My Map access is required to add to a topic.")
 
     if payload.accepted:
         accepted_topic_name = payload.topic
         if premium_access:
-            existing_id = payload.existing_topic_space_id or next((
-                space["id"] for space in read_map(profile_data)["topic_spaces"]
-                if space["title"].strip().casefold() == payload.topic.casefold()
-            ), None)
+            existing_id = payload.existing_topic_space_id or next(
+                (
+                    space["id"]
+                    for space in read_map(profile_data)["topic_spaces"]
+                    if space["title"].strip().casefold() == payload.topic.casefold()
+                ),
+                None,
+            )
             if existing_id:
                 try:
                     profile_data, topic_space = link_chat_to_topic_space(
@@ -867,20 +922,34 @@ def confirm_topic(
             ):
                 try:
                     profile_data, topic_space = update_topic_space(
-                        profile_data, topic_space_id=topic_space["id"],
-                        category=payload.category if "category" in payload.model_fields_set else None,
-                        related_topic_ids=list(dict.fromkeys([
-                            *topic_space.get("related_topic_ids", []), *payload.related_topic_ids,
-                        ])), update_related=True,
+                        profile_data,
+                        topic_space_id=topic_space["id"],
+                        category=(
+                            payload.category if "category" in payload.model_fields_set else None
+                        ),
+                        related_topic_ids=list(
+                            dict.fromkeys(
+                                [
+                                    *topic_space.get("related_topic_ids", []),
+                                    *payload.related_topic_ids,
+                                ]
+                            )
+                        ),
+                        update_related=True,
                     )
                 except (LookupError, ValueError) as exc:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+                    ) from exc
 
             if existing_id:
                 profile_data, _ = add_map_entry(
-                    profile_data, category=payload.entry_category,
-                    text=payload.description, topic_space_id=topic_space["id"],
-                    source_chat_id=payload.chat_id, reason=f"Saved from topic suggestion: {payload.topic}",
+                    profile_data,
+                    category=payload.entry_category,
+                    text=payload.description,
+                    topic_space_id=topic_space["id"],
+                    source_chat_id=payload.chat_id,
+                    reason=f"Saved from topic suggestion: {payload.topic}",
                 )
 
             topics = list(profile_data.get("topics", []))
@@ -906,9 +975,8 @@ def confirm_topic(
             if not chat_info.get("topic_space_id"):
                 chat_info["topic_space_id"] = topic_space["id"]
             pending_map_suggestion = chat_info.get("pending_map_suggestion")
-            if (
-                isinstance(pending_map_suggestion, dict)
-                and not pending_map_suggestion.get("topic_space_id")
+            if isinstance(pending_map_suggestion, dict) and not pending_map_suggestion.get(
+                "topic_space_id"
             ):
                 pending_map_suggestion["topic_space_id"] = topic_space["id"]
                 pending_map_suggestion["topic_title"] = topic_space["title"]
@@ -918,8 +986,11 @@ def confirm_topic(
             accepted_topic_names.append(accepted_topic_name)
         chat_info["accepted_topic_names"] = accepted_topic_names
     if queued_topics:
-        remaining = ([item for item in queued_topics if item.get("suggestion_id") != payload.suggestion_id]
-                     if payload.suggestion_id else queued_topics[1:])
+        remaining = (
+            [item for item in queued_topics if item.get("suggestion_id") != payload.suggestion_id]
+            if payload.suggestion_id
+            else queued_topics[1:]
+        )
         set_pending_topic_queue(chat_info, remaining)
     else:
         set_pending_topic_queue(chat_info, [])
@@ -978,10 +1049,14 @@ def confirm_map_suggestion(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
         profile.data = profile_data
 
-    suggestion_event = pending_map_suggestion if isinstance(pending_map_suggestion, dict) else {
-        "category": payload.category,
-        "text": payload.text,
-    }
+    suggestion_event = (
+        pending_map_suggestion
+        if isinstance(pending_map_suggestion, dict)
+        else {
+            "category": payload.category,
+            "text": payload.text,
+        }
+    )
     chat_info = remember_map_suggestion_event(
         chat_info,
         "last_saved_map_suggestion" if payload.accepted else "last_dismissed_map_suggestion",

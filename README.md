@@ -16,6 +16,7 @@ per-user LLM requests, and persistent user profiles.
 - Basic bot and abuse protection for auth, API, and LLM endpoints
 - Request-size limits, security headers, and production config checks
 - SQLite by default, configurable through `DATABASE_URL`
+- Optional synchronous PostgreSQL with psycopg 3 and explicit Alembic migrations
 - Per-user profile storage
 - Chat-LLM endpoint that sends chat context, chat history, and the saved profile to the LLM
 - Background analyser that scores chats with backend pattern rules
@@ -30,6 +31,10 @@ per-user LLM requests, and persistent user profiles.
 
 ## Documentation
 
+- [Backend structure, boundaries and validation](docs/BACKEND_STRUCTURE.md)
+- [Pre-cleanup backend audit and import inventory](docs/BACKEND_STRUCTURE_AUDIT.md)
+- [Database portability audit](docs/DATABASE_PORTABILITY_AUDIT.md)
+- [PostgreSQL setup, migrations, data verification and rollback](docs/DATABASE_MIGRATION.md)
 - [Stripe subscription setup](docs/stripe-setup.md)
 - [Administration and editable prompts](docs/admin.md)
 - [Local webmail and reusable setup](WEBMAIL_SETUP.md)

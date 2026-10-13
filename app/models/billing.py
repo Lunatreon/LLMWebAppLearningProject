@@ -1,10 +1,11 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.types import LegacyDateTime
 from app.models.user import utc_now
 
 if TYPE_CHECKING:
@@ -37,12 +38,12 @@ class BillingSubscription(Base):
     status: Mapped[str] = mapped_column(String(40), default="none", nullable=False)
     cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     current_period_end: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
+        LegacyDateTime(timezone=True),
         nullable=True,
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(LegacyDateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        LegacyDateTime(timezone=True),
         default=utc_now,
         onupdate=utc_now,
     )
@@ -61,4 +62,4 @@ class ProcessedStripeEvent(Base):
         nullable=False,
     )
     event_type: Mapped[str] = mapped_column(String(120), nullable=False)
-    processed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    processed_at: Mapped[datetime] = mapped_column(LegacyDateTime(timezone=True), default=utc_now)

@@ -33,8 +33,7 @@ def saved_user_messages_for_date(db: Session, user_id: int, usage_date: str) -> 
         1
         for info in chat_infos
         for message in (info or {}).get("messages", [])
-        if message.get("role") == "user"
-        and _message_date(message.get("created_at")) == usage_date
+        if message.get("role") == "user" and _message_date(message.get("created_at")) == usage_date
     )
 
 

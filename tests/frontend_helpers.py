@@ -1,4 +1,5 @@
 """Compose view markup only for assertions; production loads views in the browser."""
+
 import json
 import re
 from pathlib import Path

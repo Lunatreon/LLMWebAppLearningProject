@@ -1,11 +1,32 @@
+from pathlib import Path
+
+from alembic.config import Config
+from alembic.runtime.migration import MigrationContext
+from alembic.script import ScriptDirectory
+
+from app.core.config import settings
 from app.db.base import Base
 from app.db.session import engine
 from app.models import billing, feedback, mail_message, terms, user  # noqa: F401
 
 
 def init_db() -> None:
+    if engine.dialect.name != "sqlite" or not settings.is_local_environment:
+        require_migrated_schema()
+        return
     Base.metadata.create_all(bind=engine)
     ensure_sqlite_user_columns()
+
+
+def require_migrated_schema() -> None:
+    """Startup verifies migrations; it never applies production DDL."""
+    root = Path(__file__).resolve().parents[2]
+    config = Config(str(root / "alembic.ini"))
+    scripts = ScriptDirectory.from_config(config)
+    with engine.connect() as connection:
+        current = set(MigrationContext.configure(connection).get_current_heads())
+    if current != set(scripts.get_heads()):
+        raise RuntimeError("Database schema is not at Alembic head. Run alembic upgrade head.")
 
 
 def ensure_sqlite_user_columns() -> None:

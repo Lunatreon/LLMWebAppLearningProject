@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: feely_dev
+      POSTGRES_USER: feely_dev
+      POSTGRES_PASSWORD: ${FEELY_POSTGRES_PASSWORD:?Set FEELY_POSTGRES_PASSWORD for the local database}
+      TZ: UTC
+      PGTZ: UTC
+    ports:
+      - "127.0.0.1:${FEELY_POSTGRES_PORT:-55432}:5432"
+    volumes:
+      - feely_postgres_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U feely_dev -d feely_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  feely_postgres_dev:

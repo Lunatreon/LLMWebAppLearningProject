@@ -31,7 +31,7 @@ from app.services.billing import (
     normalize_subscription,
     remove_subscription_for_admin,
 )
-from app.services.prompts import (
+from app.llm.prompts import (
     PromptConfigurationError,
     read_system_prompt,
     write_system_prompt,
@@ -50,17 +50,25 @@ def login_admin(payload: AdminLoginRequest, db: Session = Depends(get_db)) -> Ad
         valid_password = verify_password(payload.password, password_hash)
         if valid_username and valid_password:
             return AdminToken(access_token=create_admin_access_token(username))
-    user = db.scalar(select(User).where(
-        (func.lower(User.username) == payload.username.strip().lower()) |
-        (func.lower(User.email) == payload.username.strip().lower())
-    ))
-    if user and user.is_active and user.role == "admin" and verify_password(payload.password, user.hashed_password):
+    user = db.scalar(
+        select(User).where(
+            (func.lower(User.username) == payload.username.strip().lower())
+            | (func.lower(User.email) == payload.username.strip().lower())
+        )
+    )
+    if (
+        user
+        and user.is_active
+        and user.role == "admin"
+        and verify_password(payload.password, user.hashed_password)
+    ):
         return AdminToken(access_token=create_admin_access_token(user.username, user_id=user.id))
     if not username or not password_hash:
         if not db.scalar(select(User.id).where(User.role == "admin").limit(1)):
             raise HTTPException(status_code=503, detail="Administrator login is not configured.")
     raise HTTPException(
-        status_code=401, detail="Incorrect administrator username or password.",
+        status_code=401,
+        detail="Incorrect administrator username or password.",
         headers={"WWW-Authenticate": "Bearer"},
     )
 
@@ -109,9 +117,12 @@ def create_admin_user(
     if db.scalar(select(User.id).where(func.lower(User.username) == payload.username.lower())):
         raise HTTPException(status_code=409, detail="Username is already in use.")
     user = User(
-        email=str(payload.email).lower(), username=payload.username,
-        hashed_password=hash_password(payload.password), role=payload.role,
-        display_name=payload.display_name, is_email_verified=False,
+        email=str(payload.email).lower(),
+        username=payload.username,
+        hashed_password=hash_password(payload.password),
+        role=payload.role,
+        display_name=payload.display_name,
+        is_email_verified=False,
     )
     db.add(user)
     try:
@@ -204,7 +215,9 @@ def remove_admin_user_subscription(
     except BillingNotConfiguredError:
         raise HTTPException(status_code=503, detail="Stripe billing is not configured.") from None
     except BillingProviderError:
-        raise HTTPException(status_code=502, detail="Stripe could not cancel the subscription.") from None
+        raise HTTPException(
+            status_code=502, detail="Stripe could not cancel the subscription."
+        ) from None
     logger.info("Administrator %s removed subscription for user %s", admin_username, user.id)
     return admin_user_read(db, user)
 

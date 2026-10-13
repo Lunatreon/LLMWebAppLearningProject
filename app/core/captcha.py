@@ -90,7 +90,4 @@ def turnstile_succeeded(
         return False
 
     action = payload.get("action")
-    return (
-        action == expected_action
-        or (allow_missing_action and not action)
-    )
+    return action == expected_action or (allow_missing_action and not action)

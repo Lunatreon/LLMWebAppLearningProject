@@ -8,14 +8,14 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_db, rate_limit_auth
 from app.core.captcha import captcha_public_config, verify_registration_captcha
 from app.core.config import settings
-from app.core.email_verification import (
+from app.services.email_verification import (
     create_email_verification_token,
     email_verification_is_expired,
     hash_email_verification_token,
     hash_email_verification_pin,
     send_email_verification_message,
 )
-from app.core.password_reset import (
+from app.services.password_reset import (
     create_password_reset_token,
     hash_password_reset_token,
     password_reset_is_expired,
@@ -53,7 +53,9 @@ def read_email_config() -> dict[str, bool]:
 
 
 def token_for_user(user: User, db: Session) -> Token:
-    if (settings.email_verification_enabled or settings.email_verification_required) and not user.is_email_verified:
+    if (
+        settings.email_verification_enabled or settings.email_verification_required
+    ) and not user.is_email_verified:
         db.commit()
         raise HTTPException(status_code=403, detail="Please verify your email before logging in.")
     user.last_login_at = utc_now()
@@ -76,14 +78,21 @@ def read_android_config():
         "password_login_enabled": enabled,
         "token_type": "bearer",
         "access_token_expires_in_seconds": settings.access_token_expire_minutes * 60,
-        "endpoints": {name: settings.api_v1_prefix + path for name, path in {
-            "register": "/auth/register", "login": "/auth/login",
-            "captcha_config": "/auth/captcha/config", "email_config": "/auth/email/config",
-            "verify_email": "/auth/email-verification/confirm",
-            "password_reset_request": "/auth/password-reset/request",
-            "password_reset_confirm": "/auth/password-reset/confirm",
-            "terms_config": "/terms/config", "terms_status": "/terms/me", "terms_accept": "/terms/accept",
-        }.items()},
+        "endpoints": {
+            name: settings.api_v1_prefix + path
+            for name, path in {
+                "register": "/auth/register",
+                "login": "/auth/login",
+                "captcha_config": "/auth/captcha/config",
+                "email_config": "/auth/email/config",
+                "verify_email": "/auth/email-verification/confirm",
+                "password_reset_request": "/auth/password-reset/request",
+                "password_reset_confirm": "/auth/password-reset/confirm",
+                "terms_config": "/terms/config",
+                "terms_status": "/terms/me",
+                "terms_accept": "/terms/accept",
+            }.items()
+        },
     }
 
 
@@ -101,10 +110,17 @@ def register(
     current_terms = terms_config()
     if current_terms["configured"]:
         if not payload.terms_accepted:
-            raise HTTPException(422, "Please explicitly accept the FeelY terms before creating an account.")
-        if (payload.terms_version != current_terms["version"] or
-                payload.terms_document_sha256 != current_terms["document_sha256"]):
-            raise HTTPException(409, "The terms changed. Read the current version and check the acceptance box again.")
+            raise HTTPException(
+                422, "Please explicitly accept the FeelY terms before creating an account."
+            )
+        if (
+            payload.terms_version != current_terms["version"]
+            or payload.terms_document_sha256 != current_terms["document_sha256"]
+        ):
+            raise HTTPException(
+                409,
+                "The terms changed. Read the current version and check the acceptance box again.",
+            )
     if payload.website and payload.website.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -123,9 +139,7 @@ def register(
     username = payload.username.strip()
     username_lookup = username.lower()
     existing_user = db.scalar(
-        select(User).where(
-            (User.email == email) | (func.lower(User.username) == username_lookup)
-        )
+        select(User).where((User.email == email) | (func.lower(User.username) == username_lookup))
     )
     if existing_user is not None:
         raise HTTPException(
@@ -149,9 +163,15 @@ def register(
     try:
         if current_terms["configured"]:
             db.flush()
-            db.add(TermsAcceptance(user_id=user.id, version=current_terms["version"],
-                document_url=current_terms["document_url"], document_sha256=current_terms["document_sha256"],
-                client="api"))
+            db.add(
+                TermsAcceptance(
+                    user_id=user.id,
+                    version=current_terms["version"],
+                    document_url=current_terms["document_url"],
+                    document_sha256=current_terms["document_sha256"],
+                    client="api",
+                )
+            )
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -187,14 +207,20 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> Token:
         )
     )
 
-    if user is None or not user.is_active or not verify_password(payload.password, user.hashed_password):
+    if (
+        user is None
+        or not user.is_active
+        or not verify_password(payload.password, user.hashed_password)
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email, username, or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if (settings.email_verification_enabled or settings.email_verification_required) and not user.is_email_verified:
+    if (
+        settings.email_verification_enabled or settings.email_verification_required
+    ) and not user.is_email_verified:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Please verify your email before logging in.",
@@ -224,7 +250,9 @@ def request_email_verification(
 
     email = str(payload.email).strip().lower()
     enforce_rate_limit(
-        f"verification-send:{email}", max_attempts=3, window_seconds=3600,
+        f"verification-send:{email}",
+        max_attempts=3,
+        window_seconds=3600,
         detail="Too many code requests. Please try again in an hour.",
     )
     user = db.scalar(select(User).where(User.email == email))
@@ -237,21 +265,34 @@ def request_email_verification(
     return generic_response
 
 
-@router.post("/email-verification/confirm", response_model=EmailVerificationConfirmResponse,
-             dependencies=[Depends(rate_limit_auth)])
+@router.post(
+    "/email-verification/confirm",
+    response_model=EmailVerificationConfirmResponse,
+    dependencies=[Depends(rate_limit_auth)],
+)
 def confirm_email_verification(
     payload: EmailVerificationConfirmRequest,
     db: Session = Depends(get_db),
 ) -> EmailVerificationConfirmResponse:
-    invalid = HTTPException(status_code=400, detail="Verification code or link is invalid or expired. Request a new code.")
+    invalid = HTTPException(
+        status_code=400,
+        detail="Verification code or link is invalid or expired. Request a new code.",
+    )
     if payload.pin is not None:
         email = str(payload.email).lower()
         enforce_rate_limit(
-            f"verification-confirm:{email}", max_attempts=10, window_seconds=900,
+            f"verification-confirm:{email}",
+            max_attempts=10,
+            window_seconds=900,
             detail="Too many verification attempts. Please wait before trying again.",
         )
         user = db.scalar(select(User).where(User.email == email))
-        if user is None or not user.is_active or user.is_email_verified or not user.email_verification_sent_at:
+        if (
+            user is None
+            or not user.is_active
+            or user.is_email_verified
+            or not user.email_verification_sent_at
+        ):
             raise invalid
         sent_at = user.email_verification_sent_at
         if sent_at.tzinfo is None:
@@ -259,12 +300,16 @@ def confirm_email_verification(
         if utc_now() > sent_at + timedelta(minutes=settings.email_verification_pin_expire_minutes):
             raise invalid
         # Persist attempts atomically, including failures; this survives restarts.
-        changed = db.execute(update(User).where(
-            User.id == user.id,
-            User.email_verification_token_hash == user.email_verification_token_hash,
-            User.email_verification_attempts < settings.email_verification_max_attempts,
-        ).values(email_verification_attempts=User.email_verification_attempts + 1),
-            execution_options={"synchronize_session": False})
+        changed = db.execute(
+            update(User)
+            .where(
+                User.id == user.id,
+                User.email_verification_token_hash == user.email_verification_token_hash,
+                User.email_verification_attempts < settings.email_verification_max_attempts,
+            )
+            .values(email_verification_attempts=User.email_verification_attempts + 1),
+            execution_options={"synchronize_session": False},
+        )
         db.commit()
         if not changed.rowcount:
             raise invalid
@@ -273,15 +318,28 @@ def confirm_email_verification(
         # Keep already-issued, high-entropy verification links working.
         token_hash = hash_email_verification_token(payload.token)
         user = db.scalar(select(User).where(User.email_verification_token_hash == token_hash))
-        if user is None or not user.is_active or email_verification_is_expired(user.email_verification_sent_at):
+        if (
+            user is None
+            or not user.is_active
+            or email_verification_is_expired(user.email_verification_sent_at)
+        ):
             raise invalid
 
-    changed = db.execute(update(User).where(
-        User.id == user.id, User.is_email_verified.is_(False),
-        User.email_verification_token_hash == token_hash,
-    ).values(is_email_verified=True, email_verified_at=utc_now(),
-             email_verification_token_hash=None, email_verification_sent_at=None,
-             email_verification_attempts=0))
+    changed = db.execute(
+        update(User)
+        .where(
+            User.id == user.id,
+            User.is_email_verified.is_(False),
+            User.email_verification_token_hash == token_hash,
+        )
+        .values(
+            is_email_verified=True,
+            email_verified_at=utc_now(),
+            email_verification_token_hash=None,
+            email_verification_sent_at=None,
+            email_verification_attempts=0,
+        )
+    )
     if not changed.rowcount:
         db.rollback()
         raise invalid
@@ -345,10 +403,20 @@ def confirm_password_reset(
             detail="Password reset link is invalid or expired.",
         )
 
-    changed = db.execute(update(User).where(
-        User.id == user.id, User.is_active.is_(True), User.password_reset_token_hash == token_hash,
-    ).values(hashed_password=hash_password(payload.new_password), auth_provider="password",
-             password_reset_token_hash=None, password_reset_sent_at=None))
+    changed = db.execute(
+        update(User)
+        .where(
+            User.id == user.id,
+            User.is_active.is_(True),
+            User.password_reset_token_hash == token_hash,
+        )
+        .values(
+            hashed_password=hash_password(payload.new_password),
+            auth_provider="password",
+            password_reset_token_hash=None,
+            password_reset_sent_at=None,
+        )
+    )
     if not changed.rowcount:
         db.rollback()
         raise HTTPException(status_code=400, detail="Password reset link is invalid or expired.")

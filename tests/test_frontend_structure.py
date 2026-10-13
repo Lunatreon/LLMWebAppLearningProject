@@ -20,11 +20,16 @@ def test_root_serves_shell_and_legacy_urls_redirect_with_query_intact():
         root = client.get("/", follow_redirects=False)
         assert root.status_code == 200
         assert root.content == (WEBSITE / "index.html").read_bytes()
-        assert 'data-view=' in root.text
+        assert "data-view=" in root.text
         assert 'data-view="views/auth.html"' in root.text
         assert 'data-view="views/journal.html"' in root.text
         for page in ("chat.html", "index.html"):
-            for query in ("", "?reset_password_token=a%2Bb&mode=login", "?checkout=success&session_id=abc", "?view=account&billing_return=portal"):
+            for query in (
+                "",
+                "?reset_password_token=a%2Bb&mode=login",
+                "?checkout=success&session_id=abc",
+                "?view=account&billing_return=portal",
+            ):
                 for method in ("GET", "HEAD"):
                     response = client.request(method, f"/{page}{query}", follow_redirects=False)
                     assert response.status_code == 307
@@ -39,7 +44,9 @@ def test_shell_views_and_scripts_are_public():
     assert sources[-1] == "js/start.js"
     assert {"js/chat.js", "js/map.js", "js/journal.js", "js/account.js"} <= set(sources)
     with TestClient(app) as client:
-        views = re.findall(r'data-view="([^"]+)"', (WEBSITE / "index.html").read_text(encoding="utf-8"))
+        views = re.findall(
+            r'data-view="([^"]+)"', (WEBSITE / "index.html").read_text(encoding="utf-8")
+        )
         assert {"views/chat.html", "views/map.html", "views/journal.html"} <= set(views)
         for source in [*sources, *views, "styles.css", "js/load-views.js"]:
             assert source in PUBLIC_FILES
@@ -74,17 +81,17 @@ def test_index_references_views_and_separate_assets():
     assert application_scripts(html)
     assert all(
         re.fullmatch(r'<script src="[^"]+" defer></script>', script)
-        for script in re.findall(r'<script\b[^>]*>.*?</script>', html, re.DOTALL)
+        for script in re.findall(r"<script\b[^>]*>.*?</script>", html, re.DOTALL)
     )
-    assert '<style' not in html
-    assert not re.search(r'\s(?:style|on\w+)\s*=', html)
+    assert "<style" not in html
+    assert not re.search(r"\s(?:style|on\w+)\s*=", html)
     assert 'type="text/plain"' not in html
-    assert 'data-view=' in html
-    assert '<link rel="stylesheet" href="styles.css" />' in html
+    assert "data-view=" in html
+    assert re.search(r'<link rel="stylesheet" href="styles\.css(?:\?[^"]*)?"\s*/>', html)
     assert '<main class="shell" data-app-shell hidden>' in html
-    assert 'A page file could not load' not in html
-    assert 'fetchFeelYView' not in html
-    assert 'loadFeelYViews' not in html
+    assert "A page file could not load" not in html
+    assert "fetchFeelYView" not in html
+    assert "loadFeelYViews" not in html
 
 
 def test_static_server_serves_the_entry_page_views_and_assets():
@@ -94,7 +101,9 @@ def test_static_server_serves_the_entry_page_views_and_assets():
 
     port = 0
     for _ in range(2):
-        server = ThreadingHTTPServer(("127.0.0.1", port), partial(StaticAssets, directory=str(WEBSITE)))
+        server = ThreadingHTTPServer(
+            ("127.0.0.1", port), partial(StaticAssets, directory=str(WEBSITE))
+        )
         port = server.server_port
         thread = Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -103,17 +112,23 @@ def test_static_server_serves_the_entry_page_views_and_assets():
                 html = response.read().decode("utf-8").replace("\r\n", "\n")
             assert html == (WEBSITE / "index.html").read_text(encoding="utf-8")
             assert 'data-view="views/auth.html"' in html
-            assert 'data-view=' in html
-            assert '<style' not in html
-            assert '<link rel="stylesheet" href="styles.css" />' in html
+            assert "data-view=" in html
+            assert "<style" not in html
+            assert re.search(r'<link rel="stylesheet" href="styles\.css(?:\?[^"]*)?"\s*/>', html)
             views = re.findall(r'data-view="([^"]+)"', html)
             for name in ["styles.css", "js/load-views.js", *views, *application_scripts(html)]:
                 with urlopen(f"http://127.0.0.1:{port}/{name}", timeout=3) as response:
                     assert response.status == 200
                     assert response.read() == (WEBSITE / name).read_bytes()
-                    expected_types = ({"text/html"} if name.endswith(".html") else
-                                      {"text/css"} if name.endswith(".css") else
-                                      {"text/javascript", "application/javascript"})
+                    expected_types = (
+                        {"text/html"}
+                        if name.endswith(".html")
+                        else (
+                            {"text/css"}
+                            if name.endswith(".css")
+                            else {"text/javascript", "application/javascript"}
+                        )
+                    )
                     assert response.headers.get_content_type() in expected_types
         finally:
             server.shutdown()

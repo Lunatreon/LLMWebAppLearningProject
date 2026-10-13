@@ -25,7 +25,9 @@ class SlidingWindowRateLimiter:
         cutoff = now - window_seconds
         with self._lock:
             if now >= self._next_cleanup:
-                for expired_key in [key for key, expires in self._expires.items() if expires <= now]:
+                for expired_key in [
+                    key for key, expires in self._expires.items() if expires <= now
+                ]:
                     self._events.pop(expired_key, None)
                     self._expires.pop(expired_key, None)
                 self._next_cleanup = now + 60
@@ -84,4 +86,3 @@ def enforce_rate_limit(
         detail=detail,
         headers={"Retry-After": str(math.ceil(retry_after))},
     )
-

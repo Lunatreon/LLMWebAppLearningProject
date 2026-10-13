@@ -43,7 +43,9 @@ class UserAccountRead(UserRead):
 
 class UserAccountUpdate(BaseModel):
     email: EmailStr | None = None
-    username: str | None = Field(default=None, min_length=3, max_length=80, pattern=r"^[a-zA-Z0-9_.-]+$")
+    username: str | None = Field(
+        default=None, min_length=3, max_length=80, pattern=r"^[a-zA-Z0-9_.-]+$"
+    )
     display_name: str | None = Field(default=None, max_length=120)
     bio: str | None = Field(default=None, max_length=500)
     avatar_url: str | None = Field(default=None, max_length=500)

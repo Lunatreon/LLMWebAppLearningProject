@@ -14,7 +14,7 @@ from app.core.middleware import (
     SecurityHeadersMiddleware,
 )
 from app.db.init_db import init_db
-from app.services.llm.providers.ollama import warm_ollama_model
+from app.llm.providers.ollama import warm_ollama_model
 from app.services.webmail import poll_mail
 
 
@@ -23,7 +23,9 @@ async def lifespan(app: FastAPI, init_database: bool = True):
     if init_database:
         init_db()
     warm_task = None
-    mail_task = asyncio.create_task(poll_mail()) if settings.webmail_enabled and init_database else None
+    mail_task = (
+        asyncio.create_task(poll_mail()) if settings.webmail_enabled and init_database else None
+    )
     if settings.ollama_prewarm:
         warm_task = asyncio.create_task(warm_ollama_model())
     try:
@@ -46,10 +48,13 @@ def create_app(init_database: bool = True) -> FastAPI:
         async with lifespan(app, init_database=init_database):
             yield
 
-    app = FastAPI(title=settings.app_name, lifespan=app_lifespan,
-                  openapi_url="/openapi.json" if settings.api_docs_enabled else None,
-                  docs_url="/docs" if settings.api_docs_enabled else None,
-                  redoc_url=None)
+    app = FastAPI(
+        title=settings.app_name,
+        lifespan=app_lifespan,
+        openapi_url="/openapi.json" if settings.api_docs_enabled else None,
+        docs_url="/docs" if settings.api_docs_enabled else None,
+        redoc_url=None,
+    )
 
     app.add_middleware(BasicAuthMiddleware)
     app.add_middleware(

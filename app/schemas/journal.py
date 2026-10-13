@@ -5,7 +5,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.profile import TopicCategory
 
-
 JournalSuggestionKind = Literal["topic", "map_entry"]
 JournalSuggestionStatus = Literal["pending", "saved", "dismissed"]
 

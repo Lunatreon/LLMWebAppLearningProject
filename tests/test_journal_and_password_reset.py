@@ -9,14 +9,17 @@ from app.api.routes import auth as auth_routes
 from app.core.config import settings
 from app.models.billing import BillingSubscription
 from app.models.user import User
-from app.services.llm.tasks import journal as llm_service
+from app.llm.tasks import journal as llm_service
 
 
 def register_and_login(client, email: str, username: str):
-    assert client.post(
-        "/api/v1/auth/register",
-        json={"email": email, "username": username, "password": "original-pass"},
-    ).status_code == 201
+    assert (
+        client.post(
+            "/api/v1/auth/register",
+            json={"email": email, "username": username, "password": "original-pass"},
+        ).status_code
+        == 201
+    )
     token = client.post(
         "/api/v1/auth/login",
         json={"email_or_username": email, "password": "original-pass"},
@@ -67,14 +70,20 @@ def test_password_reset_email_changes_password_once(client, monkeypatch):
         json={"token": sent_tokens[0][1], "new_password": "replacement-pass"},
     )
     assert confirmed.status_code == 200
-    assert client.post(
-        "/api/v1/auth/login",
-        json={"email_or_username": "reset@example.com", "password": "replacement-pass"},
-    ).status_code == 200
-    assert client.post(
-        "/api/v1/auth/password-reset/confirm",
-        json={"token": sent_tokens[0][1], "new_password": "another-pass"},
-    ).status_code == 400
+    assert (
+        client.post(
+            "/api/v1/auth/login",
+            json={"email_or_username": "reset@example.com", "password": "replacement-pass"},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/api/v1/auth/password-reset/confirm",
+            json={"token": sent_tokens[0][1], "new_password": "another-pass"},
+        ).status_code
+        == 400
+    )
 
 
 def test_ollama_journal_retries_an_incomplete_json_response(monkeypatch):
@@ -156,11 +165,14 @@ def test_daily_journal_is_premium_autosave_ready_and_user_confirmed(client):
         "when I pause before answering. I want this journal page connected to the topic I "
         "already created instead of making a duplicate topic for the same part of my life."
     )
-    assert client.put(
-        "/api/v1/journal/entries/2026-08-30",
-        headers=headers,
-        json={"content": earlier_content},
-    ).status_code == 200
+    assert (
+        client.put(
+            "/api/v1/journal/entries/2026-08-30",
+            headers=headers,
+            json={"content": earlier_content},
+        ).status_code
+        == 200
+    )
     earlier_analysis = client.post(
         "/api/v1/journal/entries/2026-08-30/analyse",
         headers=headers,

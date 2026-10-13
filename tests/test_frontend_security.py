@@ -4,6 +4,8 @@ from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 CHAT_HTML = ROOT_DIR / "website" / "index.html"
+
+
 def read_frontend_javascript():
     html = assembled_chat_html()
     sources = application_scripts(html)
@@ -14,12 +16,11 @@ def test_website_root_is_the_shell():
     index_html = (ROOT_DIR / "website" / "index.html").read_text(encoding="utf-8")
     assert 'data-view="views/chat.html"' in index_html
     assert 'id="conversation-view"' not in index_html
-    assert 'window.location.replace' not in index_html
+    assert "window.location.replace" not in index_html
 
 
 def test_feely_favicon_is_used_by_every_browser_tab():
     favicon = ROOT_DIR / "website" / "assets" / "feely-favicon.png"
-
 
     assert favicon.is_file()
     assert favicon.stat().st_size > 0
@@ -76,7 +77,7 @@ def test_new_chat_is_only_listed_after_its_first_saved_message():
     assert "state.activeChatId = null;" in javascript
     assert "async function showChat({ startFreshChat = false } = {})" in javascript
     assert javascript.count("await showChat({ startFreshChat: true });") == 2
-    assert 'src="js/load-views.js" defer' in assembled_chat_html()
+    assert re.search(r'src="js/load-views\.js(?:\?[^"]*)?" defer', assembled_chat_html())
     assert "await createChat();" not in javascript
     assert "chat_id: state.activeChatId" in javascript
     assert "upsertChat(updatedChat);" in javascript
@@ -110,14 +111,16 @@ def test_my_map_is_visible_but_guarded_by_the_premium_entitlement():
     assert 'id="chat-plan-note"' in html
     assert "function hasMyMapAccess()" in javascript
     assert "function renderMapPaywall()" in javascript
-    assert 'if (!hasMyMapAccess()) {' in javascript
+    assert "if (!hasMyMapAccess()) {" in javascript
     assert 'startSubscriptionCheckout("monthly")' in javascript
 
 
 def test_topic_suggestions_are_not_hidden_by_the_map_paywall():
     javascript = read_frontend_javascript()
 
-    render_topic = javascript.split("function renderTopic(topic) {", 1)[1].split("function renderMapSuggestion", 1)[0]
+    render_topic = javascript.split("function renderTopic(topic) {", 1)[1].split(
+        "function renderMapSuggestion", 1
+    )[0]
     assert "state.pendingTopic = topic;" in render_topic
     assert 'topicCard.classList.toggle("hidden", !topic);' in render_topic
     assert "if (hasMyMapAccess()) await loadMap();" in javascript
@@ -156,7 +159,7 @@ def test_overall_map_thread_is_permanent_and_available_as_a_destination():
     assert "const nodes = [\n    overallMapNode(map)," in javascript
     assert "unassigned.textContent = OVERALL_MAP_TITLE;" in javascript
     assert ".map-node.overall" in stylesheet
-    assert '<link rel="stylesheet" href="styles.css" />' in html
+    assert re.search(r'<link rel="stylesheet" href="styles\.css(?:\?[^"]*)?"\s*/>', html)
 
 
 def test_dark_and_pink_light_appearance_can_be_switched_and_saved():
@@ -173,7 +176,7 @@ def test_dark_and_pink_light_appearance_can_be_switched_and_saved():
     assert 'const THEME_STORAGE_KEY = "feely_theme";' in javascript
     assert 'return "dark";' in javascript
     assert "localStorage.setItem(THEME_STORAGE_KEY, selectedTheme)" in javascript
-    assert 'document.documentElement.dataset.theme = selectedTheme;' in javascript
+    assert "document.documentElement.dataset.theme = selectedTheme;" in javascript
     assert 'html[data-theme="light"]' in stylesheet
     assert "--lavender: #f2789c;" in stylesheet
     assert "--scrollbar-thumb: rgba(197, 181, 255, 0.48);" in stylesheet
@@ -186,11 +189,11 @@ def test_sidebar_lists_scroll_without_scrolling_the_page():
     javascript = read_frontend_javascript()
     stylesheet = (CHAT_HTML.parent / "styles.css").read_text(encoding="utf-8")
 
-    assert 'src="js/load-views.js" defer' in html
-    assert '<link rel="stylesheet" href="styles.css" />' in html
+    assert re.search(r'src="js/load-views\.js(?:\?[^"]*)?" defer', html)
+    assert re.search(r'<link rel="stylesheet" href="styles\.css(?:\?[^"]*)?"\s*/>', html)
     assert "function syncViewportHeight()" in javascript
     assert 'style.setProperty("--app-height"' in javascript
-    assert "window.visualViewport?.addEventListener(\"resize\", syncViewportHeight);" in javascript
+    assert 'window.visualViewport?.addEventListener("resize", syncViewportHeight);' in javascript
     assert ".sidebar-context" in stylesheet
     assert ".map-topic-list" in stylesheet
     assert ".journal-entry-list" in stylesheet

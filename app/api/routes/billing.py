@@ -57,7 +57,9 @@ def start_checkout(
 ) -> BillingSessionResponse:
     try:
         if not settings.premium_features_enabled:
-            raise HTTPException(status_code=409, detail="All features are now free during the test phase.")
+            raise HTTPException(
+                status_code=409, detail="All features are now free during the test phase."
+            )
         checkout_url = create_checkout_session(db, current_user, payload.plan)
     except BillingNotConfiguredError:
         raise _configuration_error() from None

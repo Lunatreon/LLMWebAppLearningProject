@@ -146,12 +146,16 @@ class Settings(BaseSettings):
 
     def validate_runtime_security(self) -> None:
         if self.secret_key == "change-this-secret-before-deploying" or len(self.secret_key) < 32:
-            raise RuntimeError("SECRET_KEY must be a unique random value of at least 32 characters.")
+            raise RuntimeError(
+                "SECRET_KEY must be a unique random value of at least 32 characters."
+            )
         if self.is_local_environment:
             return
 
         if self.secret_key == "change-this-secret-before-deploying" or len(self.secret_key) < 32:
-            raise RuntimeError("SECRET_KEY must be changed to a long random value before deployment.")
+            raise RuntimeError(
+                "SECRET_KEY must be changed to a long random value before deployment."
+            )
 
         unsafe_origins = {"*", "null"} & set(self.cors_origins)
         if unsafe_origins:
@@ -176,7 +180,9 @@ class Settings(BaseSettings):
                 "EMAIL_VERIFICATION_ENABLED must be true when email verification is required."
             )
         if self.email_verification_enabled and not self.email_delivery_configured:
-            raise RuntimeError("SMTP settings must be configured when email verification is enabled.")
+            raise RuntimeError(
+                "SMTP settings must be configured when email verification is enabled."
+            )
         if self.password_reset_enabled and not self.email_delivery_configured:
             raise RuntimeError("SMTP settings must be configured when password reset is enabled.")
 

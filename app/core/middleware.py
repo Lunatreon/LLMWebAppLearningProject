@@ -8,7 +8,6 @@ from typing import Any
 from app.core.config import settings
 from app.core.rate_limit import rate_limiter
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -26,9 +25,10 @@ class RejectedCorsPreflightLoggingMiddleware:
         headers = dict(scope.get("headers") or [])
 
         async def send_with_diagnostic(message: dict[str, Any]) -> None:
-            if message.get("type") == "http.response.start" and int(
-                message.get("status", 0)
-            ) >= 400:
+            if (
+                message.get("type") == "http.response.start"
+                and int(message.get("status", 0)) >= 400
+            ):
                 logger.warning(
                     "Rejected CORS preflight: origin=%r method=%r headers=%r path=%s",
                     headers.get(b"origin", b"").decode("latin-1"),
@@ -109,11 +109,15 @@ class HttpRateLimitMiddleware:
                 f"http:{peer[0]}", settings.rate_limit_http_per_minute, 60
             )
             if not allowed:
+
                 async def with_retry(message):
                     if message["type"] == "http.response.start":
                         message["headers"].append((b"retry-after", str(math.ceil(retry)).encode()))
                     await send(message)
-                await send_json_error(with_retry, status_code=429, detail="Too many requests. Try again later.")
+
+                await send_json_error(
+                    with_retry, status_code=429, detail="Too many requests. Try again later."
+                )
                 return
         await self.app(scope, receive, send)
 

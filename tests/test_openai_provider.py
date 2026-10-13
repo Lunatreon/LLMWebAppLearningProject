@@ -8,8 +8,8 @@ import pytest
 from fastapi import HTTPException
 
 from app.core.config import settings
-from app.services.llm.providers.factory import get_chat_llm_client, get_topic_llm_client
-from app.services.llm.tasks.journal import analyse_journal_text
+from app.llm.providers.factory import get_chat_llm_client, get_topic_llm_client
+from app.llm.tasks.journal import analyse_journal_text
 
 
 @pytest.mark.parametrize("role", ["chat", "topic", "journal"])
@@ -22,9 +22,9 @@ def test_openai_roles_preserve_credentials_models_and_prompt_contract(monkeypatc
         "topic": {"topic": "Work", "description": "Finding a balance"},
         "journal": {"suggestions": []},
     }
-    response = SimpleNamespace(choices=[
-        SimpleNamespace(message=SimpleNamespace(content=json.dumps(payloads[role])))
-    ])
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payloads[role])))]
+    )
     create = AsyncMock(return_value=response)
     credentials = []
 
@@ -36,9 +36,9 @@ def test_openai_roles_preserve_credentials_models_and_prompt_contract(monkeypatc
 
     if role == "chat":
         on_chunk = AsyncMock()
-        result = asyncio.run(get_chat_llm_client().respond(
-            "A busy day", {}, {}, "chat-id", on_text_chunk=on_chunk
-        ))
+        result = asyncio.run(
+            get_chat_llm_client().respond("A busy day", {}, {}, "chat-id", on_text_chunk=on_chunk)
+        )
         assert result.assistant_message == "A reflective reply"
         on_chunk.assert_awaited_once_with("A reflective reply")
     elif role == "topic":

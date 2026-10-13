@@ -2,11 +2,9 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
-from app.db.base import Base
 from app.models.billing import BillingSubscription
 from app.models.user import User
 from app.schemas.billing import SubscriptionStatus
@@ -78,9 +76,8 @@ def test_local_development_can_explicitly_bypass_premium_features(monkeypatch):
     assert normalized["chat_daily_limit"] == settings.rate_limit_llm_user_per_day
 
 
-def test_premium_access_uses_only_local_subscription_state(tmp_path):
-    engine = create_engine(f"sqlite:///{tmp_path / 'billing.db'}")
-    Base.metadata.create_all(engine)
+def test_premium_access_uses_only_local_subscription_state(database_engine):
+    engine = database_engine
     TestingSession = sessionmaker(bind=engine)
     now = datetime.now(timezone.utc)
 
@@ -219,9 +216,7 @@ def test_checkout_return_securely_synchronizes_subscription(monkeypatch, client)
         json={"plan": "monthly"},
     )
     assert checkout_response.status_code == 200
-    assert checkout_params[0]["success_url"].endswith(
-        "&session_id={CHECKOUT_SESSION_ID}"
-    )
+    assert checkout_params[0]["success_url"].endswith("&session_id={CHECKOUT_SESSION_ID}")
 
     sync_response = client.post(
         "/api/v1/billing/checkout/sync",
@@ -340,9 +335,8 @@ def test_portal_return_url_accepts_only_trusted_web_origins(monkeypatch):
         validated_portal_return_url("https://user:password@app.feel-y.com/chat.html")
 
 
-def test_resume_subscription_clears_scheduled_cancellation(monkeypatch, tmp_path):
-    engine = create_engine(f"sqlite:///{tmp_path / 'resume.db'}")
-    Base.metadata.create_all(engine)
+def test_resume_subscription_clears_scheduled_cancellation(monkeypatch, database_engine):
+    engine = database_engine
     TestingSession = sessionmaker(bind=engine)
     period_end = datetime.now(timezone.utc) + timedelta(days=20)
     update_calls = []
@@ -403,9 +397,8 @@ def test_resume_subscription_clears_scheduled_cancellation(monkeypatch, tmp_path
         assert update_calls == [("sub_resume", {"cancel_at_period_end": False})]
 
 
-def test_admin_subscription_removal_cancels_stripe_and_local_access(monkeypatch, tmp_path):
-    engine = create_engine(f"sqlite:///{tmp_path / 'admin-cancel.db'}")
-    Base.metadata.create_all(engine)
+def test_admin_subscription_removal_cancels_stripe_and_local_access(monkeypatch, database_engine):
+    engine = database_engine
     TestingSession = sessionmaker(bind=engine)
     cancel_calls = []
     canceled_snapshot = {
@@ -449,9 +442,7 @@ def test_admin_subscription_removal_cancels_stripe_and_local_access(monkeypatch,
 
         assert removed.status == "canceled"
         assert has_premium_access(db, user) is False
-        assert cancel_calls == [
-            ("sub_admin_cancel", {"invoice_now": False, "prorate": False})
-        ]
+        assert cancel_calls == [("sub_admin_cancel", {"invoice_now": False, "prorate": False})]
 
 
 def test_free_test_phase_unlocks_features_and_blocks_checkout(client, monkeypatch):
@@ -463,7 +454,12 @@ def test_free_test_phase_unlocks_features_and_blocks_checkout(client, monkeypatc
     assert response["journal_access"] is True
     assert response["premium"] is False
     assert response["available_plans"] == []
-    assert client.post("/api/v1/billing/checkout", headers=headers, json={"plan": "monthly"}).status_code == 409
+    assert (
+        client.post(
+            "/api/v1/billing/checkout", headers=headers, json={"plan": "monthly"}
+        ).status_code
+        == 409
+    )
     monkeypatch.setattr(settings, "premium_features_enabled", True)
     response = client.get("/api/v1/billing/subscription", headers=headers).json()
     assert response["free_test_phase"] is False
@@ -473,20 +469,47 @@ def test_free_test_phase_unlocks_features_and_blocks_checkout(client, monkeypatc
 
 def test_reply_reactions_persist_toggle_and_require_chat_owner(client):
     headers = _register_and_authenticate(client)
-    reply = client.post("/api/v1/llm/message", headers=headers, json={"context": "I feel uncertain about work."})
+    reply = client.post(
+        "/api/v1/llm/message", headers=headers, json={"context": "I feel uncertain about work."}
+    )
     assert reply.status_code == 200
     result = reply.json()
     url = f"/api/v1/llm/chats/{result['chat_id']}"
     stamp = result["chat_info"]["messages"][-1]["created_at"]
     for reaction in ("like", "dislike", None):
-        response = client.put(url + "/reaction", headers=headers, json={"created_at": stamp, "reaction": reaction})
+        response = client.put(
+            url + "/reaction", headers=headers, json={"created_at": stamp, "reaction": reaction}
+        )
         assert response.status_code == 200
         assert client.get(url, headers=headers).json()["messages"][-1]["reaction"] == reaction
-    assert client.put(url + "/reaction", headers=headers, json={"created_at": stamp, "reaction": "invalid"}).status_code == 422
-    assert client.put(url + "/reaction", headers=headers, json={"created_at": "missing", "reaction": "like"}).status_code == 404
-    client.post("/api/v1/auth/register", json={"email": "other@example.com", "username": "other", "password": "secure-password"})
-    token = client.post("/api/v1/auth/login", json={"email_or_username": "other@example.com", "password": "secure-password"}).json()["access_token"]
-    assert client.put(url + "/reaction", headers={"Authorization": f"Bearer {token}"}, json={"created_at": stamp, "reaction": "like"}).status_code == 404
+    assert (
+        client.put(
+            url + "/reaction", headers=headers, json={"created_at": stamp, "reaction": "invalid"}
+        ).status_code
+        == 422
+    )
+    assert (
+        client.put(
+            url + "/reaction", headers=headers, json={"created_at": "missing", "reaction": "like"}
+        ).status_code
+        == 404
+    )
+    client.post(
+        "/api/v1/auth/register",
+        json={"email": "other@example.com", "username": "other", "password": "secure-password"},
+    )
+    token = client.post(
+        "/api/v1/auth/login",
+        json={"email_or_username": "other@example.com", "password": "secure-password"},
+    ).json()["access_token"]
+    assert (
+        client.put(
+            url + "/reaction",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"created_at": stamp, "reaction": "like"},
+        ).status_code
+        == 404
+    )
 
 
 def test_cancelled_generation_releases_reserved_daily_quota(client, monkeypatch):
@@ -499,15 +522,19 @@ def test_cancelled_generation_releases_reserved_daily_quota(client, monkeypatch)
     from sqlalchemy import select
 
     _register_and_authenticate(client)
+
     async def cancel(**kwargs):
         raise asyncio.CancelledError()
+
     monkeypatch.setattr(routes, "get_chat_llm_client", lambda: SimpleNamespace(respond=cancel))
     generator = client.app.dependency_overrides[get_db]()
     db = next(generator)
     try:
         user = db.scalar(select(User).where(User.email == "billing@example.com"))
         with pytest.raises(asyncio.CancelledError):
-            asyncio.run(routes.process_llm_message(LLMRequest(context="hello"), BackgroundTasks(), db, user))
+            asyncio.run(
+                routes.process_llm_message(LLMRequest(context="hello"), BackgroundTasks(), db, user)
+            )
         usage = db.scalar(select(DailyLLMUsage).where(DailyLLMUsage.user_id == user.id))
         assert usage.message_count == 0
     finally:

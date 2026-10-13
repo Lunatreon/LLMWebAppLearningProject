@@ -5,7 +5,6 @@ from uuid import uuid4
 import httpx
 import pytest
 
-
 BASE_URL = os.getenv("FEELY_TEST_SERVER_URL", "http://127.0.0.1:8000").rstrip("/")
 API_URL = f"{BASE_URL}/api/v1"
 RUN_LIVE_TESTS = os.getenv("FEELY_RUN_SERVER_TESTS") == "1"

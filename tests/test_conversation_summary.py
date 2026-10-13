@@ -2,7 +2,7 @@ from copy import deepcopy
 
 import pytest
 
-from app.services.conversation_summary import (
+from app.llm.tasks.conversation_summary import (
     summarize_conversation,
     update_conversation_summary,
 )
@@ -51,8 +51,7 @@ def test_empty_older_messages_clear_stale_summary(older_content):
 
 def test_summary_excludes_latest_turns_and_bounds_older_excerpts():
     older_messages = [
-        {"role": "user", "content": " ".join([f"statement-{i}"] * 50)}
-        for i in range(10)
+        {"role": "user", "content": " ".join([f"statement-{i}"] * 50)} for i in range(10)
     ]
     messages = older_messages + [
         {"role": "user", "content": "Recent"},

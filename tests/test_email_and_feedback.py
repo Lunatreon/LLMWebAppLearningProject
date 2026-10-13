@@ -8,9 +8,9 @@ import pytest
 from sqlalchemy import select
 
 from app.api.dependencies import get_db
-from app.core import mail
+from app.integrations import email as mail
 from app.core.config import settings
-from app.core.email_verification import hash_email_verification_pin
+from app.services.email_verification import hash_email_verification_pin
 from app.core.rate_limit import rate_limiter
 from app.core.security import create_access_token, create_admin_access_token, hash_password
 from app.models.user import User, utc_now
@@ -68,9 +68,14 @@ def outbox(monkeypatch):
 
 
 def register(client, email="tester@example.com", username="tester"):
-    return client.post("/api/v1/auth/register", json={
-        "email": email, "username": username, "password": "original-password",
-    })
+    return client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": email,
+            "username": username,
+            "password": "original-password",
+        },
+    )
 
 
 def pin_from(message):
@@ -93,7 +98,10 @@ def test_pin_activation_is_required_scoped_and_single_use(client, outbox):
         token = create_access_token(str(user.id))
     credentials = {"email_or_username": "tester", "password": "original-password"}
     assert client.post("/api/v1/auth/login", json=credentials).status_code == 403
-    assert client.get("/api/v1/users/me", headers={"Authorization": f"Bearer {token}"}).status_code == 403
+    assert (
+        client.get("/api/v1/users/me", headers={"Authorization": f"Bearer {token}"}).status_code
+        == 403
+    )
     assert confirm(client, pin, "someone-else@example.com").status_code == 400
     assert confirm(client, pin).status_code == 200
     assert confirm(client, pin).status_code == 400
@@ -108,7 +116,12 @@ def test_pin_lockout_survives_rate_limiter_reset_and_resend_replaces_pin(client,
         assert confirm(client, wrong).status_code == 400
     rate_limiter.reset()
     assert confirm(client, original).status_code == 400
-    assert client.post("/api/v1/auth/email-verification/request", json={"email": "tester@example.com"}).status_code == 200
+    assert (
+        client.post(
+            "/api/v1/auth/email-verification/request", json={"email": "tester@example.com"}
+        ).status_code
+        == 200
+    )
     assert confirm(client, pin_from(outbox[-1])).status_code == 200
 
 
@@ -129,13 +142,15 @@ def test_expired_pin_and_disabled_accounts_cannot_activate(client, outbox):
 
 
 def test_duplicate_pins_are_safe_for_different_addresses(client, outbox, monkeypatch):
-    monkeypatch.setattr("app.core.email_verification.secrets.randbelow", lambda _: 123)
+    monkeypatch.setattr("app.services.email_verification.secrets.randbelow", lambda _: 123)
     assert register(client).status_code == 201
     assert register(client, "second@example.com", "second").status_code == 201
     assert pin_from(outbox[-1]) == "000123"
     assert confirm(client, "000123").status_code == 200
     with database(client) as db:
-        assert not db.scalar(select(User).where(User.email == "second@example.com")).is_email_verified
+        assert not db.scalar(
+            select(User).where(User.email == "second@example.com")
+        ).is_email_verified
 
 
 @pytest.mark.parametrize("use_ssl", [False, True])
@@ -144,7 +159,9 @@ def test_reset_email_sender_link_and_single_use(client, outbox, monkeypatch, use
     monkeypatch.setattr(settings, "smtp_port", 465 if use_ssl else 587)
     register(client)
     assert confirm(client, pin_from(outbox[-1])).status_code == 200
-    result = client.post("/api/v1/auth/password-reset/request", json={"email": "tester@example.com"})
+    result = client.post(
+        "/api/v1/auth/password-reset/request", json={"email": "tester@example.com"}
+    )
     assert result.status_code == 200
     content = outbox[-1].get_content()
     link = re.search(r"https://app.feel-y.com/\?reset_password_token=\S+", content).group(0)
@@ -152,35 +169,54 @@ def test_reset_email_sender_link_and_single_use(client, outbox, monkeypatch, use
     payload = {"token": token, "new_password": "replacement-password"}
     assert client.post("/api/v1/auth/password-reset/confirm", json=payload).status_code == 200
     assert client.post("/api/v1/auth/password-reset/confirm", json=payload).status_code == 400
-    assert client.post("/api/v1/auth/login", json={"email_or_username": "tester", "password": "replacement-password"}).status_code == 200
+    assert (
+        client.post(
+            "/api/v1/auth/login",
+            json={"email_or_username": "tester", "password": "replacement-password"},
+        ).status_code
+        == 200
+    )
     before = len(outbox)
-    absent = client.post("/api/v1/auth/password-reset/request", json={"email": "absent@example.com"})
+    absent = client.post(
+        "/api/v1/auth/password-reset/request", json={"email": "absent@example.com"}
+    )
     assert absent.json() == result.json()
     assert len(outbox) == before
 
 
 def test_registration_mail_failure_can_be_recovered_with_resend(client, outbox, monkeypatch):
     smtp = mail.smtplib.SMTP
+
     def broken(*args, **kwargs):
         raise smtplib.SMTPAuthenticationError(535, "provider-private-error")
+
     monkeypatch.setattr(mail.smtplib, "SMTP", broken)
     response = register(client)
     assert response.status_code == 502
     assert "account was created" in response.json()["detail"]
     assert "provider-private-error" not in response.text
     monkeypatch.setattr(mail.smtplib, "SMTP", smtp)
-    assert client.post("/api/v1/auth/email-verification/request", json={"email": "tester@example.com"}).status_code == 200
+    assert (
+        client.post(
+            "/api/v1/auth/email-verification/request", json={"email": "tester@example.com"}
+        ).status_code
+        == 200
+    )
     assert confirm(client, pin_from(outbox[-1])).status_code == 200
 
 
 def test_feedback_flag_storage_admin_access_and_account_deletion(client, monkeypatch):
     monkeypatch.setattr(settings, "feedback_enabled", True)
     register(client)
-    token = client.post("/api/v1/auth/login", json={"email_or_username": "tester", "password": "original-password"}).json()["access_token"]
+    token = client.post(
+        "/api/v1/auth/login", json={"email_or_username": "tester", "password": "original-password"}
+    ).json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
     payload = {"category": "bug", "message": "  The map did not open.  "}
     assert client.post("/api/v1/feedback", json=payload).status_code == 401
-    assert client.post("/api/v1/feedback", headers=headers, json={"message": "   "}).status_code == 422
+    assert (
+        client.post("/api/v1/feedback", headers=headers, json={"message": "   "}).status_code == 422
+    )
     result = client.post("/api/v1/feedback", headers=headers, json=payload)
     assert result.status_code == 201
     assert client.get("/api/v1/admin/feedback", headers=headers).status_code == 401
@@ -190,19 +226,29 @@ def test_feedback_flag_storage_admin_access_and_account_deletion(client, monkeyp
     entries = client.get("/api/v1/admin/feedback", headers=admin).json()
     assert entries[0]["message"] == "The map did not open."
     assert entries[0]["email"] == "tester@example.com"
-    assert client.get(f"/api/v1/admin/feedback?before_id={entries[0]['id']}", headers=admin).json() == []
+    assert (
+        client.get(f"/api/v1/admin/feedback?before_id={entries[0]['id']}", headers=admin).json()
+        == []
+    )
     monkeypatch.setattr(settings, "feedback_enabled", False)
     assert client.get("/api/v1/feedback/config").json() == {"enabled": False}
     assert client.post("/api/v1/feedback", headers=headers, json=payload).status_code == 404
     assert len(client.get("/api/v1/admin/feedback", headers=admin).json()) == 1
-    assert client.request("DELETE", "/api/v1/users/me/account", headers=headers,
-                          json={"password": "original-password"}).status_code == 204
+    assert (
+        client.request(
+            "DELETE",
+            "/api/v1/users/me/account",
+            headers=headers,
+            json={"password": "original-password"},
+        ).status_code
+        == 204
+    )
     assert client.get("/api/v1/admin/feedback", headers=admin).json() == []
 
 
 @pytest.mark.parametrize("delivery_fails", [False, True])
 def test_feedback_notification_preserves_saved_submission(client, monkeypatch, delivery_fails):
-    from app.core import feedback_mail
+    from app.services import feedback_notifications as feedback_mail
     from app.models.feedback import Feedback
 
     monkeypatch.setattr(settings, "feedback_enabled", True)
@@ -216,11 +262,18 @@ def test_feedback_notification_preserves_saved_submission(client, monkeypatch, d
 
     monkeypatch.setattr(feedback_mail, "send_mail", deliver)
     register(client)
-    token = client.post("/api/v1/auth/login", json={
-        "email_or_username": "tester", "password": "original-password",
-    }).json()["access_token"]
-    result = client.post("/api/v1/feedback", headers={"Authorization": f"Bearer {token}"},
-                         json={"category": "idea", "message": "Please add a calendar."})
+    token = client.post(
+        "/api/v1/auth/login",
+        json={
+            "email_or_username": "tester",
+            "password": "original-password",
+        },
+    ).json()["access_token"]
+    result = client.post(
+        "/api/v1/feedback",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"category": "idea", "message": "Please add a calendar."},
+    )
     assert result.status_code == 201
     assert len(messages) == 1
     assert messages[0]["To"] == "info@feel-y.com"

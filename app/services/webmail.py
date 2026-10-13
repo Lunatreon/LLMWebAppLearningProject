@@ -1,4 +1,5 @@
 """Pull durable incoming mail from Cloudflare; acknowledge only after DB commit."""
+
 import asyncio
 import logging
 import re
@@ -60,9 +61,17 @@ def save_incoming(db, key, raw):
     if db.scalar(select(MailMessage.id).where(MailMessage.delivery_key == key)):
         return
     msg, body = parse_mail(raw)
-    db.add(MailMessage(delivery_key=key, folder="inbox", sender=str(msg.get("From", "")),
-                       recipient=settings.webmail_address, subject=str(msg.get("Subject", "(No subject)")),
-                       body=body, raw=raw))
+    db.add(
+        MailMessage(
+            delivery_key=key,
+            folder="inbox",
+            sender=str(msg.get("From", "")),
+            recipient=settings.webmail_address,
+            subject=str(msg.get("Subject", "(No subject)")),
+            body=body,
+            raw=raw,
+        )
+    )
     try:
         db.commit()
     except IntegrityError:
@@ -73,6 +82,7 @@ def save_incoming(db, key, raw):
 
 def pull_mail():
     from datetime import datetime, timezone
+
     base = settings.webmail_worker_url.rstrip("/")
     if not base or len(settings.webmail_bridge_secret) < 32:
         sync_state["error"] = "Incoming mail bridge is not configured."
@@ -81,8 +91,12 @@ def pull_mail():
         sync_state["error"] = "The mail bridge must use HTTPS."
         return
     try:
-        with httpx.Client(base_url=base, headers={"Authorization": f"Bearer {settings.webmail_bridge_secret}"},
-                          timeout=30, follow_redirects=False) as client:
+        with httpx.Client(
+            base_url=base,
+            headers={"Authorization": f"Bearer {settings.webmail_bridge_secret}"},
+            timeout=30,
+            follow_redirects=False,
+        ) as client:
             response = client.get("/messages")
             response.raise_for_status()
             for key in response.json()["keys"]:

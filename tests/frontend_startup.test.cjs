@@ -147,7 +147,7 @@ test("temporary gateway errors recover before application startup", async () => 
   assert.equal(f.loadedScripts.filter(name => name === "app.js").length, 1);
 });
 
-test("persistent gateway errors stop after three attempts", async () => {
+test("persistent gateway errors stop after six attempts", async () => {
   const attempts = new Map();
   const f = fixture({ viewResponse: async name => {
     attempts.set(name, (attempts.get(name) || 0) + 1);
@@ -155,7 +155,7 @@ test("persistent gateway errors stop after three attempts", async () => {
   } });
   assert.equal(await f.ready, false);
   assert.equal(f.loadedScripts.length, 0);
-  assert.equal(Math.max(...attempts.values()), 3);
+  assert.equal(Math.max(...attempts.values()), 6);
   assert.equal(f.nodes.get("app-loading-retry").hidden, false);
 });
 

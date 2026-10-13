@@ -13,7 +13,7 @@ These are developer-defined options; there is currently no admin page for creati
 | Topic type | Person, Trait, Experience, Other | `app/schemas/profile.py` (`TopicCategory`), `app/services/self_authorship.py` (`TOPIC_CATEGORIES`), `website/js/map.js` (`TOPIC_CATEGORIES`) |
 | Note category | Inherited script, My perception, Value, Body signal, Practice, Evidence | `app/schemas/profile.py` (`MapEntryCategory`), `app/services/self_authorship.py` (`ENTRY_CATEGORIES`), `website/app.js` (`MAP_CATEGORY_LABELS`) |
 
-To add a choice, update its backend validation and frontend label definitions together. Also update any matching literals in `app/schemas/llm.py` and `app/schemas/journal.py`, the structured AI response enums in `app/services/llm/responses.py`, and the category guidance in the relevant files under `prompts/`. Topic choices in the chat form are also listed in `website/views/chat.html`.
+To add a choice, update its backend validation and frontend label definitions together. Also update any matching literals in `app/schemas/llm.py` and `app/schemas/journal.py`, the structured AI response enums in `app/llm/responses.py`, and the category guidance in the relevant files under `prompts/`. Topic choices in the chat form are also listed in `website/views/chat.html`.
 
 `merged_topic` is reserved for the merge history; it is excluded from suggestion category pickers.
 

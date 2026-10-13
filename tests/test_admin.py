@@ -2,17 +2,20 @@ from app.core.config import settings
 from app.core.security import hash_password
 import pytest
 
-from app.services.prompts import (
+from app.llm.prompts import (
     PromptConfigurationError,
     read_system_prompt,
 )
 
 
 def register_and_login(client, email: str, username: str, password: str = "secure-pass"):
-    assert client.post(
-        "/api/v1/auth/register",
-        json={"email": email, "username": username, "password": password},
-    ).status_code == 201
+    assert (
+        client.post(
+            "/api/v1/auth/register",
+            json={"email": email, "username": username, "password": password},
+        ).status_code
+        == 201
+    )
     token = client.post(
         "/api/v1/auth/login",
         json={"email_or_username": email, "password": password},
@@ -36,52 +39,101 @@ def test_admin_creates_roles_and_revokes_database_admin_access(monkeypatch, clie
     root = configure_and_login_admin(monkeypatch, client)
     accounts = {}
     for role in ("member", "test", "admin"):
-        response = client.post("/api/v1/admin/users", headers=root, json={
-            "email": f"{role}@example.com", "username": f"role_{role}",
-            "password": "account-password", "role": role,
-        })
+        response = client.post(
+            "/api/v1/admin/users",
+            headers=root,
+            json={
+                "email": f"{role}@example.com",
+                "username": f"role_{role}",
+                "password": "account-password",
+                "role": role,
+            },
+        )
         assert response.status_code == 201
         accounts[role] = response.json()
         assert accounts[role]["role"] == role
-        login = client.post("/api/v1/admin/login", json={
-            "username": f"{role}@example.com", "password": "account-password",
-        })
+        login = client.post(
+            "/api/v1/admin/login",
+            json={
+                "username": f"{role}@example.com",
+                "password": "account-password",
+            },
+        )
         assert login.status_code == (200 if role == "admin" else 401)
         if role == "admin":
             database_admin = {"Authorization": f"Bearer {login.json()['access_token']}"}
     assert client.get("/api/v1/admin/users", headers=database_admin).status_code == 200
     assert client.get("/api/v1/users/me", headers=database_admin).status_code == 401
-    assert client.patch(f"/api/v1/admin/users/{accounts['admin']['id']}", headers=root,
-                        json={"role": "test"}).status_code == 200
+    assert (
+        client.patch(
+            f"/api/v1/admin/users/{accounts['admin']['id']}", headers=root, json={"role": "test"}
+        ).status_code
+        == 200
+    )
     assert client.get("/api/v1/admin/users", headers=database_admin).status_code == 401
-    assert client.post("/api/v1/admin/users", headers=root, json={
-        "email": "new@example.com", "username": "ROLE_TEST", "password": "account-password",
-    }).status_code == 409
-    assert client.patch(f"/api/v1/admin/users/{accounts['test']['id']}", headers=root,
-                        json={"role": "invalid"}).status_code == 422
+    assert (
+        client.post(
+            "/api/v1/admin/users",
+            headers=root,
+            json={
+                "email": "new@example.com",
+                "username": "ROLE_TEST",
+                "password": "account-password",
+            },
+        ).status_code
+        == 409
+    )
+    assert (
+        client.patch(
+            f"/api/v1/admin/users/{accounts['test']['id']}", headers=root, json={"role": "invalid"}
+        ).status_code
+        == 422
+    )
 
 
 def test_regular_accounts_cannot_grant_roles_or_manage_users(monkeypatch, client):
 
     root = configure_and_login_admin(monkeypatch, client)
-    client.post("/api/v1/auth/register", json={
-        "email": "ordinary@example.com", "username": "ordinary", "password": "account-password",
-        "role": "admin",
-    })
-    token = client.post("/api/v1/auth/login", json={
-        "email_or_username": "ordinary", "password": "account-password",
-    }).json()["access_token"]
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "ordinary@example.com",
+            "username": "ordinary",
+            "password": "account-password",
+            "role": "admin",
+        },
+    )
+    token = client.post(
+        "/api/v1/auth/login",
+        json={
+            "email_or_username": "ordinary",
+            "password": "account-password",
+        },
+    ).json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
     member = client.get("/api/v1/users/me/account", headers=headers).json()
     assert member["role"] == "member"
     client.patch("/api/v1/users/me/account", headers=headers, json={"role": "admin"})
     assert client.get("/api/v1/users/me/account", headers=headers).json()["role"] == "member"
-    assert client.patch(f"/api/v1/admin/users/{member['id']}", headers=headers,
-                        json={"role": "admin"}).status_code == 401
-    assert client.post("/api/v1/admin/users", headers=headers, json={
-        "email": "blocked@example.com", "username": "blocked", "password": "account-password",
-        "role": "admin",
-    }).status_code == 401
+    assert (
+        client.patch(
+            f"/api/v1/admin/users/{member['id']}", headers=headers, json={"role": "admin"}
+        ).status_code
+        == 401
+    )
+    assert (
+        client.post(
+            "/api/v1/admin/users",
+            headers=headers,
+            json={
+                "email": "blocked@example.com",
+                "username": "blocked",
+                "password": "account-password",
+                "role": "admin",
+            },
+        ).status_code
+        == 401
+    )
     for role in ("test", "admin"):
         client.patch(f"/api/v1/admin/users/{member['id']}", headers=root, json={"role": role})
         assert client.get("/api/v1/users/me/account", headers=headers).json()["role"] == role
@@ -134,10 +186,13 @@ def test_admin_routes_are_allowlisted_and_manage_users(monkeypatch, client):
         json={"new_password": "new-secure-pass"},
     )
     assert reset.status_code == 200
-    assert client.post(
-        "/api/v1/auth/login",
-        json={"email_or_username": "member@example.com", "password": "new-secure-pass"},
-    ).status_code == 200
+    assert (
+        client.post(
+            "/api/v1/auth/login",
+            json={"email_or_username": "member@example.com", "password": "new-secure-pass"},
+        ).status_code
+        == 200
+    )
 
     removed = client.post(
         f"/api/v1/admin/users/{member['id']}/subscription/remove",
@@ -171,7 +226,9 @@ def test_admin_prompt_edits_are_loaded_from_files(monkeypatch, client, tmp_path)
     )
     assert changed.status_code == 200
     assert read_system_prompt("chat") == changed_text.strip()
-    assert (tmp_path / "prompts" / "chat_system.txt").read_text(encoding="utf-8").strip() == changed_text.strip()
+    assert (tmp_path / "prompts" / "chat_system.txt").read_text(
+        encoding="utf-8"
+    ).strip() == changed_text.strip()
 
 
 def test_admin_login_is_independent_and_requires_configuration(monkeypatch, client):

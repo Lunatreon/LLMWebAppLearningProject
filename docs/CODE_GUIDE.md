@@ -243,11 +243,11 @@ Response body:
 
 ## LLM Service Design
 
-The LLM package lives in `app/services/llm/`. Provider implementations depend on
+The LLM package lives in `app/llm/`. Provider implementations depend on
 shared contracts, context builders, and response validators. Those shared modules
 do not import providers or HTTP routes. Provider implementations and selection
-live in `providers/`; operations such as journal analysis live in `tasks/`. Editable prompt files are handled by `app/services/prompts.py`.
-See `app/services/llm/README.md` for where to put a change.
+live in `providers/`; operations such as journal analysis live in `tasks/`. Editable prompt files are handled by `app/llm/prompts.py`.
+See `app/llm/README.md` for where to put a change.
 
 FastAPI, Pydantic, SQLAlchemy, and the official provider SDKs remain the framework
 boundaries. Adding a feature does not require a new framework or a provider rewrite.
@@ -309,7 +309,7 @@ per-role model overrides remain supported; local development does not need a key
 
 The existing summary is a compact memory for future model requests, not a
 separate user-facing summary feature. Its implementation is now isolated in
-`app/services/conversation_summary.py`:
+`app/llm/tasks/conversation_summary.py`:
 
 1. `summarize_conversation(messages)` produces bounded, verbatim excerpts from
    older user messages. It excludes assistant interpretations and the most recent
@@ -498,7 +498,7 @@ def create_note(payload: NoteCreate, db: Session = Depends(get_db)):
 
 ## How To Add A New LLM Provider
 
-Add a provider module under `app/services/llm/providers/`. Reuse the contracts in `types.py`,
+Add a provider module under `app/llm/providers/`. Reuse the contracts in `types.py`,
 payload builders in `context.py`, and validators in `responses.py`.
 
 Implement either the chat protocol, topic protocol, or both. A chat provider
@@ -520,7 +520,7 @@ async def respond(
 Example:
 
 ```python
-from app.services.llm.types import ChatLLMResult
+from app.llm.types import ChatLLMResult
 
 
 class MyLLMClient:
@@ -539,7 +539,7 @@ class MyLLMClient:
         )
 ```
 
-Then update the matching factory in `app/services/llm/providers/factory.py`:
+Then update the matching factory in `app/llm/providers/factory.py`:
 
 ```python
 def get_chat_llm_client() -> ChatLLMClient:
