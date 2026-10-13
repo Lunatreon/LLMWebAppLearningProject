@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.vitest/
+*.tsbuildinfo
+package-lock.json
+.env*
+__pycache__/

@@ -1,0 +1,161 @@
+/* Keep the reference stylesheet as the source of truth during migration.
+   Vite resolves its relative image URLs from website/ and bundles the assets. */
+@import '../../../website/styles.css';
+
+/* Inactive auth tabs are Router links with the original button geometry. */
+.auth-tabs a.tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+/* Local shell additions only: the reference has no active feedback/account
+   route state. Keep its palette and spacing while making selection visible. */
+.sidebar-feedback-link.active,
+.sidebar-profile .icon-button[aria-current='page'] {
+  background: var(--night-soft);
+  box-shadow: inset 0 0 0 1px var(--line-dark);
+}
+
+html[data-theme='light'] .sidebar-journal-link.active {
+  color: var(--ink);
+}
+
+.sidebar-profile .icon-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* Feedback is a routed paper panel.
+   Its ID/classes retain the reference form sizing, padding and mobile rules. */
+.feedback-page {
+  position: relative;
+  flex-shrink: 0;
+  margin: 0 auto;
+}
+
+.feedback-page > .dialog-close {
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+}
+
+/* Same paper panel/form geometry as the legacy #terms-review dialog. */
+.terms-page {
+  position: relative;
+  flex-shrink: 0;
+  margin: 0 auto;
+}
+
+/* Account retains its dialog/header/grid styling in the routed presentation. */
+.account-page {
+  position: relative;
+  flex-shrink: 0;
+  margin: 0 auto;
+}
+
+.account-page > .account-dialog-close {
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+}
+
+/* Preserve reference PIN/dialog geometry within the existing routed auth shell. */
+.auth-panel:has(> .activation-page) {
+  padding: 0;
+}
+.activation-page {
+  position: relative;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  box-shadow: none;
+}
+.activation-page > .dialog-close {
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+}
+
+.auth-panel:has(> .recovery-page) {
+  padding: 0;
+}
+.recovery-page {
+  position: relative;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  box-shadow: none;
+}
+.recovery-page > .dialog-close {
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+}
+
+/* Premium is still a reference action; retain the original button geometry. */
+.map-paywall-actions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  min-width: 160px;
+  padding: 0 16px;
+}
+
+/* Router links keep the existing Map button geometry. */
+.map-connected-chats a {
+  display: block;
+  text-decoration: none;
+  min-width: 0;
+  min-height: 36px;
+  border: 1px solid rgba(120, 100, 157, 0.16);
+  border-radius: 8px;
+  padding: 7px 9px;
+  background: rgba(255, 253, 249, 0.72);
+  color: var(--ink);
+  text-align: left;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.map-task-actions a {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  min-height: 28px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0 10px;
+  background: var(--ink);
+  color: var(--white);
+  font-size: 10px;
+  font-weight: 800;
+}
+.map-entry-menu a {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  min-height: 30px;
+  border-radius: 6px;
+  padding: 0 8px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* Reuse native dialog geometry for the controlled Reflection modal. */
+.reflection-dialog {
+  max-height: calc(var(--app-height) - 36px);
+  overflow-y: auto;
+}
+
+/* Reference actions are links with the original Chat button styling. */
+a.chat-plan-upgrade,
+a.message-upgrade-button {
+  text-decoration: none;
+}
