@@ -23,6 +23,7 @@
 !deployment/
 !deployment/Caddyfile
 !deployment/frontend.Dockerfile
+!deployment/configure-reference.mjs
 **/node_modules/
 **/dist/
 **/.env*

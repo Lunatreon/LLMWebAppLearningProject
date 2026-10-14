@@ -203,7 +203,13 @@ with engine.connect() as connection:
     role = connection.execute(text("SELECT rolsuper, rolcreatedb, rolcreaterole FROM pg_roles WHERE rolname = current_user")).one()
     assert not any(role)
     transaction = connection.get_transaction()
-    connection.execute(text("INSERT INTO users (email, username, hashed_password, is_active, is_email_verified, created_at, updated_at, auth_provider, role, email_verification_attempts) VALUES ('ci@example.invalid', 'ci-owner-probe', 'not-a-login-hash', true, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'password', 'member', 0) RETURNING id")).scalar_one()
+    connection.execute(text(
+        "INSERT INTO users "
+        "(email, username, hashed_password, is_active, is_email_verified, created_at, "
+        "updated_at, auth_provider, role, email_verification_attempts) "
+        "VALUES ('ci@example.invalid', 'ci-owner-probe', 'not-a-login-hash', true, false, "
+        "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'password', 'member', 0) RETURNING id"
+    )).scalar_one()
     transaction.rollback()
 engine.dispose()
 """

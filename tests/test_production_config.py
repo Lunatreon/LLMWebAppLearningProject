@@ -3,16 +3,17 @@
 import asyncio
 import json
 import os
-from pathlib import Path
-from urllib.parse import urlsplit
 
 import httpx
 import pytest
+from fastapi.testclient import TestClient
 from openai import AsyncOpenAI
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.core.config import settings
 from app.core.production import public_https_url
 from app.llm.providers.openai import OpenAIChatLLMClient
+from app.main import create_app
 from scripts.production_ci import create_fixture
 from scripts.production_config import load_production, write_backend_environment
 
@@ -111,6 +112,43 @@ def test_public_urls_reject_credentials_loopback_and_invalid_origins():
     assert not public_https_url("https://app.example.invalid:5173")
     assert not public_https_url("https://user:password@app.example.invalid")
     assert not public_https_url("https://app.example.invalid/path", origin_only=True)
+
+
+@pytest.mark.parametrize(
+    "peer, expected", [("172.30.20.2", "198.51.100.7"), ("198.51.100.9", "198.51.100.9")]
+)
+def test_only_the_selected_proxy_can_set_client_ip_and_scheme(peer, expected):
+    captured = {}
+
+    async def app(scope, receive, send):
+        captured.update(scope)
+
+    async def check():
+        middleware = ProxyHeadersMiddleware(app, trusted_hosts=["172.30.20.2"])
+        await middleware(
+            {
+                "type": "http",
+                "scheme": "http",
+                "client": (peer, 1234),
+                "headers": [
+                    (b"x-forwarded-for", b"198.51.100.7"),
+                    (b"x-forwarded-proto", b"https"),
+                ],
+            },
+            None,
+            None,
+        )
+
+    asyncio.run(check())
+    assert captured["client"][0] == expected
+    assert captured["scheme"] == ("https" if peer == "172.30.20.2" else "http")
+
+
+def test_configured_hosts_reject_unknown_hosts_without_changing_health_contract(monkeypatch):
+    monkeypatch.setattr(settings, "allowed_hosts", ["app.example.invalid"])
+    client = TestClient(create_app(init_database=False), base_url="https://app.example.invalid")
+    assert client.get("/api/v1/health").json() == {"status": "ok"}
+    assert client.get("/api/v1/health", headers={"Host": "unexpected.invalid"}).status_code == 400
 
 
 def test_openai_uses_explicit_sdk_limits_and_preserves_one_chunk_callback(monkeypatch):

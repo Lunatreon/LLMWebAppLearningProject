@@ -1,5 +1,9 @@
 # Local deployment environment — Backend Phase 3
 
+For the separate production configuration and operator procedures, see
+[DEPLOYMENT_PRODUCTION.md](DEPLOYMENT_PRODUCTION.md). This local stack retains
+Mailpit, mock LLM, loopback ports and its existing development environment.
+
 The primary Compose stack runs the existing FastAPI entry point, PostgreSQL 17
 and Mailpit. React stays on the host. The host-based SQLite `.env`, `feely.db`,
 legacy website and frontend implementation are untouched. Nothing is deployed

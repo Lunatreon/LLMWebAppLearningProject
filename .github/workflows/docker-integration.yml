@@ -3,7 +3,13 @@ name: Docker integration
 on:
   pull_request:
   push:
-    branches: [main, master, codex/backend-phase35-docker-validation, codex/backend-phase4-production-readiness]
+    branches:
+      [
+        main,
+        master,
+        codex/backend-phase35-docker-validation,
+        codex/backend-phase4-production-readiness,
+      ]
   workflow_dispatch:
 
 permissions:

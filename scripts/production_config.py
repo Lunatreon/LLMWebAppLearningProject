@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 
 from dotenv import dotenv_values
+from pydantic import ValidationError
 from sqlalchemy.engine import make_url
 
 from app.core.config import Settings
@@ -19,6 +20,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def load_production(path):
+    if not path.is_file():
+        raise RuntimeError("The private production master env file does not exist.")
     values = dict(dotenv_values(path, interpolate=False))
     defaults = {
         name: field.get_default(call_default_factory=True)
@@ -27,7 +30,15 @@ def load_production(path):
     for name in defaults:
         raw = values.get(name.upper())
         if raw is not None:
-            defaults[name] = json.loads(raw) if name in {"allowed_hosts", "cors_origins"} else raw
+            if name in {"allowed_hosts", "cors_origins"}:
+                try:
+                    defaults[name] = json.loads(raw)
+                except ValueError:
+                    raise RuntimeError(
+                        f"{name.upper()} must be a JSON list of hostnames/origins."
+                    ) from None
+            else:
+                defaults[name] = raw
     # Supplying every field prevents host environment variables filling absent credentials.
     config = Settings(_env_file=None, **defaults)
     if config.is_local_environment:
@@ -105,10 +116,8 @@ def validate_deployment_values(config, values):
                 raise RuntimeError(f"{key} cannot use a protocol-relative URL.")
 
 
-def write_backend_environment(config, target, *, replace=False):
-    if target.exists() and not replace:
-        raise FileExistsError("Backend env already exists; use --replace after reviewing changes.")
-    lines = []
+def backend_environment(config):
+    values = {}
     for name, value in config.model_dump().items():
         if value is None:
             # An explicit None for a role whose default is local must keep inheritance.
@@ -122,7 +131,14 @@ def write_backend_environment(config, target, *, replace=False):
             value = str(value)
         if "\n" in value or "\r" in value:
             raise RuntimeError(f"{name.upper()} cannot contain a newline in the runtime env file.")
-        lines.append(f"{name.upper()}={value}")
+        values[name.upper()] = value
+    return values
+
+
+def write_backend_environment(config, target, *, replace=False):
+    if target.exists() and not replace:
+        raise FileExistsError("Backend env already exists; use --replace after reviewing changes.")
+    lines = [f"{name}={value}" for name, value in backend_environment(config).items()]
     # Compose env_file format: raw preserves literal $, # and quotes in provider passwords.
     descriptor, temporary = tempfile.mkstemp(prefix=".feely-production-", dir=target.parent)
     try:
@@ -186,9 +202,9 @@ def check_compose(config, values, command, environment):
         )
     if backend["environment"].get("ENVIRONMENT") != "production":
         raise RuntimeError("The filtered backend env must select production.")
-    if backend["environment"].get("DATABASE_URL") != config.database_url:
+    if backend["environment"] != backend_environment(config):
         raise RuntimeError(
-            "Regenerate the filtered backend env; DATABASE_URL differs from the master."
+            "Regenerate the filtered backend env; runtime values differ from the validated master."
         )
     if set(backend["depends_on"]) != {"postgres"}:
         raise RuntimeError("Production backend must not depend on Mailpit.")
@@ -242,6 +258,9 @@ def main():
             if type(error) in {RuntimeError, FileExistsError}
             else "Invalid or missing production configuration."
         )
+        if isinstance(error, ValidationError):
+            fields = sorted({str(item["loc"][0]).upper() for item in error.errors()})
+            message = "Invalid production settings: " + ", ".join(fields) + "."
         print(f"Production {args.action}: FAIL. {message}")
         raise SystemExit(1) from None
 

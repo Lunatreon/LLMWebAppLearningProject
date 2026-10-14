@@ -24,6 +24,7 @@ ENV/
 node_modules/
 !.env.example
 !.env.production.example
+.feely-production-*
 
 # Local databases and generated files
 *.db

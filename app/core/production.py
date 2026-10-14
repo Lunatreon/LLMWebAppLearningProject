@@ -96,12 +96,15 @@ def validate_production_config(config) -> None:
         raise RuntimeError(
             "SMTP_HOST must use a production delivery service, not a local mail capture target."
         )
+    if not 1 <= config.smtp_port <= 65535:
+        raise RuntimeError("SMTP_PORT must be a valid TCP port.")
     if config.smtp_use_tls == config.smtp_use_ssl:
         raise RuntimeError(
             "Enable exactly one of SMTP_USE_TLS (STARTTLS) and SMTP_USE_SSL (implicit TLS)."
         )
     if bool(config.smtp_username) != bool(config.smtp_password) or (
-        config.smtp_password and not configured(config.smtp_password)
+        config.smtp_password
+        and (not configured(config.smtp_password) or not configured(config.smtp_username))
     ):
         raise RuntimeError(
             "SMTP_USERNAME and SMTP_PASSWORD must be configured together when SMTP authentication is used."
@@ -126,8 +129,10 @@ def validate_production_config(config) -> None:
         raise RuntimeError(
             "TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY must not contain placeholders."
         )
+    if not configured(config.turnstile_action):
+        raise RuntimeError("TURNSTILE_ACTION must be configured, not a placeholder.")
     if (
-        not config.terms_version.strip()
+        not configured(config.terms_version)
         or not public_https_url(config.terms_document_url)
         or not config.terms_document_sha256
     ):

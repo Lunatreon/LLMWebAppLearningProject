@@ -12,6 +12,12 @@
         Permissions-Policy "camera=(), microphone=(), geolocation=()"
     }
 
+    @historical_activation {
+        path / /index.html /chat.html
+        query verify_email_token=*
+    }
+    redir @historical_activation /reference/?{query} 307
+
     handle /api/* {
         reverse_proxy backend:8000 {
             # Preserve NDJSON delivery and replace all untrusted client IP/scheme headers.
