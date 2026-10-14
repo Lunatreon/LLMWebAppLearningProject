@@ -24,6 +24,13 @@ persist credentials. Fork PR code runs under `pull_request`, with no secrets.
 The workflow installs the existing dev dependencies, runs the complete default
 SQLite Python suite and legacy JS suite, then calls `scripts/docker_integration.py`:
 
+The regression step explicitly selects `ENVIRONMENT=local` and a loopback CORS
+allowlist without opaque (`null`) origins, reproducing the existing tested local
+configuration without copying a developer `.env`. A clean checkout otherwise
+uses the application's older fallback CORS list, which includes `null` and
+contradicts the existing opaque-origin rejection test. This CI configuration
+does not change application defaults or the Docker runtime environment.
+
 1. Generate a separate `.env.docker` with the existing generator, random throwaway
    signing/database secrets, mock LLM, Mailpit and synthetic configured Terms
    metadata. The React reset origin stays `http://127.0.0.1:5173`. No external
