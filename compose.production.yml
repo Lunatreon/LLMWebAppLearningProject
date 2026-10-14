@@ -1,0 +1,89 @@
+# Run this file alone: --env-file .env.production -f compose.production.yml.
+# extends reuses the validated runtime definitions without importing Mailpit.
+name: feely-production
+
+services:
+  backend:
+    extends:
+      file: compose.yml
+      service: backend
+    # The filtered file contains Settings fields only, never the bootstrap DB secret.
+    env_file: !override
+      - path: ${FEELY_PRODUCTION_APP_ENV_FILE:-.env.production.backend}
+        format: raw
+    environment: !reset {}
+    ports: !reset []
+    depends_on: !override
+      postgres:
+        condition: service_healthy
+    command:
+      - python
+      - -m
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --workers
+      - "1"
+      - --proxy-headers
+      - --forwarded-allow-ips
+      - ${FEELY_PROXY_IP:?Configure the single trusted Caddy address}
+      - --no-server-header
+      - --no-access-log
+    networks:
+      ingress:
+        ipv4_address: ${FEELY_BACKEND_IP:?Configure the reserved backend ingress address}
+      database:
+
+  postgres:
+    extends:
+      file: compose.yml
+      service: postgres
+    environment:
+      POSTGRES_APP_USER: ${POSTGRES_APP_USER:?Configure the non-superuser application owner}
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:?Configure the application DB password}
+    volumes:
+      - ./deployment/postgres/init-app-role.sh:/docker-entrypoint-initdb.d/10-app-role.sh:ro
+    networks:
+      - database
+
+  caddy:
+    build:
+      context: .
+      dockerfile: deployment/frontend.Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
+        VITE_LEGACY_APP_URL: ${VITE_LEGACY_APP_URL:-/reference/}
+        VITE_LEGACY_SIGN_IN_URL: ${VITE_LEGACY_SIGN_IN_URL:-/reference/}
+    environment:
+      INGRESS_DOMAIN: ${INGRESS_DOMAIN:?Configure the public Caddy hostname}
+      ACME_EMAIL: ${ACME_EMAIL:?Configure the certificate contact email}
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      backend:
+        condition: service_healthy
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      ingress:
+        ipv4_address: ${FEELY_PROXY_IP:?Configure the single trusted Caddy address}
+    restart: unless-stopped
+
+networks:
+  ingress:
+    ipam:
+      config:
+        - subnet: ${FEELY_PROXY_SUBNET:?Configure the private ingress Docker subnet}
+  database:
+    internal: true
+
+volumes:
+  postgres_data:
+  prompts_data:
+  caddy_data:
+  caddy_config:

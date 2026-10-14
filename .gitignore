@@ -23,6 +23,7 @@ ENV/
 .wrangler/
 node_modules/
 !.env.example
+!.env.production.example
 
 # Local databases and generated files
 *.db

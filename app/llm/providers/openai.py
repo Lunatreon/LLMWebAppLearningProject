@@ -1,6 +1,9 @@
 """OpenAI transport using the official asynchronous SDK."""
 
 from typing import Any
+import logging
+
+from app.core.config import settings
 
 from app.llm.context import chat_request_payload, topic_request_payload
 from app.llm.json_response import parse_json_response
@@ -8,13 +11,40 @@ from app.llm.responses import chat_result_from_payload, topic_result_from_payloa
 from app.llm.types import ChatLLMResult, TextChunkCallback, TopicLLMResult
 from app.llm.prompts import read_system_prompt
 
+logger = logging.getLogger(__name__)
+
 
 class OpenAIBaseClient:
     def __init__(self, api_key: str, model: str) -> None:
         from openai import AsyncOpenAI
 
-        self.client = AsyncOpenAI(api_key=api_key)
+        self.client = AsyncOpenAI(
+            api_key=api_key,
+            timeout=settings.openai_timeout_seconds,
+            max_retries=settings.openai_max_retries,
+        )
         self.model = model
+
+    async def complete(self, messages):
+        from openai import APIError
+
+        try:
+            return await self.client.chat.completions.create(
+                model=self.model,
+                response_format={"type": "json_object"},
+                messages=messages,
+            )
+        except APIError as error:
+            # SDK exceptions may contain the provider response or private request text.
+            logger.warning(
+                "OpenAI request failed: error_type=%s status=%s",
+                type(error).__name__,
+                getattr(error, "status_code", None),
+            )
+            raise RuntimeError("OpenAI provider request failed.") from None
+        finally:
+            # Each factory-created provider owns one request, including cancellation.
+            await self.client.close()
 
 
 class OpenAIChatLLMClient(OpenAIBaseClient):
@@ -27,10 +57,8 @@ class OpenAIChatLLMClient(OpenAIBaseClient):
         *,
         on_text_chunk: TextChunkCallback | None = None,
     ) -> ChatLLMResult:
-        response = await self.client.chat.completions.create(
-            model=self.model,
-            response_format={"type": "json_object"},
-            messages=[
+        response = await self.complete(
+            [
                 {
                     "role": "system",
                     "content": read_system_prompt("chat"),
@@ -55,10 +83,8 @@ class OpenAITopicLLMClient(OpenAIBaseClient):
         topic_hint: str | None = None,
         available_topics: list[dict[str, Any]] | None = None,
     ) -> TopicLLMResult:
-        response = await self.client.chat.completions.create(
-            model=self.model,
-            response_format={"type": "json_object"},
-            messages=[
+        response = await self.complete(
+            [
                 {
                     "role": "system",
                     "content": read_system_prompt("topic"),

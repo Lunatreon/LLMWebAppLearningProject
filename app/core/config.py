@@ -45,6 +45,7 @@ class Settings(BaseSettings):
         ]
     )
     trust_proxy_headers: bool = False
+    allowed_hosts: list[str] = Field(default_factory=list)
     max_request_body_bytes: int = 128_000
     api_docs_enabled: bool = False
     rate_limit_http_per_minute: int = 300
@@ -110,6 +111,8 @@ class Settings(BaseSettings):
     topic_llm_provider: str | None = "local"
     journal_llm_provider: str | None = None
     openai_api_key: str | None = None
+    openai_timeout_seconds: float = Field(default=600.0, gt=0, le=600)
+    openai_max_retries: int = Field(default=2, ge=0, le=3)
     openai_model: str = "gpt-5.4-mini"
     openai_chat_model: str | None = None
     openai_topic_model: str | None = None
@@ -185,6 +188,10 @@ class Settings(BaseSettings):
             )
         if self.password_reset_enabled and not self.email_delivery_configured:
             raise RuntimeError("SMTP settings must be configured when password reset is enabled.")
+
+        from app.core.production import validate_production_config
+
+        validate_production_config(self)
 
     @property
     def email_delivery_configured(self) -> bool:

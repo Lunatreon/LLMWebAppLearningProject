@@ -14,6 +14,8 @@ from app.db.session import create_database_engine, database_url
 def check_health() -> None:
     port = int(os.environ.get("FEELY_HEALTH_PORT", "8000"))
     request = Request(f"http://127.0.0.1:{port}{settings.api_v1_prefix}/health")
+    if settings.allowed_hosts:
+        request.add_header("Host", settings.allowed_hosts[0])
     if settings.basic_auth_enabled:
         credentials = f"{settings.basic_auth_username or ''}:{settings.basic_auth_password or ''}"
         encoded = base64.b64encode(credentials.encode()).decode()

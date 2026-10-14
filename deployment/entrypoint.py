@@ -26,6 +26,17 @@ def wait_for_database(timeout_seconds: float = 60, retry_seconds: float = 2) -> 
             try:
                 with engine.connect() as connection:
                     connection.execute(text("SELECT 1"))
+                    if not settings.is_local_environment:
+                        privileges = connection.execute(
+                            text(
+                                "SELECT rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls "
+                                "FROM pg_roles WHERE rolname = current_user"
+                            )
+                        ).one()
+                        if any(privileges):
+                            raise RuntimeError(
+                                "The production application role must not have PostgreSQL administrative privileges."
+                            )
                 return
             except SQLAlchemyError:
                 if time.monotonic() >= deadline:
@@ -52,7 +63,11 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except (RuntimeError, subprocess.CalledProcessError):
+    except RuntimeError as error:
+        # Validation/readiness errors contain field names, never configured secret values.
+        print(f"Backend startup refused: {error}", file=sys.stderr)
+        raise SystemExit(1) from None
+    except subprocess.CalledProcessError:
         print(
             "Backend startup failed. Check database readiness, Alembic and runtime configuration.",
             file=sys.stderr,

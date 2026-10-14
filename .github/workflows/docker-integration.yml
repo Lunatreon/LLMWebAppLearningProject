@@ -3,7 +3,7 @@ name: Docker integration
 on:
   pull_request:
   push:
-    branches: [main, master, codex/backend-phase35-docker-validation]
+    branches: [main, master, codex/backend-phase35-docker-validation, codex/backend-phase4-production-readiness]
   workflow_dispatch:
 
 permissions:
@@ -67,3 +67,43 @@ jobs:
             ${{ env.FEELY_DOCKER_TEST_DIR }}/summary.md
             ${{ env.FEELY_DOCKER_TEST_DIR }}/report.json
             ${{ env.FEELY_DOCKER_TEST_DIR }}/*.log
+
+  production-config:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      FEELY_PRODUCTION_CI_DIR: /tmp/feely-production-ci-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.13.14'
+      - name: Install configuration validation dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Prepare synthetic production values without provider credentials
+        run: >-
+          python -m scripts.production_ci prepare
+          --directory "$FEELY_PRODUCTION_CI_DIR"
+          --project "feely-prod-ci-${{ github.run_id }}-${{ github.run_attempt }}"
+      - name: Validate production Compose and missing-configuration guards
+        run: python -m scripts.production_ci check --directory "$FEELY_PRODUCTION_CI_DIR"
+      - name: Build production images and validate Caddy without serving publicly
+        run: python -m scripts.production_ci build --directory "$FEELY_PRODUCTION_CI_DIR"
+      - name: Verify non-superuser production DB initialization, Alembic and readiness
+        run: python -m scripts.production_ci run --directory "$FEELY_PRODUCTION_CI_DIR"
+      - name: Always scan and collect sanitized production diagnostics
+        if: ${{ always() }}
+        run: python -m scripts.production_ci logs --directory "$FEELY_PRODUCTION_CI_DIR"
+      - name: Always remove disposable production rehearsal resources
+        if: ${{ always() }}
+        run: python -m scripts.production_ci cleanup --directory "$FEELY_PRODUCTION_CI_DIR"
+      - name: Upload sanitized production evidence only
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: production-config-results
+          retention-days: 7
+          if-no-files-found: ignore
+          path: ${{ env.FEELY_PRODUCTION_CI_DIR }}/*.log

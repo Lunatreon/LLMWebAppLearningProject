@@ -1,0 +1,39 @@
+{
+    email {$ACME_EMAIL}
+    admin off
+}
+
+{$INGRESS_DOMAIN} {
+    header {
+        -Server
+        X-Content-Type-Options nosniff
+        Referrer-Policy no-referrer
+        X-Frame-Options DENY
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    }
+
+    handle /api/* {
+        reverse_proxy backend:8000 {
+            # Preserve NDJSON delivery and replace all untrusted client IP/scheme headers.
+            flush_interval -1
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    redir /reference /reference/ 308
+    handle_path /reference/* {
+        root * /srv/reference
+        header Cache-Control no-store
+        file_server
+    }
+
+    handle {
+        root * /srv/app
+        # Prevent cached HTML or reset URLs from surviving a release/account change.
+        header Cache-Control no-store
+        try_files {path} /index.html
+        file_server
+    }
+}
