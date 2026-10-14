@@ -14,5 +14,5 @@ RUN node /build/configure-reference.mjs
 FROM caddy:2.11.7-alpine
 COPY deployment/Caddyfile /etc/caddy/Caddyfile
 COPY --from=frontend /build/frontend-react/dist/ /srv/app/
-# Only the generated HTML's public API meta value differs from the reference source.
+# The generated reference copy locks its public API configuration; source stays intact.
 COPY --from=frontend /build/reference/ /srv/reference/

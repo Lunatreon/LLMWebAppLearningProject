@@ -275,8 +275,10 @@ should contain localhost,127.0.0.1,:5500 or:5173.
 **Recommended initial option A:** Caddy serves the production React build plus
 `/api/v1` on one domain. Set `VITE_API_BASE_URL=/api/v1`, and both reference
 destinations to `/reference/`. The image includes a read-only copy of the
-legacy website at that prefix. Source files remain unchanged; only the image's
-generated HTML API meta value is configured for the chosen build. Its relative assets/views still work.
+legacy website at that prefix. Source files remain unchanged; the image's generated
+HTML API meta value and API resolver are fixed to the validated public build
+setting. Query/storage overrides cannot send its shared JWT to another server.
+Its relative assets/views still work.
 React's production reference-account link passes the configured absolute API
 base, avoiding the legacy HTML's old public API meta default. Same-origin local
 storage shares the existing session key; no JWT is put in a URL.
@@ -300,6 +302,9 @@ HTTP/loopback URLs and unknown VITE variables (including keys). The runtime sele
 configured/same-origin API values and ignores query/local-storage API overrides;
 development retains those comparison conveniences. A VITE change requires rebuilding
 the frontend image; changing backend env alone does not rewrite a static bundle.
+Bundle inspection still finds React Router's internal `http://localhost` URL-parsing
+sentinels. They are not API/network destinations; application build inputs and
+runtime API selection do not depend on a development host or port.
 
 | Remaining dependency | Initial production handling |
 | --- | --- |
@@ -312,8 +317,9 @@ the frontend image; changing backend env alone does not rewrite a static bundle.
 
 A React-only artifact without any reference hosting still lacks billing and
 deletion. This phase supplies hosting/configuration compatibility, not new React
-features. Legacy API query overrides remain reference compatibility behavior;
-give users only generated trusted destinations and plan their eventual removal
+features. API query/storage overrides remain available only in the original
+development/reference source; the generated production reference copy locks its
+destination. Give users generated trusted destinations and plan eventual removal
 with full feature parity, not a deployment cleanup.
 
 ## 10. Headers, logging and limits
