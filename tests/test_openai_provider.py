@@ -31,7 +31,8 @@ def test_openai_roles_preserve_credentials_models_and_prompt_contract(monkeypatc
     close = AsyncMock()
 
     def client_factory(*, api_key, timeout, max_retries):
-        assert timeout == settings.openai_timeout_seconds
+        assert timeout.read == settings.openai_timeout_seconds
+        assert timeout.connect == min(5.0, settings.openai_timeout_seconds)
         assert max_retries == settings.openai_max_retries
         credentials.append(api_key)
         return SimpleNamespace(

@@ -214,6 +214,8 @@ permissions before real launch; CI cannot prove account access or billing.
 The official asynchronous SDK uses explicit `OPENAI_TIMEOUT_SECONDS` and
 `OPENAI_MAX_RETRIES`. Code defaults preserve the SDK's 600-second timeout/two
 retries; the production template chooses60seconds per attempt and two retries.
+A connection attempt retains the SDK's five-second bound (or the shorter chosen
+timeout), rather than inheriting the longer response timeout.
 A per-attempt timeout is not an overall deadline; include retry delay/attempts in
 latency planning. Do not add another retry loop around these calls. See
 [official OpenAI retry guidance](https://developers.openai.com/api/docs/guides/rate-limits#retrying-with-exponential-backoff).

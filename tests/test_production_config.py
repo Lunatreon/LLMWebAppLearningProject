@@ -203,7 +203,8 @@ def test_openai_uses_explicit_sdk_limits_and_preserves_one_chunk_callback(monkey
         assert provider.client.is_closed()
 
     asyncio.run(check())
-    assert captured["timeout"] == 15 and captured["max_retries"] == 0
+    assert captured["timeout"].read == 15 and captured["timeout"].connect == 5
+    assert captured["max_retries"] == 0
     assert captured["payload"]["model"] == "configured-model"
     assert captured["payload"]["response_format"] == {"type": "json_object"}
     assert captured["payload"].get("stream", False) is False

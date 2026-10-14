@@ -2,6 +2,7 @@
 
 from typing import Any
 import logging
+import httpx
 
 from app.core.config import settings
 
@@ -20,7 +21,10 @@ class OpenAIBaseClient:
 
         self.client = AsyncOpenAI(
             api_key=api_key,
-            timeout=settings.openai_timeout_seconds,
+            timeout=httpx.Timeout(
+                settings.openai_timeout_seconds,
+                connect=min(5.0, settings.openai_timeout_seconds),
+            ),
             max_retries=settings.openai_max_retries,
         )
         self.model = model
