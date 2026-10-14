@@ -84,8 +84,8 @@ production template contains only placeholders and safe non-secret configuration
 | `TOPIC_LLM_PROVIDER` | REQUIRED PRODUCTION CONFIG | Explicitly select openai in production; legacy default local would otherwise override the base provider. |
 | `JOURNAL_LLM_PROVIDER` | REQUIRED PRODUCTION CONFIG | Falls back through Topic then base provider; production template selects openai explicitly. |
 | `OPENAI_API_KEY` | REQUIRED PRODUCTION SECRET | Required when any effective Chat/Topic/Journal provider is openai. Backend only. |
-| `OPENAI_TIMEOUT_SECONDS` | OPTIONAL | Per-attempt SDK timeout; default600 preserves SDK behavior, production template60. SDK retries are separate. |
-| `OPENAI_MAX_RETRIES` | OPTIONAL | SDK retries0..3; default2, no application retry layer added. |
+| `OPENAI_TIMEOUT_SECONDS` | OPTIONAL | Per-attempt SDK timeout; default 600 preserves SDK behavior, production template 60. SDK retries are separate. |
+| `OPENAI_MAX_RETRIES` | OPTIONAL | SDK retries 0..3; default 2, no application retry layer added. |
 | `OPENAI_MODEL` | REQUIRED PRODUCTION CONFIG | Optional per-role model override; falls back to OPENAI_MODEL. Model access must be verified by the operator. |
 | `OPENAI_CHAT_MODEL` | OPTIONAL | Optional per-role model override; falls back to OPENAI_MODEL. Model access must be verified by the operator. |
 | `OPENAI_TOPIC_MODEL` | OPTIONAL | Optional per-role model override; falls back to OPENAI_MODEL. Model access must be verified by the operator. |
@@ -132,7 +132,7 @@ production template contains only placeholders and safe non-secret configuration
 | `VITE_API_BASE_URL` | OPTIONAL | Public build-time value: defaults to /api/v1; absolute HTTPS API URL for external frontend hosting. |
 | `VITE_LEGACY_APP_URL` | OPTIONAL | Public build-time reference destination, default /reference/. Production rejects loopback URLs. |
 | `VITE_LEGACY_SIGN_IN_URL` | OPTIONAL | Public build-time reference account bridge, default /reference/; same origin recommended for shared session storage. |
-| `FEELY_HEALTH_PORT` | OPTIONAL | Internal readiness probe port, default8000; do not point it at an external host. |
+| `FEELY_HEALTH_PORT` | OPTIONAL | Internal readiness probe port, default 8000; do not point it at an external host. |
 | `FEELY_DOCKER_ENV_FILE` | DEVELOPMENT ONLY | Existing local stack env selection; production file uses the filtered production env instead. |
 | `FEELY_API_PORT` | DEVELOPMENT ONLY | Existing loopback host API port; production backend publishes none. |
 | `FEELY_MAILPIT_PORT` | DEVELOPMENT ONLY | Existing Mailpit UI mapping; Mailpit is absent from production. |

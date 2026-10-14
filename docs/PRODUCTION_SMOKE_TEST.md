@@ -10,7 +10,7 @@ Keep real production CAPTCHA, email verification and rate limits enabled. A smok
 creates disposable account-owned data but never deletes existing users/data or
 resets volumes. Do not use account-deletion/billing-purchase actions in this check.
 
-1. **Health:** check public `https://<ingress-domain>/api/v1/health` returns200 and
+1. **Health:** check public `https://<ingress-domain>/api/v1/health` returns 200 and
    `{"status":"ok"}`. Confirm all required services are healthy and internal
    `python -m deployment.healthcheck` succeeds. Check HTTP redirects to HTTPS and
    the certificate matches the real domain.
@@ -40,7 +40,7 @@ resets volumes. Do not use account-deletion/billing-purchase actions in this che
     completion/reflection remains attached to the same entry after reload.
 11. **Recovery email:** log out and request a password reset for the smoke
     mailbox. Verify real delivery, sender and that the link origin exactly matches
-    `PUBLIC_APP_URL`, with no localhost,127.0.0.1,:5500 or:5173.
+    `PUBLIC_APP_URL`, with no localhost, 127.0.0.1, :5500 or :5173.
 12. **Reset:** open the link in React, confirm token scrubbing and reset with a
     new password. Check success without exposing the token in screenshots/logs.
 13. **Logout/login:** verify the new password works, Account identity is the same

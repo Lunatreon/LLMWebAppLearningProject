@@ -179,10 +179,10 @@ endpoint. `ps` must report healthy before the smoke test.
 
 Caddy provides automatic certificates and HTTP→HTTPS redirects. Persist its
 `caddy_data` and `caddy_config` volumes; protect certificate/account keys as secrets.
-The backend keeps UID/GID10001, read-only application filesystem, dropped
+The backend keeps UID/GID 10001, read-only application filesystem, dropped
 capabilities and owned writable prompt volume/tmp. The official Caddy image keeps
 its upstream runtime defaults; it is not a host service or an extra infrastructure
-platform. Never solve volume permissions with chmod777.
+platform. Never solve volume permissions with chmod 777.
 
 ## 6. Forwarded headers, client IP and host validation
 
@@ -215,7 +215,7 @@ permissions before real launch; CI cannot prove account access or billing.
 
 The official asynchronous SDK uses explicit `OPENAI_TIMEOUT_SECONDS` and
 `OPENAI_MAX_RETRIES`. Code defaults preserve the SDK's 600-second timeout/two
-retries; the production template chooses60seconds per attempt and two retries.
+retries; the production template chooses 60 seconds per attempt and two retries.
 A connection attempt retains the SDK's five-second bound (or the shorter chosen
 timeout), rather than inheriting the longer response timeout.
 A per-attempt timeout is not an overall deadline; include retry delay/attempts in
@@ -235,8 +235,8 @@ existing generic Chat error path remains in use. No key is sent to React/Caddy.
 
 Production SMTP uses the existing `app/integrations/email.py` boundary. Set
 `SMTP_HOST`, port, verified `SMTP_FROM_EMAIL`, and provider authentication. Use
-exactly one of STARTTLS (`SMTP_USE_TLS=true`, commonly587) or implicit TLS
-(`SMTP_USE_SSL=true`, commonly465). Certificate validation and a15-second SMTP
+exactly one of STARTTLS (`SMTP_USE_TLS=true`, commonly 587) or implicit TLS
+(`SMTP_USE_SSL=true`, commonly 465). Certificate validation and a 15-second SMTP
 timeout already exist. Both auth fields may be empty only for an intentional TLS
 relay. Mailpit/cleartext delivery remains local-only.
 
@@ -268,7 +268,7 @@ Set `PUBLIC_APP_URL=https://<real-frontend-domain>` with no path/query/port. Res
 mail keeps its existing `/?reset_password_token=...` URL and React handles it,
 scrubs it and keeps the mounted reset form. Activation mail is a six-digit PIN,
 not an activation URL, so do not invent link behavior. No newly generated mail
-should contain localhost,127.0.0.1,:5500 or:5173.
+should contain localhost, 127.0.0.1, :5500 or :5173.
 
 ## 9. React deployment and legacy dependencies
 
@@ -347,12 +347,12 @@ docker compose --env-file .env.production -f compose.production.yml logs --tail=
 Review logs privately before sharing; the CI scan is a targeted regression check,
 not a guarantee about arbitrary future secret formats or operator debug changes.
 
-Existing rate policies are retained: HTTP/API300/min/IP, auth30/min/IP,
-registration20/hour/IP, login8/15minutes/identifier, resend3/hour/address,
-activation confirmation10/15minutes/address plus persisted PIN attempt maximum5,
-recovery request3/hour/address, reset confirmation auth limit, Chat30/min/user
+Existing rate policies are retained: HTTP/API 300/min/IP, auth 30/min/IP,
+registration 20/hour/IP, login 8/15 minutes/identifier, resend 3/hour/address,
+activation confirmation 10/15 minutes/address plus persisted PIN attempt maximum 5,
+recovery request 3/hour/address, reset confirmation auth limit, Chat 30/min/user
 and existing daily limits. CAPTCHA shares registration/auth limits; its verification
-timeout is5seconds. Actual configured values are in the inventory/Settings.
+timeout is 5 seconds. Actual configured values are in the inventory/Settings.
 Limits are in-process and reset with a process restart; one worker/container is
 intentional. Multiple replicas need a later concurrency/rate-limit review. Existing
 long transactions and JSON/quota update races are known, deferred application
@@ -431,7 +431,7 @@ compose_restore run --rm --no-deps --entrypoint python backend -m alembic heads
 ```
 
 Compare current/heads and inspect the ten application tables/counts and known
-records before new writes. Restore prompt edits if needed with UID/GID10001
+records before new writes. Restore prompt edits if needed with UID/GID 10001
 ownership, then start the restored backend, run readiness and the smoke checklist
 on an isolated route. Record archive date, duration and verification results; test
 at least monthly and after material DB changes. Dispose of rehearsal resources
@@ -508,7 +508,7 @@ Official references: [Compose extends](https://docs.docker.com/compose/how-tos/m
 
 ## Validation record — 2026-10-14
 
-[GitHub Actions run38580048375](https://github.com/Lunatreon/FeelY/actions/runs/38580048375)
+[GitHub Actions run 38580048375](https://github.com/Lunatreon/FeelY/actions/runs/38580048375)
 passed both jobs on code commit `9a7d1b6e787fd67b95a099e29c51cfba511b278d`
 of `codex/backend-phase4-production-readiness`. The following documentation-only
 evidence update does not change that validated runtime. `main` was not modified.
@@ -516,14 +516,14 @@ evidence update does not change that validated runtime. `main` was not modified.
 | Validation | Result |
 | --- | --- |
 | Full SQLite suite in clean CI | 277 passed, five expected skips. |
-| Full PostgreSQL suite on native PostgreSQL17.11 | 281 passed, one existing opt-in live test skipped; final SDK changes also covered by offline transport tests. |
-| React suite | 559 passed across26 files. The existing Reflection background assertion now waits for its lazy Map render. |
-| JavaScript checks | 52 passed:49 retained legacy tests and three generated-production-reference API-lock tests. |
+| Full PostgreSQL suite on native PostgreSQL 17.11 | 281 passed, one existing opt-in live test skipped; final SDK changes also covered by offline transport tests. |
+| React suite | 559 passed across 26 files. The existing Reflection background assertion now waits for its lazy Map render. |
+| JavaScript checks | 52 passed: 49 retained legacy tests and three generated-production-reference API-lock tests. |
 | React contract scripts | All nine passed against isolated non-superuser PostgreSQL schemas; task-owned fixtures/schemas cleaned up. |
 | Existing Docker lifecycle | Actual image build, Compose, empty PG/startup Alembic/ten tables, networking/health, full HTTP+Mailpit/mock flows, restart persistence, volume reset, graceful stop, UID/permissions, log scan and always-cleanup passed. |
 | Production Docker rehearsal | Three-service/no-Mailpit/no-public-DB/API-port checks; complete filtered-env equality; missing-config rejection; real backend/React/Caddy builds; Caddy validation; fresh app-role init, non-superuser Alembic/query/sequence/write rollback and readiness passed. No public Caddy listener, certificate issuance, SMTP or paid LLM request was started. |
-| Configuration completeness | All104 Settings fields plus20 deployment/build/process inputs classified; placeholder master cannot start production. |
-| Static/compile checks | Black112 scoped backend/deployment/test/tool files; Prettier on changed TS/JS/config; actionlint1.7.12; imports of79 app/deployment modules and Python compile checks passed. React TypeScript/production build passed locally and in the image build. |
+| Configuration completeness | All 104 Settings fields plus 20 deployment/build/process inputs classified; placeholder master cannot start production. |
+| Static/compile checks | Black: 112 scoped backend/deployment/test/tool files; Prettier on changed TS/JS/config; actionlint 1.7.12; imports of 79 app/deployment modules and Python compile checks passed. React TypeScript/production build passed locally and in the image build. |
 | Contracts and preservation | Full OpenAPI matched the reference revision. Legacy source, migrations, prompts, existing .env/SQLite DB and local compose.yml/Dockerfile hashes matched. The generated image copy alone receives the locked public API configuration. |
 
 No live domain/TLS, real OpenAI account/model access, real SMTP sender/deliverability,
