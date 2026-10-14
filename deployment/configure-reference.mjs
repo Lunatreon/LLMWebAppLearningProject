@@ -7,7 +7,7 @@ const reference = path.join(buildRoot, 'reference');
 cpSync(path.join(buildRoot, 'website'), reference, { recursive: true });
 const file = path.join(reference, 'index.html');
 const html = readFileSync(file, 'utf8');
-const publicApiBase = process.env.VITE_API_BASE_URL || '/api/v1';
+const publicApiBase = (process.env.VITE_API_BASE_URL?.trim() || '/api/v1').replace(/\/$/, '');
 const apiBase = publicApiBase
   .replaceAll('&', '&amp;')
   .replaceAll('"', '&quot;')

@@ -6,7 +6,12 @@ const { spawnSync } = require('node:child_process');
 const { test } = require('node:test');
 const vm = require('node:vm');
 
-for (const apiBase of ['/api/v1', 'https://api.example.invalid/api/v1']) {
+for (const requestedBase of [
+  '/api/v1',
+  'https://api.example.invalid/api/v1',
+  'https://api.example.invalid/api/v1/',
+]) {
+  const apiBase = requestedBase.replace(/\/$/, '');
   test(`generated production reference locks the API to ${apiBase}`, () => {
     const root = mkdtempSync(path.join(os.tmpdir(), 'feely-production-reference-'));
     try {
@@ -17,7 +22,7 @@ for (const apiBase of ['/api/v1', 'https://api.example.invalid/api/v1']) {
       const original = readFileSync(path.join(root, 'website', 'app.js'), 'utf8');
       const result = spawnSync(process.execPath, ['deployment/configure-reference.mjs', root], {
         encoding: 'utf8',
-        env: { ...process.env, VITE_API_BASE_URL: apiBase },
+        env: { ...process.env, VITE_API_BASE_URL: requestedBase },
       });
       assert.equal(result.status, 0, result.stderr);
       const script = readFileSync(path.join(root, 'reference', 'app.js'), 'utf8');
