@@ -505,3 +505,29 @@ Official references: [Compose extends](https://docs.docker.com/compose/how-tos/m
 [Compose replacements](https://docs.docker.com/reference/compose-file/merge/),
 [Caddy reverse proxy](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy),
 [Uvicorn proxy settings](https://www.uvicorn.org/settings/#http).
+
+## Validation record — 2026-10-14
+
+[GitHub Actions run38580048375](https://github.com/Lunatreon/FeelY/actions/runs/38580048375)
+passed both jobs on code commit `9a7d1b6e787fd67b95a099e29c51cfba511b278d`
+of `codex/backend-phase4-production-readiness`. The following documentation-only
+evidence update does not change that validated runtime. `main` was not modified.
+
+| Validation | Result |
+| --- | --- |
+| Full SQLite suite in clean CI | 277 passed, five expected skips. |
+| Full PostgreSQL suite on native PostgreSQL17.11 | 281 passed, one existing opt-in live test skipped; final SDK changes also covered by offline transport tests. |
+| React suite | 559 passed across26 files. The existing Reflection background assertion now waits for its lazy Map render. |
+| JavaScript checks | 52 passed:49 retained legacy tests and three generated-production-reference API-lock tests. |
+| React contract scripts | All nine passed against isolated non-superuser PostgreSQL schemas; task-owned fixtures/schemas cleaned up. |
+| Existing Docker lifecycle | Actual image build, Compose, empty PG/startup Alembic/ten tables, networking/health, full HTTP+Mailpit/mock flows, restart persistence, volume reset, graceful stop, UID/permissions, log scan and always-cleanup passed. |
+| Production Docker rehearsal | Three-service/no-Mailpit/no-public-DB/API-port checks; complete filtered-env equality; missing-config rejection; real backend/React/Caddy builds; Caddy validation; fresh app-role init, non-superuser Alembic/query/sequence/write rollback and readiness passed. No public Caddy listener, certificate issuance, SMTP or paid LLM request was started. |
+| Configuration completeness | All104 Settings fields plus20 deployment/build/process inputs classified; placeholder master cannot start production. |
+| Static/compile checks | Black112 scoped backend/deployment/test/tool files; Prettier on changed TS/JS/config; actionlint1.7.12; imports of79 app/deployment modules and Python compile checks passed. React TypeScript/production build passed locally and in the image build. |
+| Contracts and preservation | Full OpenAPI matched the reference revision. Legacy source, migrations, prompts, existing .env/SQLite DB and local compose.yml/Dockerfile hashes matched. The generated image copy alone receives the locked public API configuration. |
+
+No live domain/TLS, real OpenAI account/model access, real SMTP sender/deliverability,
+production Turnstile widget or production browser flow can be proven with synthetic
+credentials. Those remain the final operational checks once the external resources
+exist. No Hetzner deployment, schema migration change, product redesign, monitoring
+platform or broad application refactor was performed.
