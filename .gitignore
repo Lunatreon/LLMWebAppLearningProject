@@ -29,6 +29,8 @@ node_modules/
 *.sqlite
 *.sqlite3
 feely.db
+*.dump
+backups/
 
 # Logs
 *.log

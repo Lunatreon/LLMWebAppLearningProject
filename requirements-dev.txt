@@ -1,2 +1,4 @@
-# Formatting only; application dependencies remain in requirements.txt.
+# Runtime dependencies plus local testing/formatting tools; not used by Docker.
+-r requirements.txt
+pytest>=8.3,<9.0
 black==26.10.1

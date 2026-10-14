@@ -1,0 +1,65 @@
+name: Docker integration
+
+on:
+  pull_request:
+  push:
+    branches: [main, master, codex/backend-phase35-docker-validation]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docker-integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      FEELY_DOCKER_TEST_DIR: /tmp/feely-docker-integration-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.13.14'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install validation dependencies
+        run: |
+          python -m pip install -r requirements-dev.txt
+          npm ci --prefix frontend-react
+      - name: Non-Docker backend and legacy JavaScript regression checks
+        run: |
+          python -m pytest -q
+          node --test --test-concurrency=1 tests/*.test.cjs
+      - name: Generate isolated dummy credentials and mock/Mailpit configuration
+        run: >-
+          python -m scripts.docker_integration prepare
+          --work-dir "$FEELY_DOCKER_TEST_DIR"
+          --project "feely-ci-${{ github.run_id }}-${{ github.run_attempt }}"
+      - name: Validate Compose configuration without printing secrets
+        run: python -m scripts.docker_integration config --work-dir "$FEELY_DOCKER_TEST_DIR"
+      - name: Build the actual backend image
+        run: python -m scripts.docker_integration build --work-dir "$FEELY_DOCKER_TEST_DIR"
+      - name: Validate Docker runtime, real HTTP/SMTP and volume lifecycle
+        run: python -m scripts.docker_integration run --work-dir "$FEELY_DOCKER_TEST_DIR"
+      - name: Scan logs, write results and print sanitized diagnostics on failure
+        if: ${{ always() }}
+        run: python -m scripts.docker_integration diagnostics --work-dir "$FEELY_DOCKER_TEST_DIR"
+      - name: Always remove disposable containers and volumes
+        if: ${{ always() }}
+        # The helper runs docker compose down -v --remove-orphans for its owned project only.
+        run: python -m scripts.docker_integration cleanup --work-dir "$FEELY_DOCKER_TEST_DIR"
+      - name: Upload only sanitized evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: docker-integration-results
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            ${{ env.FEELY_DOCKER_TEST_DIR }}/summary.md
+            ${{ env.FEELY_DOCKER_TEST_DIR }}/report.json
+            ${{ env.FEELY_DOCKER_TEST_DIR }}/*.log

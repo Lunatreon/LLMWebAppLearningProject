@@ -35,6 +35,7 @@ per-user LLM requests, and persistent user profiles.
 - [Pre-cleanup backend audit and import inventory](docs/BACKEND_STRUCTURE_AUDIT.md)
 - [Database portability audit](docs/DATABASE_PORTABILITY_AUDIT.md)
 - [PostgreSQL setup, migrations, data verification and rollback](docs/DATABASE_MIGRATION.md)
+- [Local Docker backend, PostgreSQL and Mailpit](docs/DEPLOYMENT_LOCAL.md)
 - [Stripe subscription setup](docs/stripe-setup.md)
 - [Administration and editable prompts](docs/admin.md)
 - [Local webmail and reusable setup](WEBMAIL_SETUP.md)
@@ -579,6 +580,7 @@ api_router.include_router(example.router, prefix="/example", tags=["example"])
 ## Tests
 
 ```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 .\.venv\Scripts\python.exe -m pytest
 ```
 
