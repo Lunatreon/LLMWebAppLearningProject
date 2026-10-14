@@ -28,9 +28,15 @@ def test_openai_roles_preserve_credentials_models_and_prompt_contract(monkeypatc
     create = AsyncMock(return_value=response)
     credentials = []
 
-    def client_factory(*, api_key):
+    close = AsyncMock()
+
+    def client_factory(*, api_key, timeout, max_retries):
+        assert timeout == settings.openai_timeout_seconds
+        assert max_retries == settings.openai_max_retries
         credentials.append(api_key)
-        return SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+        return SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=create)), close=close
+        )
 
     monkeypatch.setattr(openai, "AsyncOpenAI", client_factory)
 
@@ -50,6 +56,7 @@ def test_openai_roles_preserve_credentials_models_and_prompt_contract(monkeypatc
 
     assert credentials == ["test-only-key"]
     create.assert_awaited_once()
+    close.assert_awaited_once()
     request = create.call_args.kwargs
     assert request["model"] == f"test-{role}-model"
     assert request["response_format"] == {"type": "json_object"}

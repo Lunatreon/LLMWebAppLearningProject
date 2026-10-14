@@ -72,10 +72,20 @@ class Rehearsal:
         self.command, self.environment = compose_command(
             self.master, self.values, project=self.project
         )
+        secret_names = {
+            "SECRET_KEY",
+            "POSTGRES_PASSWORD",
+            "POSTGRES_APP_PASSWORD",
+            "SMTP_PASSWORD",
+            "TURNSTILE_SECRET_KEY",
+            "OPENAI_API_KEY",
+            "ANTHROPIC_API_KEY",
+            "STRIPE_SECRET_KEY",
+            "STRIPE_WEBHOOK_SECRET",
+            "WEBMAIL_BRIDGE_SECRET",
+        }
         self.private = [
-            value
-            for name, value in self.values.items()
-            if any(word in name for word in ("PASSWORD", "SECRET", "API_KEY")) and value
+            value for name, value in self.values.items() if name in secret_names and value
         ]
 
     def run(self, arguments, *, timeout=120):
@@ -193,7 +203,7 @@ with engine.connect() as connection:
     role = connection.execute(text("SELECT rolsuper, rolcreatedb, rolcreaterole FROM pg_roles WHERE rolname = current_user")).one()
     assert not any(role)
     transaction = connection.get_transaction()
-    connection.execute(text("INSERT INTO users (email, username, hashed_password, is_active, is_email_verified, created_at, auth_provider, role, email_verification_attempts) VALUES ('ci@example.invalid', 'ci-owner-probe', 'not-a-login-hash', true, false, CURRENT_TIMESTAMP, 'password', 'member', 0) RETURNING id")).scalar_one()
+    connection.execute(text("INSERT INTO users (email, username, hashed_password, is_active, is_email_verified, created_at, updated_at, auth_provider, role, email_verification_attempts) VALUES ('ci@example.invalid', 'ci-owner-probe', 'not-a-login-hash', true, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'password', 'member', 0) RETURNING id")).scalar_one()
     transaction.rollback()
 engine.dispose()
 """
