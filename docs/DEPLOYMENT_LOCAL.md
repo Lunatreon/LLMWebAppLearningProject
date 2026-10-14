@@ -22,7 +22,7 @@ to commit SHAs. The token has read-only contents permission and checkout does no
 persist credentials. Fork PR code runs under `pull_request`, with no secrets.
 
 The workflow installs the existing dev dependencies, runs the complete default
-SQLite Python suite and legacy JS suite, then calls `scripts/docker_integration.py`:
+SQLite Python suite and legacy JS suite, then calls `scripts/docker_integration.py`.
 
 The regression step explicitly selects `ENVIRONMENT=local` and a loopback CORS
 allowlist without opaque (`null`) origins, reproducing the existing tested local
@@ -30,6 +30,8 @@ configuration without copying a developer `.env`. A clean checkout otherwise
 uses the application's older fallback CORS list, which includes `null` and
 contradicts the existing opaque-origin rejection test. This CI configuration
 does not change application defaults or the Docker runtime environment.
+
+It then performs these checks:
 
 1. Generate a separate `.env.docker` with the existing generator, random throwaway
    signing/database secrets, mock LLM, Mailpit and synthetic configured Terms
@@ -98,6 +100,8 @@ PowerShell, from the repository root:
 ```powershell
 python -m pip install -r requirements-dev.txt
 npm ci --prefix frontend-react
+$env:ENVIRONMENT = 'local'
+$env:CORS_ORIGINS = '["http://127.0.0.1:5500","http://localhost:5500","http://127.0.0.1:5173","http://localhost:5173"]'
 python -m pytest -q
 node --test --test-concurrency=1 tests/*.test.cjs
 
@@ -122,10 +126,14 @@ try {
 Get-Content (Join-Path $dockerCheckDir 'summary.md')
 ```
 
-For Bash after installing dependencies/running regression checks:
+For Bash after installing dependencies:
 
 ```bash
 set -euo pipefail
+export ENVIRONMENT=local
+export CORS_ORIGINS='["http://127.0.0.1:5500","http://localhost:5500","http://127.0.0.1:5173","http://localhost:5173"]'
+python -m pytest -q
+node --test --test-concurrency=1 tests/*.test.cjs
 docker_check_id="$(python -c 'import uuid; print(uuid.uuid4().hex)')"
 docker_check_dir="${TMPDIR:-/tmp}/feely-ci-$docker_check_id"
 python -m scripts.docker_integration prepare --work-dir "$docker_check_dir" --project "feely-ci-$docker_check_id"
@@ -154,6 +162,35 @@ files. The development machine still has no Docker daemon; the earlier native
 service evidence below must not be read as image, network, volume or signal proof.
 Browser-rendered parity remains a separate validation gate; this job exercises
 the actual frontend clients over HTTP without rendering React pages.
+
+### Validated Docker run — 2026-10-14
+
+[GitHub Actions run 38555165763](https://github.com/Lunatreon/FeelY/actions/runs/38555165763)
+passed on the isolated `codex/backend-phase35-docker-validation` branch at code
+commit `5c4f35759d2b7355c388c438150a8dfbeea7156a`. The subsequent documentation
+update does not change the validated runtime/scripts. `main` was not updated.
+
+| Check | Observed result |
+| --- | --- |
+| Image and Compose | Real backend build and Compose configuration passed on Ubuntu/Docker. |
+| PostgreSQL and Alembic | Empty pre-start catalogue; startup/explicit upgrade succeeded; current matched heads; all ten application tables existed. |
+| Health and networking | All three container health checks passed; HTTP health, authenticated PostgreSQL queries and backend-to-Mailpit SMTP EHLO passed. |
+| HTTP and real mail | Registration, activation mail/PIN, login, Terms, Account update, Journal, Map, Reflection, streamed mock Chat and recovery/reset passed; reset URL matched the configured React origin. |
+| Persistence and reset | Every stored column survived down/up; saved HTTP records reread successfully; down -v/up produced a fresh migrated DB and empty Mailpit. |
+| Shutdown | Normal backend stop finished within the bound, exit zero, no OOM and no traceback, with completed Uvicorn shutdown. |
+| Permissions | UID/GID 10001, dropped capabilities, no-new-privileges, read-only app and writable owned prompts/tmp probes passed. No permission fixes were needed. |
+| Secrets and cleanup | Container log scan passed; sanitized evidence uploaded; always() teardown removed the disposable containers, network and named volumes. |
+| Regression checks | CI: 239 Python tests passed, five skipped; 49 legacy JS tests passed. Local PostgreSQL suite: 243 passed, one skipped. The 21 new harness safety tests are included in those totals. |
+| Additional local checks | actionlint 1.7.12, Black, Prettier, Python compilation, generated-env Compose parsing, native PostgreSQL/Mailpit flow and native backend restart/readback passed. |
+| Preservation | All 329 captured reference hashes matched, including application code, migrations, both frontends, prompts, existing .env/SQLite DB and the pre-existing Docker runtime files. |
+
+The first clean-runner attempt exposed the existing CORS test's dependence on
+local env configuration; the explicit regression-step environment above fixed
+that CI setup issue. No application defaults, HTTP contracts, schema, SQL or
+Docker runtime architecture were changed. The historical native-only evidence
+below is retained as the Phase 3 record; this successful CI run supplies the
+previously missing Docker runtime evidence. Hetzner deployment, production
+TLS/ingress/secrets/mail/roles/backups review and browser validation remain deferred.
 
 ## Quick start
 
