@@ -17,7 +17,7 @@ production template contains only placeholders and safe non-secret configuration
 | `ADMIN_ACCESS_TOKEN_EXPIRE_MINUTES` | OPTIONAL | Existing application setting; preserve its default unless deployment requirements justify an explicit value. |
 | `SECRET_KEY` | REQUIRED PRODUCTION SECRET | Random signing/HMAC key, >=32 characters; stable across releases/restores. |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | OPTIONAL | Existing application setting; preserve its default unless deployment requirements justify an explicit value. |
-| `DATABASE_URL` | REQUIRED PRODUCTION CONFIG | PostgreSQL app-owner URL; contains its password and is also a secret. SQLite fallback is rejected in production. |
+| `DATABASE_URL` | REQUIRED PRODUCTION SECRET | PostgreSQL app-owner URL contains its password; never print it as ordinary config. SQLite fallback is rejected in production. |
 | `CORS_ORIGINS` | REQUIRED PRODUCTION CONFIG | Exact HTTPS frontend origins, no slash/path/port wildcard/null/loopback; include PUBLIC_APP_URL. |
 | `TRUST_PROXY_HEADERS` | DEVELOPMENT ONLY | Legacy compatibility flag, not used to parse headers. Must remain false; production Uvicorn trusts the Caddy IP explicitly. |
 | `ALLOWED_HOSTS` | REQUIRED PRODUCTION CONFIG | Exact backend/Caddy hostnames; no wildcard. The internal readiness probe sends the first allowed Host. |
@@ -26,7 +26,7 @@ production template contains only placeholders and safe non-secret configuration
 | `RATE_LIMIT_HTTP_PER_MINUTE` | OPTIONAL | Existing process-local limit; positive in production. Single worker/container initially; counters reset on restart. |
 | `BASIC_AUTH_ENABLED` | DEVELOPMENT ONLY | Must remain false in production. Normal JWT auth is unchanged. |
 | `BASIC_AUTH_USERNAME` | OPTIONAL | Existing application setting; preserve its default unless deployment requirements justify an explicit value. |
-| `BASIC_AUTH_PASSWORD` | REQUIRED PRODUCTION SECRET | Development/staging compatibility only; Basic auth conflicts with Bearer Authorization on this API. |
+| `BASIC_AUTH_PASSWORD` | DEVELOPMENT ONLY | Development/staging compatibility secret; Basic auth conflicts with Bearer Authorization and is disabled in production. |
 | `RATE_LIMIT_ENABLED` | REQUIRED PRODUCTION CONFIG | Existing process-local limit; positive in production. Single worker/container initially; counters reset on restart. |
 | `RATE_LIMIT_API_PER_MINUTE` | OPTIONAL | Existing process-local limit; positive in production. Single worker/container initially; counters reset on restart. |
 | `RATE_LIMIT_AUTH_IP_PER_MINUTE` | OPTIONAL | Existing process-local limit; positive in production. Single worker/container initially; counters reset on restart. |
@@ -111,7 +111,7 @@ production template contains only placeholders and safe non-secret configuration
 | `OLLAMA_TOPIC_NUM_GPU` | OPTIONAL | Optional external Ollama configuration; mock/local are development-only. No Ollama service is deployed here. |
 | `OLLAMA_JOURNAL_NUM_GPU` | OPTIONAL | Optional external Ollama configuration; mock/local are development-only. No Ollama service is deployed here. |
 | `OLLAMA_KEEP_ALIVE` | OPTIONAL | Optional external Ollama configuration; mock/local are development-only. No Ollama service is deployed here. |
-| `OLLAMA_PREWARM` | DEVELOPMENT ONLY | Keep false in this initial OpenAI production topology; no model server is part of the stack. |
+| `OLLAMA_PREWARM` | OPTIONAL | Keep false in this initial OpenAI production topology; relevant only to a separately configured Ollama deployment. |
 | `PROMPT_DIRECTORY` | REQUIRED PRODUCTION CONFIG | Existing application setting; preserve its default unless deployment requirements justify an explicit value. |
 
 ## Compose, frontend and process settings

@@ -142,8 +142,10 @@ a fresh production-owned database.
 Startup remains: PostgreSQL health → bounded authenticated DB wait/privilege check
 → `alembic upgrade head` → exec one Uvicorn process. Migration errors stop startup;
 FastAPI also requires the exact Alembic heads before serving. Migration output is
-visible. Restart and `upgrade head` are idempotent. Run one migration owner/process
-initially; no multi-worker or multi-replica migration race is introduced.
+visible. Restart and `upgrade head` are idempotent.
+The entrypoint also prints `alembic current` after a successful upgrade so the
+resulting revision is visible without enabling SQL/parameter logging. Run one
+migration owner/process initially; no multi-worker or multi-replica migration race is introduced.
 
 ## 5. Build, DNS, Caddy and TLS
 

@@ -54,6 +54,9 @@ def main() -> None:
     print("Database ready; applying Alembic migrations.", flush=True)
     # One backend process per local container. Migrations never run per request/worker.
     subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], check=True)
+    # The minimal Alembic config has no global logging setup. Show the resulting
+    # revision explicitly without enabling SQL/parameter logging in migrations/tests.
+    subprocess.run([sys.executable, "-m", "alembic", "current"], check=True)
     if len(sys.argv) < 2:
         raise RuntimeError("Container entrypoint needs a command to execute.")
     print("Schema migrated; starting backend command.", flush=True)
