@@ -1,0 +1,2 @@
+# The PostgreSQL image sources this POSIX script, including from Windows checkouts.
+deployment/postgres/*.sh text eol=lf

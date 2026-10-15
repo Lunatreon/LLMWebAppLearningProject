@@ -1,12 +1,14 @@
 import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv } from 'vite';
+import { validateProductionPublicConfig } from './production-config.ts';
 
 const frontendRoot = fileURLToPath(new URL('.', import.meta.url));
 const legacyRoot = fileURLToPath(new URL('../website', import.meta.url));
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, frontendRoot, 'VITE_');
+  if (command === 'build') validateProductionPublicConfig(env);
   const proxy = {
     '^/reference/': {
       target: env.VITE_LEGACY_APP_URL || 'http://127.0.0.1:5500',

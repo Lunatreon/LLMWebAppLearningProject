@@ -826,7 +826,7 @@ async def stream_message_to_llm(
             raise
         except Exception as exc:
             stream_db.rollback()
-            logger.exception("Streaming chat generation failed", exc_info=exc)
+            logger.error("Streaming chat generation failed: error_type=%s", type(exc).__name__)
             yield json.dumps(
                 {"type": "error", "message": "FeelY could not finish this response."}
             ) + "\n"

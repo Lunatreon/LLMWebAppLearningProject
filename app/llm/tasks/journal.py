@@ -42,10 +42,8 @@ async def analyse_journal_text(journal_text: str, entry_date: str) -> JournalLLM
                 or settings.openai_model
             ),
         )
-        response = await client.client.chat.completions.create(
-            model=client.model,
-            response_format={"type": "json_object"},
-            messages=[
+        response = await client.complete(
+            [
                 {"role": "system", "content": read_system_prompt("journal")},
                 {"role": "user", "content": request_payload},
             ],

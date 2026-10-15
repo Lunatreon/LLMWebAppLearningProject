@@ -1,5 +1,12 @@
 # FeelY React frontend
 
+Production build/deployment configuration is documented in
+[DEPLOYMENT_PRODUCTION.md](../docs/DEPLOYMENT_PRODUCTION.md). The public
+`.env.production.example` defaults to same-origin `/api/v1` and `/reference/`.
+Production rejects localhost/HTTP build destinations and ignores development
+query/storage API overrides. Billing/deletion still require the retained reference
+frontend; Caddy's production image includes it without changing legacy sources.
+
 This is a separate React + TypeScript + Vite application. The working vanilla
 frontend remains in `../website/`. All existing frontend and backend files are
 unchanged. The React shell now includes the original sidebar structure, workspace

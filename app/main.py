@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.router import api_router
 from app.core.config import settings
@@ -79,6 +80,8 @@ def create_app(init_database: bool = True) -> FastAPI:
     app.add_middleware(RejectedCorsPreflightLoggingMiddleware)
     app.add_middleware(HttpRateLimitMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
+    if settings.allowed_hosts:
+        app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
 
     app.include_router(api_router, prefix=settings.api_v1_prefix)
     return app

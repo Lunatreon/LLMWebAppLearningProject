@@ -66,7 +66,7 @@ describe('real Reflection modal and Practice -> Map completion', () => {
     expect(within(dialog).getAllByRole('textbox')).toHaveLength(1);
     expect(screen.queryByText('Shared shell active')).toBeNull();
     expect(document.title).toBe('My Map | FeelY');
-    expect(document.getElementById('map-content')).not.toBeNull();
+    await waitFor(() => expect(document.getElementById('map-content')).not.toBeNull());
   });
   test.each([null, 3, ' '])(
     'direct route with invalid/missing %j source does not fabricate standalone Reflection',

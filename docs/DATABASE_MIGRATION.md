@@ -1,5 +1,8 @@
 # PostgreSQL portability and migration foundation
 
+For the subsequent backend/PostgreSQL/Mailpit Compose stack and recovery rehearsal,
+see [local deployment](DEPLOYMENT_LOCAL.md). The DB-only setup below remains available.
+
 SQLite remains the default. This phase adds an opt-in synchronous PostgreSQL
 path, Alembic schema ownership, isolated database tests and an operator migration
 tool. It does not switch the deployed application or copy/delete the existing

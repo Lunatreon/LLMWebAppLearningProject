@@ -1,10 +1,16 @@
-export const legacyAppUrl = import.meta.env.VITE_LEGACY_APP_URL?.trim() || 'http://127.0.0.1:5500/';
+export const legacyAppUrl =
+  import.meta.env.VITE_LEGACY_APP_URL?.trim() ||
+  (import.meta.env.PROD ? '/reference/' : 'http://127.0.0.1:5500/');
 
 // Vite replaces the reference entry's public meta configuration. Keep the actual
 // legacy precedence, including local hosts taking priority over stored/config bases.
 export function resolveApiBase(
   location: Pick<Location, 'search' | 'hostname' | 'protocol' | 'origin'> = window.location,
 ) {
+  if (import.meta.env.PROD) {
+    // A deployed build must not send a saved JWT to a query/storage-selected API.
+    return (import.meta.env.VITE_API_BASE_URL?.trim() || '/api/v1').replace(/\/$/, '');
+  }
   const queryBase = new URLSearchParams(location.search).get('api_base')?.trim();
   if (queryBase) return queryBase.replace(/\/$/, '');
   if (
@@ -30,7 +36,9 @@ export function legacySignInUrl(search = window.location.search) {
     import.meta.env.VITE_LEGACY_SIGN_IN_URL || '/reference/',
     window.location.origin,
   );
-  const apiBase = new URLSearchParams(search).get('api_base');
+  const apiBase = import.meta.env.PROD
+    ? new URL(resolveApiBase(), window.location.origin).href
+    : new URLSearchParams(search).get('api_base');
   if (apiBase) url.searchParams.set('api_base', apiBase);
   return url.href;
 }
