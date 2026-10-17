@@ -1,10 +1,11 @@
-"""Publish a finished HTML AGB version and configure mandatory acceptance locally.
+"""Publish a finished AGB snapshot and configure mandatory acceptance locally.
 
-Review and finish website/legal/agb-draft.html first. This command never uploads
+Review and finish website/legal/agb-draft.txt first. This command never uploads
 files or restarts the backend. Existing version files are never overwritten.
 """
 import argparse
 import hashlib
+from html import escape
 from pathlib import Path
 import re
 from urllib.parse import urlsplit
@@ -24,8 +25,22 @@ def publish(document: Path, version: str, public_url: str, root: Path = ROOT, *,
         raise ValueError("Draft publication requires a test- version prefix.")
     if not allow_draft and any(marker in content for marker in ("ENTWURF", "PLATZHALTER", "[PLZ", "[Link", "[Veröffentlichungsdatum")):
         raise ValueError("Finish and review the placeholder document before publishing.")
+    if document.suffix.lower() == ".txt":
+        # Freeze the text; accepted versions must not fetch the mutable draft.
+        content = (
+            '<!doctype html>\n<html lang="de"><head><meta charset="utf-8">'
+            '<meta name="viewport" content="width=device-width,initial-scale=1">'
+            '<title>FeelY – Allgemeine Geschäftsbedingungen</title>'
+            '<style>body{font:18px/1.6 system-ui;max-width:800px;margin:3rem auto;'
+            'padding:0 1.2rem}pre{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere}'
+            '</style></head><body><main><pre>'
+            + escape(content) + '</pre></main></body></html>\n'
+        )
+        data = content.encode("utf-8")
+    elif 'data-terms-source=' in content:
+        raise ValueError("Publish the source .txt file, not the live draft viewer.")
     if "<html" not in content.lower():
-        raise ValueError("Provide a UTF-8 HTML document.")
+        raise ValueError("Provide a UTF-8 .txt or HTML document.")
     destination = root / "website" / "legal" / "agb" / f"{version}.html"
     document_url = f"{public_url.rstrip('/')}/legal/agb/{version}.html"
     if len(document_url) > 2048:
@@ -47,7 +62,7 @@ def publish(document: Path, version: str, public_url: str, root: Path = ROOT, *,
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--document", type=Path, default=ROOT / "website/legal/agb-draft.html")
+    parser.add_argument("--document", type=Path, default=ROOT / "website/legal/agb-draft.txt")
     parser.add_argument("--version", required=True)
     parser.add_argument("--public-url", default="https://app.feel-y.com")
     parser.add_argument("--allow-draft", action="store_true", help="Explicitly publish unfinished terms for testing only; requires a test- version.")

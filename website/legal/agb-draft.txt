@@ -1,0 +1,585 @@
+ENTWURF – noch nicht zur Veröffentlichung oder Zustimmung bestimmt.
+Bearbeitungsstand: 17.10.2026. Dieser Entwurf enthält die bestätigten Anbieterangaben.
+Offene Angaben stehen in eckigen Klammern. Das vorgeschlagene Mindestalter ist 12 Jahre;
+Einwilligungs- und Registrierungsabläufe für Minderjährige sind noch festzulegen.
+Kostenmodell, Laufzeiten, Datenschutz, Speicherdauer, Training, weitere Dienstleister,
+Streitbeilegung und weitere markierte Entscheidungen sind noch offen.
+Der Entwurf ersetzt keine bereits veröffentlichte Version.
+
+Allgemeine Geschäftsbedingungen (AGB)
+
+Stand: [DATUM]
+
+Diese Allgemeinen Geschäftsbedingungen („AGB“) gelten für die Nutzung von FeelY, einem digitalen Dienst einschließlich eines KI-gestützten Chatbots, sowie aller damit verbundenen Websites, Anwendungen, Funktionen und sonstigen digitalen Angebote (zusammen „Dienste“).
+
+1. Anbieter und Vertragspartner
+
+Anbieter der Dienste und Vertragspartner der Nutzer ist:
+
+Selina Juliana Bernard
+
+Meller Straße 31, 49082 Osnabrück, Deutschland
+
+feely@selinabernard.com
+
+[WEITERE PFLICHTANGABEN, FALLS ERFORDERLICH]
+
+nachfolgend „Anbieter“, „wir“ oder „uns“.
+
+„Nutzer“ bezeichnet jede natürliche oder juristische Person, die auf unsere Dienste zugreift oder diese nutzt.
+
+Für Verbraucher gelten zusätzlich sämtliche zwingenden verbraucherschützenden gesetzlichen Vorschriften.
+
+2. Geltungsbereich
+
+FeelY richtet sich an Privatpersonen und Unternehmen in Europa.
+
+Diese AGB regeln den Zugang zu und die Nutzung unserer Dienste.
+
+Abweichende Bedingungen des Nutzers gelten nur, wenn wir ihrer Geltung ausdrücklich zugestimmt haben.
+
+Für einzelne Produkte, Funktionen, Abonnements oder Zusatzleistungen können ergänzende Bedingungen gelten. Hierauf wird vor der Nutzung der jeweiligen Leistung hingewiesen. Im Falle eines Widerspruchs gehen speziellere Bedingungen für die betreffende Leistung diesen allgemeinen AGB vor.
+
+Unsere Datenschutzerklärung erläutert gesondert, wie personenbezogene Daten verarbeitet werden. Sie ist nicht Bestandteil dieser AGB, ergänzt diese jedoch hinsichtlich der Datenverarbeitung.
+
+3. Beschreibung der Dienste
+
+FeelY stellt digitale Funktionen zur Verfügung, insbesondere:
+
+- einen KI-gestützten Chatbot,
+
+- [Weitere zum Start angebotene Funktionen und etwaige Nutzungslimits bestätigen].
+
+Der Nutzer interagiert bei entsprechend gekennzeichneten Funktionen mit einem System künstlicher Intelligenz und nicht mit einem Menschen.
+
+Der konkrete Funktionsumfang ergibt sich aus der zum Zeitpunkt der Nutzung oder des Vertragsschlusses veröffentlichten Produktbeschreibung.
+
+Bestimmte Funktionen können nur registrierten Nutzern, zahlenden Nutzern oder Nutzern bestimmter Tarife zur Verfügung stehen.
+
+Wir können technische Nutzungsgrenzen vorsehen, beispielsweise hinsichtlich der Anzahl von Nachrichten, Dateigrößen, verfügbaren Funktionen, Speicherdauer, Rechenkapazität oder Nutzung innerhalb eines bestimmten Zeitraums. Entsprechende Beschränkungen werden im Produkt oder in der jeweiligen Tarifbeschreibung kenntlich gemacht.
+
+4. KI-System und Funktionsweise
+
+Unsere Dienste können künstliche Intelligenz, maschinelles Lernen, Large Language Models oder andere automatisierte Systeme einsetzen.
+
+Der Nutzer nimmt zur Kenntnis, dass KI-Systeme probabilistisch arbeiten. Antworten werden auf Grundlage von Eingaben, Systemkonfigurationen und statistischen Modellen erzeugt und stellen nicht zwingend eine verifizierte Feststellung von Tatsachen dar.
+
+KI-generierte Inhalte können insbesondere:
+
+- sachlich falsch sein,
+
+- unvollständig sein,
+
+- Zusammenhänge falsch interpretieren,
+
+- veraltete Informationen enthalten,
+
+- widersprüchlich sein,
+
+- Informationen oder Quellen erfinden,
+
+- einen höheren Grad an Sicherheit vermitteln, als sachlich gerechtfertigt ist,
+
+- ungeeignete oder unerwünschte Inhalte enthalten.
+
+Auch detailliert oder überzeugend formulierte Antworten sind nicht notwendigerweise richtig.
+
+Soweit Entscheidungen oder Handlungen auf einem KI-Output beruhen, ist der Nutzer dafür verantwortlich, die Informationen vor ihrer Verwendung in einem für den jeweiligen Zweck angemessenen Umfang zu prüfen.
+
+5. Kein Ersatz für professionelle Beratung
+
+Soweit eine Funktion nicht ausdrücklich anders beschrieben wird, dienen KI-generierte Inhalte der allgemeinen Information, Unterstützung, Reflexion oder Unterhaltung.
+
+Sie stellen insbesondere keine individuelle Rechts-, Steuer-, Finanz-, Anlage-, medizinische, psychotherapeutische oder sonstige regulierte Fachberatung dar.
+
+Der Nutzer darf sich bei Entscheidungen mit erheblichen rechtlichen, finanziellen, gesundheitlichen oder sonstigen wesentlichen Folgen nicht ausschließlich auf KI-generierte Inhalte verlassen.
+
+Soweit erforderlich, sollte qualifizierter menschlicher Rat eingeholt werden.
+
+Der Dienst ist insbesondere kein Ersatz für Psychotherapie, medizinische Behandlung, Krisenintervention oder einen Notfalldienst. In akuten Notfällen sind die hierfür vorgesehenen professionellen Notfall- und Hilfsdienste zu kontaktieren.
+
+6. Registrierung und Nutzerkonto
+
+Für die Nutzung des Chats ist ein Nutzerkonto erforderlich.
+
+Für bestimmte Funktionen kann die Erstellung eines Nutzerkontos erforderlich sein.
+
+Der Nutzer verpflichtet sich, bei der Registrierung richtige und vollständige Angaben zu machen und wesentliche Änderungen der hinterlegten Informationen zu aktualisieren.
+
+Zugangsdaten sind vertraulich zu behandeln und dürfen nicht ohne unsere Zustimmung an Dritte weitergegeben werden.
+
+Der Nutzer ist grundsätzlich für Aktivitäten verantwortlich, die über sein Nutzerkonto vorgenommen werden, soweit diese seinem Verantwortungsbereich zuzurechnen sind.
+
+Bei Verdacht auf unbefugten Zugriff ist der Nutzer verpflichtet, uns unverzüglich unter feely@selinabernard.com zu informieren.
+
+7. Mindestalter
+
+Der Dienst richtet sich an Personen ab 12 Jahren.
+
+Soweit nach dem Recht des Aufenthaltsstaates für die Nutzung oder den Abschluss eines Vertrages eine Zustimmung der gesetzlichen Vertreter erforderlich ist, darf der Dienst von Minderjährigen nur mit dieser Zustimmung genutzt werden.
+
+[Verfahren zur Zustimmung gesetzlicher Vertreter und altersgerechte Nutzung vor Veröffentlichung festlegen.]
+
+8. Vertragsschluss
+
+Bei unentgeltlichen Diensten kommt der Nutzungsvertrag spätestens mit Beginn der Nutzung des Dienstes zustande.
+
+Bei kostenpflichtigen Diensten wird dem Nutzer vor Abgabe seiner Bestellung der Leistungsumfang, der Preis, die Vertragsdauer und gegebenenfalls die automatische Verlängerung angezeigt.
+
+Mit Betätigung der entsprechend gekennzeichneten Bestellschaltfläche gibt der Nutzer ein verbindliches Angebot zum Abschluss des Vertrages ab.
+
+Der Vertrag kommt durch [BESTELLBESTÄTIGUNG / FREISCHALTUNG / ZAHLUNGSBESTÄTIGUNG] zustande.
+
+Vor Vertragsschluss erhält der Nutzer Gelegenheit, Eingabefehler zu erkennen und zu korrigieren.
+
+9. Zulässige Nutzung
+
+Der Nutzer darf die Dienste ausschließlich im Einklang mit diesen AGB und dem geltenden Recht verwenden.
+
+Insbesondere ist es untersagt, die Dienste zu verwenden, um:
+
+1. geltendes Recht oder Rechte Dritter zu verletzen;
+
+2. rechtswidrige, betrügerische, missbräuchliche oder schädliche Aktivitäten durchzuführen;
+
+3. Persönlichkeitsrechte, Datenschutzrechte, Urheberrechte, Markenrechte oder sonstige Rechte Dritter zu verletzen;
+
+4. Schadsoftware, Viren oder sonstige schädliche Inhalte einzuschleusen;
+
+5. die Sicherheit, Stabilität oder Funktionsfähigkeit unserer Systeme oder der Systeme Dritter zu beeinträchtigen;
+
+6. technische Schutzmaßnahmen, Zugangskontrollen, Sicherheitsmechanismen oder Nutzungslimits zu umgehen;
+
+7. unbefugt auf Konten, Systeme, Daten oder Informationen zuzugreifen;
+
+8. andere Personen über Identität, Herkunft oder Eigenschaften von Inhalten in irreführender Weise zu täuschen;
+
+9. KI-generierte Inhalte entgegen gesetzlichen Kennzeichnungs- oder Transparenzpflichten als menschlich erstellt auszugeben;
+
+10. automatisiert Daten aus unseren Diensten in einer Weise auszulesen, die nicht von uns ausdrücklich erlaubt wurde;
+
+11. den Dienst oder wesentliche Bestandteile hiervon unbefugt zu kopieren, weiterzuverkaufen, zu vermieten oder anderweitig kommerziell zu verwerten;
+
+12. Quellcode, Modelle oder nicht öffentlich zugängliche technische Bestandteile des Dienstes zurückzuentwickeln, soweit eine solche Beschränkung gesetzlich zulässig ist.
+
+[OPTIONAL:] Weitere Einzelheiten können in einer gesonderten Acceptable Use Policy / Nutzungsrichtlinie festgelegt werden.
+
+10. Eingaben des Nutzers („Input“)
+
+Nutzer können Informationen, Texte, Anweisungen, Dateien, Bilder oder sonstige Inhalte in den Dienst eingeben oder hochladen („Input“).
+
+Der Nutzer bleibt grundsätzlich Inhaber der Rechte, die ihm an seinem Input zustehen.
+
+Der Nutzer ist dafür verantwortlich, dass er über die notwendigen Rechte und Befugnisse zur Verwendung und Übermittlung seines Inputs verfügt.
+
+Insbesondere darf der Nutzer keine Inhalte übermitteln, wenn dadurch Rechte Dritter oder gesetzliche Vorgaben verletzt werden.
+
+Der Nutzer räumt uns an seinem Input die Rechte ein, die erforderlich sind, um den Dienst vertragsgemäß bereitzustellen, insbesondere um den Input technisch zu übertragen, zu verarbeiten, zu speichern und zur Erzeugung des gewünschten Outputs zu verwenden.
+
+Die Einzelheiten der Verarbeitung personenbezogener Daten ergeben sich aus unserer Datenschutzerklärung.
+
+11. KI-generierte Inhalte („Output“)
+
+Vom Dienst auf Grundlage von Nutzereingaben erzeugte Inhalte werden im Folgenden als „Output“ bezeichnet.
+
+Soweit an Output Rechte entstehen, die uns zustehen und rechtlich übertragbar oder lizenzierbar sind, räumen wir dem Nutzer die für die bestimmungsgemäße Nutzung des Outputs erforderlichen Rechte ein.
+
+Dies gilt nicht für:
+
+- Rechte Dritter,
+
+- bereits bestehende Inhalte,
+
+- Open-Source- oder anderweitig separat lizenzierte Inhalte,
+
+- Inhalte externer Dienste,
+
+- Rechte, die gesetzlich nicht übertragen werden können.
+
+Aufgrund der Funktionsweise generativer KI ist Output nicht notwendigerweise einzigartig. Andere Nutzer können identische oder ähnliche Inhalte erhalten.
+
+Wir garantieren daher weder Exklusivität noch urheberrechtliche Schutzfähigkeit eines bestimmten Outputs.
+
+Der Nutzer ist selbst dafür verantwortlich zu prüfen, ob und in welcher Form ein Output veröffentlicht, vervielfältigt, kommerziell verwendet oder anderweitig genutzt werden darf.
+
+12. Verantwortung für Input und Verwendung von Output
+
+Der Nutzer trägt die Verantwortung für:
+
+- seine Eingaben,
+
+- die von ihm veranlasste Verwendung des Dienstes,
+
+- die Prüfung des Outputs,
+
+- Entscheidungen, die er auf Grundlage des Outputs trifft,
+
+- die Weitergabe oder Veröffentlichung von Output.
+
+Output ist vor einer Verwendung, bei der Fehler erhebliche Folgen verursachen könnten, angemessen menschlich zu überprüfen.
+
+KI-generierter Output gibt nicht notwendigerweise Ansichten, Überzeugungen oder Empfehlungen des Anbieters wieder.
+
+13. Verarbeitung und Verbesserung des Dienstes
+
+Wir dürfen Daten und Inhalte in dem Umfang verarbeiten, der erforderlich ist, um:
+
+- die Dienste bereitzustellen,
+
+- technische Fehler zu erkennen und zu beheben,
+
+- Missbrauch und Sicherheitsrisiken zu erkennen,
+
+- gesetzliche Pflichten zu erfüllen,
+
+- unsere Nutzungsbedingungen durchzusetzen und
+
+- unsere Dienste weiterzuentwickeln,
+
+jeweils im Rahmen der geltenden datenschutzrechtlichen Bestimmungen.
+
+Ob und in welchem Umfang Nutzereingaben oder Interaktionen zur Verbesserung oder zum Training von KI-Systemen verwendet werden, wird in unserer Datenschutzerklärung und gegebenenfalls in den jeweiligen Produkteinstellungen erläutert.
+
+[HIER MUSS SPÄTER KONKRET ENTSCHIEDEN WERDEN: Training ja/nein, Drittanbieter, Opt-out etc.]
+
+14. Drittanbieter und externe KI-Modelle
+
+Unsere Dienste können technische Infrastruktur, Modelle, APIs, Zahlungsdienste, Hosting-Dienste oder andere Leistungen externer Anbieter verwenden.
+
+Hierzu können insbesondere gehören:
+
+OpenAI (KI-Anbieter). [Weitere tatsächlich eingesetzte Dienstleister vor Veröffentlichung ergänzen.]
+
+Die Einbindung solcher Anbieter kann dazu führen, dass Daten technisch an diese Anbieter übermittelt oder von ihnen verarbeitet werden. Einzelheiten ergeben sich aus unserer Datenschutzerklärung.
+
+Soweit der Nutzer externe Dienste unmittelbar nutzt oder mit seinem eigenen Konto verbindet, können zusätzlich die Bedingungen des jeweiligen Drittanbieters gelten.
+
+Für Inhalte und Dienste Dritter übernehmen wir keine Verantwortung, soweit deren Bereitstellung außerhalb unseres Verantwortungsbereichs liegt.
+
+15. Verfügbarkeit und technische Einschränkungen
+
+Wir bemühen uns um eine zuverlässige Bereitstellung der Dienste.
+
+Eine jederzeitige, ununterbrochene oder vollständig fehlerfreie Verfügbarkeit kann jedoch nicht garantiert werden, soweit nicht ausdrücklich etwas anderes vereinbart wurde oder zwingendes Recht entgegensteht.
+
+Vorübergehende Einschränkungen können insbesondere entstehen durch:
+
+- Wartungsarbeiten,
+
+- Updates,
+
+- Sicherheitsmaßnahmen,
+
+- technische Störungen,
+
+- Ausfälle von Drittanbietern,
+
+- Kapazitätsgrenzen,
+
+- Ereignisse außerhalb unseres zumutbaren Einflussbereichs.
+
+Gesetzliche Ansprüche des Nutzers bei Mängeln digitaler Produkte bleiben unberührt.
+
+16. Änderungen und Weiterentwicklung des Dienstes
+
+Digitale und KI-basierte Dienste entwickeln sich fortlaufend weiter.
+
+Wir können Funktionen insbesondere ändern, ergänzen oder ersetzen, wenn hierfür ein sachlicher Grund besteht, etwa:
+
+- technische Weiterentwicklung,
+
+- Verbesserung von Sicherheit oder Zuverlässigkeit,
+
+- Missbrauchsprävention,
+
+- Anpassung an neue Technologien,
+
+- Änderungen bei eingesetzten Drittanbietern,
+
+- gesetzliche oder regulatorische Anforderungen,
+
+- Verbesserung der Benutzerfreundlichkeit oder
+
+- Weiterentwicklung des Produktkonzepts.
+
+Soweit für den Nutzer die gesetzlichen Vorschriften über digitale Produkte gelten, erfolgen Änderungen nur im Rahmen dieser Vorschriften.
+
+Änderungen, die die Zugriffsmöglichkeit oder Nutzbarkeit für einen Verbraucher mehr als nur unerheblich beeinträchtigen, werden rechtzeitig und in der gesetzlich vorgesehenen Form mitgeteilt. Gesetzliche Kündigungs- oder Beendigungsrechte bleiben unberührt.
+
+17. Preise und Zahlung
+
+Für kostenpflichtige Leistungen gelten die zum Zeitpunkt der Bestellung angezeigten Preise.
+
+Alle Preise verstehen sich [inklusive / zuzüglich] der gesetzlich anfallenden Umsatzsteuer, soweit eine solche erhoben wird.
+
+Zur Zahlungsabwicklung können externe Zahlungsdienstleister eingesetzt werden.
+
+Der Nutzer ist verpflichtet, bei kostenpflichtigen Leistungen richtige und vollständige Zahlungsinformationen bereitzustellen und nur Zahlungsmittel zu verwenden, zu deren Nutzung er berechtigt ist.
+
+Die jeweils verfügbaren Zahlungsmethoden werden im Bestellprozess angezeigt.
+
+18. Abonnements
+
+[ENTFERNEN, WENN ES KEINE ABOS GIBT.]
+
+Soweit Leistungen als Abonnement angeboten werden, ergeben sich Preis, Abrechnungszeitraum und Vertragsdauer aus der jeweiligen Tarifbeschreibung.
+
+Ein Abonnement kann sich automatisch verlängern, wenn dies vor Vertragsschluss ausdrücklich angegeben wurde und keine Kündigung erfolgt.
+
+Wiederkehrende Entgelte werden zu Beginn des jeweiligen Abrechnungszeitraums über das hinterlegte Zahlungsmittel abgerechnet.
+
+Der Nutzer kann das Abonnement nach Maßgabe der im Bestellprozess angegebenen Kündigungsbedingungen kündigen.
+
+Soweit gesetzlich vorgeschrieben, stellen wir eine entsprechende elektronische Kündigungsmöglichkeit zur Verfügung.
+
+Nach einer ordentlichen Kündigung bleibt der Zugang grundsätzlich bis zum Ende des bereits bezahlten Abrechnungszeitraums bestehen, soweit nicht etwas anderes vereinbart wurde.
+
+Gesetzliche Erstattungs-, Widerrufs-, Minderungs- und Beendigungsrechte bleiben unberührt.
+
+19. Preisänderungen bei Abonnements
+
+Wir können Preise für zukünftige Abrechnungszeiträume ändern.
+
+Bei einer Preiserhöhung informieren wir den Nutzer rechtzeitig vor deren Wirksamwerden in Textform.
+
+Die Änderung gilt frühestens für einen zukünftigen Verlängerungszeitraum.
+
+Soweit erforderlich, erhält der Nutzer die Möglichkeit, das Abonnement vor Inkrafttreten der Preiserhöhung zu kündigen.
+
+Eine rückwirkende Preiserhöhung für bereits bezahlte Vertragszeiträume erfolgt nicht.
+
+20. Widerrufsrecht für Verbraucher
+
+Verbrauchern stehen bei Fernabsatzverträgen die gesetzlichen Widerrufsrechte zu.
+
+Die Einzelheiten, einschließlich Widerrufsfrist, Ausübung des Widerrufs, Folgen des Widerrufs und gegebenenfalls der Voraussetzungen für einen vorzeitigen Beginn der Leistung, werden in einer gesonderten Widerrufsbelehrung mitgeteilt.
+
+Diese AGB ersetzen die gesetzlich erforderliche Widerrufsbelehrung nicht.
+
+21. Kündigung durch den Nutzer
+
+Der Nutzer kann die Nutzung unentgeltlicher Dienste jederzeit einstellen.
+
+Nutzerkonten können nach dem im Produkt vorgesehenen Verfahren oder durch Kontaktaufnahme unter feely@selinabernard.com geschlossen werden.
+
+Für kostenpflichtige Verträge gelten die jeweils vereinbarten Laufzeiten und Kündigungsfristen.
+
+Zwingende gesetzliche Rechte zur außerordentlichen Kündigung oder Vertragsbeendigung bleiben unberührt.
+
+22. Sperrung und Kündigung durch den Anbieter
+
+Wir können den Zugang zu den Diensten vorübergehend beschränken oder einen Nutzungsvertrag kündigen, wenn hierfür ein sachlicher Grund besteht.
+
+Dies kann insbesondere der Fall sein, wenn:
+
+- der Nutzer wesentlich oder wiederholt gegen diese AGB verstößt;
+
+- der Dienst rechtswidrig genutzt wird;
+
+- die Nutzung Rechte anderer verletzt;
+
+- Sicherheitsrisiken für Nutzer, Dritte oder unsere Systeme entstehen;
+
+- der Nutzer technische Schutzmaßnahmen oder Nutzungsbeschränkungen umgeht;
+
+- wir aufgrund gesetzlicher Vorgaben zur Sperrung verpflichtet sind.
+
+Soweit möglich und zumutbar, wird der Nutzer vor einer Sperrung oder Kündigung informiert und erhält Gelegenheit zur Stellungnahme oder Abhilfe.
+
+Bei schwerwiegenden Sicherheitsrisiken, Rechtsverletzungen oder gesetzlichen Verpflichtungen kann eine sofortige Maßnahme erforderlich sein.
+
+Gesetzliche Rechte des Nutzers bleiben unberührt.
+
+23. Moderation und Entfernung von Inhalten
+
+Soweit Nutzer Inhalte innerhalb unserer Dienste speichern, teilen oder veröffentlichen können, dürfen wir Inhalte prüfen, einschränken oder entfernen, wenn konkrete Anhaltspunkte dafür bestehen, dass diese:
+
+- gegen geltendes Recht,
+
+- gegen diese AGB,
+
+- gegen eine ergänzende Nutzungsrichtlinie oder
+
+- gegen Rechte Dritter
+
+verstoßen.
+
+Soweit gesetzlich erforderlich, informieren wir den betroffenen Nutzer über Maßnahmen und vorhandene Beschwerde- oder Rechtsbehelfsmöglichkeiten.
+
+24. Geistiges Eigentum am Dienst
+
+Alle Rechte an unseren Diensten, einschließlich insbesondere:
+
+- Software,
+
+- Benutzeroberflächen,
+
+- Designs,
+
+- Marken,
+
+- Logos,
+
+- Texte,
+
+- Grafiken,
+
+- Datenbanken,
+
+- eigener Inhalte und
+
+- sonstiger geschützter Bestandteile
+
+verbleiben bei uns beziehungsweise den jeweiligen Rechteinhabern.
+
+Die Nutzung unserer Dienste vermittelt keine Eigentumsrechte an diesen Bestandteilen.
+
+Der Nutzer erhält lediglich das nicht ausschließliche, nicht übertragbare Recht, den Dienst während der Vertragsdauer im vereinbarten Umfang zu nutzen.
+
+25. Feedback
+
+Nutzer können uns freiwillig Rückmeldungen, Ideen oder Verbesserungsvorschläge zum Dienst übermitteln.
+
+Soweit nicht ausdrücklich anders vereinbart, dürfen wir solches Feedback ohne Verpflichtung zur Vergütung für die Weiterentwicklung unserer Produkte und Dienste verwenden.
+
+Dies betrifft nicht Rechte an sonstigen vertraulichen oder vom Nutzer geschützten Inhalten.
+
+26. Datenschutz
+
+Die Verarbeitung personenbezogener Daten erfolgt nach Maßgabe der geltenden Datenschutzgesetze.
+
+Weitere Informationen insbesondere zu:
+
+- Art und Umfang der verarbeiteten Daten,
+
+- Verarbeitungszwecken,
+
+- Rechtsgrundlagen,
+
+- Speicherdauer,
+
+- eingesetzten Dienstleistern,
+
+- internationalen Datenübermittlungen und
+
+- Rechten betroffener Personen
+
+enthält unsere Datenschutzerklärung unter [URL].
+
+27. Gewährleistung
+
+Für Verbraucher gelten die gesetzlichen Vorschriften über die Vertragsmäßigkeit und Mängel digitaler Produkte.
+
+Wir übernehmen keine darüber hinausgehende Garantie für bestimmte Eigenschaften, Ergebnisse oder wirtschaftliche Erfolge, soweit eine solche Garantie nicht ausdrücklich erklärt wurde.
+
+Insbesondere wird kein bestimmtes individuelles Ergebnis allein dadurch geschuldet, dass der Nutzer den Chatbot, Coaching-Funktionen oder andere KI-basierte Funktionen verwendet.
+
+28. Haftung
+
+Wir haften unbeschränkt:
+
+1. bei Vorsatz und grober Fahrlässigkeit;
+
+2. für Schäden aus der Verletzung des Lebens, des Körpers oder der Gesundheit;
+
+3. nach den Vorschriften des Produkthaftungsrechts, soweit dieses anwendbar ist;
+
+4. im Umfang einer ausdrücklich übernommenen Garantie;
+
+5. in sonstigen Fällen, in denen eine Haftungsbeschränkung gesetzlich unzulässig ist.
+
+Bei leicht fahrlässiger Verletzung einer wesentlichen Vertragspflicht haften wir nur auf den bei Vertragsschluss vorhersehbaren, vertragstypischen Schaden. Wesentliche Vertragspflichten sind solche Pflichten, deren Erfüllung die ordnungsgemäße Durchführung des Vertrags überhaupt erst ermöglicht und auf deren Einhaltung der Nutzer regelmäßig vertrauen darf.
+
+Im Übrigen ist die Haftung für leicht fahrlässig verursachte Schäden ausgeschlossen, soweit gesetzlich zulässig.
+
+Die vorstehenden Haftungsregelungen gelten entsprechend für unsere gesetzlichen Vertreter, Mitarbeiter und Erfüllungsgehilfen.
+
+Zwingende gesetzliche Verbraucherrechte bleiben unberührt.
+
+29. Haftung für KI-Output
+
+Die besonderen Eigenschaften generativer KI gemäß den Abschnitten 4, 11 und 12 stellen für sich genommen keinen Ausschluss gesetzlicher Mängel- oder Haftungsrechte dar.
+
+Soweit der Dienst jedoch ordnungsgemäß bereitgestellt wurde und keine weitergehende Beschaffenheit vereinbart wurde, übernehmen wir keine Garantie dafür, dass ein bestimmter KI-Output:
+
+- vollständig,
+
+- faktisch richtig,
+
+- aktuell,
+
+- einzigartig,
+
+- für einen bestimmten Zweck geeignet oder
+
+- frei von Rechten Dritter
+
+ist.
+
+Der Nutzer ist verpflichtet, die für seinen konkreten Verwendungszweck erforderliche Prüfung vorzunehmen.
+
+30. Freistellung bei geschäftlicher Nutzung
+
+[OPTIONAL – VOR ALLEM FÜR B2B RELEVANT.]
+
+Soweit der Nutzer Unternehmer ist, stellt er uns im gesetzlich zulässigen Umfang von berechtigten Ansprüchen Dritter frei, die darauf beruhen, dass von ihm bereitgestellte Inhalte oder eine von ihm veranlasste Nutzung des Dienstes schuldhaft Rechte Dritter oder gesetzliche Vorschriften verletzt.
+
+Dies umfasst angemessene und erforderliche Kosten der Rechtsverteidigung.
+
+Die Regelung gilt nicht, soweit der Nutzer die Rechtsverletzung nicht zu vertreten hat.
+
+31. Änderungen dieser AGB
+
+Wir können diese AGB ändern, wenn hierfür ein sachlicher Grund besteht, insbesondere aufgrund:
+
+- geänderter gesetzlicher oder regulatorischer Anforderungen,
+
+- neuer oder geänderter Funktionen,
+
+- Sicherheitsanforderungen,
+
+- technischer Entwicklungen oder
+
+- Änderungen unserer Geschäfts- oder Produktstruktur,
+
+und die Änderung unter Berücksichtigung der Interessen beider Vertragsparteien für den Nutzer zumutbar ist.
+
+Änderungen, welche die vertragliche Äquivalenz wesentlich verändern oder den Nutzer unangemessen benachteiligen, werden nicht allein aufgrund dieser Klausel vorgenommen.
+
+Soweit erforderlich, informieren wir Nutzer rechtzeitig vor Inkrafttreten der Änderung in Textform.
+
+Bestehen aufgrund einer Änderung gesetzliche Kündigungs-, Widerspruchs- oder Beendigungsrechte, werden wir hierüber informieren.
+
+32. Übertragung des Vertrags
+
+Der Nutzer darf Rechte oder Pflichten aus dem Nutzungsvertrag nur mit unserer Zustimmung auf Dritte übertragen, soweit nicht gesetzlich etwas anderes vorgesehen ist.
+
+Wir dürfen den Vertrag oder einzelne Rechte und Pflichten auf ein anderes Unternehmen übertragen, sofern dadurch die Rechte des Nutzers nicht beeinträchtigt werden und die Übertragung gesetzlich zulässig ist.
+
+33. Anwendbares Recht
+
+Es gilt das Recht der Bundesrepublik Deutschland.
+
+Bei Verbrauchern gilt diese Rechtswahl nur insoweit, als hierdurch nicht der Schutz entzogen wird, der dem Verbraucher aufgrund zwingender Vorschriften des Staates seines gewöhnlichen Aufenthalts zusteht.
+
+34. Gerichtsstand
+
+Für Verbraucher gelten die gesetzlichen Gerichtsstandsregelungen.
+
+Ist der Nutzer Kaufmann, juristische Person des öffentlichen Rechts oder öffentlich-rechtliches Sondervermögen oder besteht ein sonstiger gesetzlich zulässiger Fall einer Gerichtsstandsvereinbarung, ist Gerichtsstand [ORT].
+
+35. Verbraucherstreitbeilegung
+
+[HIER MUSS ANBIETERSPEZIFISCH EINE VARIANTE GEWÄHLT WERDEN.]
+
+Der Anbieter ist [bereit / nicht bereit] und [verpflichtet / nicht verpflichtet], an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen.
+
+[GGF. ZUSTÄNDIGE SCHLICHTUNGSSTELLE EINFÜGEN.]
+
+36. Schlussbestimmungen
+
+Sollten einzelne Bestimmungen dieser AGB ganz oder teilweise unwirksam sein oder werden, bleiben die übrigen Bestimmungen hiervon unberührt.
+
+An die Stelle einer unwirksamen Bestimmung treten die gesetzlichen Vorschriften.
+
+Nebenabreden und individuelle Vereinbarungen zwischen Anbieter und Nutzer gehen diesen AGB vor.

@@ -1,6 +1,7 @@
 """Public website: serve only explicitly approved assets, never a directory."""
 
 from pathlib import Path
+import re
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse
@@ -14,6 +15,11 @@ PUBLIC_FILES = frozenset(
         "index.html",
         "chat.html",
         "admin.html",
+        "agb.html",
+        "legal/terms-page.js",
+        "legal/agb-draft.html",
+        "legal/agb-draft.txt",
+        "legal/draft-page.js",
         "app.js",
         "admin.js",
         "styles.css",
@@ -55,11 +61,12 @@ def public_file(path: str, request: Request):
         query = f"?{request.url.query}" if request.url.query else ""
         return RedirectResponse(f"/{query}", status_code=307, headers={"Cache-Control": "no-store"})
     name = path or "index.html"
-    if name not in PUBLIC_FILES:
+    published_terms = re.fullmatch(r"legal/agb/[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}\.html", name)
+    if name not in PUBLIC_FILES and not published_terms:
         raise HTTPException(status_code=404, detail="Not found")
     root = WEBSITE_ROOT.resolve()
     target = (root / name).resolve()
     if not target.is_relative_to(root) or not target.is_file():
         raise HTTPException(status_code=404, detail="Not found")
-    cache_control = "no-store" if name == "index.html" else "no-cache"
+    cache_control = "no-store" if name in {"index.html", "legal/agb-draft.txt"} else "no-cache"
     return FileResponse(target, headers={"Cache-Control": cache_control})

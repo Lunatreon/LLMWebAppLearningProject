@@ -37,6 +37,37 @@ def test_root_serves_shell_and_legacy_urls_redirect_with_query_intact():
         assert client.get("/views/chat.html", follow_redirects=False).status_code == 200
 
 
+def test_legal_documents_are_public_without_exposing_other_files():
+    with TestClient(app) as client:
+        for name in ("agb.html", "legal/terms-page.js", "legal/agb-draft.html",
+                     "legal/agb-draft.txt", "legal/draft-page.js",
+                     "legal/agb/test-2026-10-05-v2.html"):
+            response = client.get(f"/{name}")
+            assert response.status_code == 200
+            assert response.content == (WEBSITE / name).read_bytes()
+            assert client.head(f"/{name}").status_code == 200
+        for name in ("legal/private.txt", "legal/agb/missing.html",
+                     "legal/agb/%2e%2e%2fagb-draft.html", ".env"):
+            assert client.get(f"/{name}").status_code == 404
+
+
+def test_draft_text_edits_are_served_without_restart(tmp_path, monkeypatch):
+    import app.api.routes.website as website_routes
+
+    legal = tmp_path / "legal"
+    legal.mkdir()
+    source = legal / "agb-draft.txt"
+    monkeypatch.setattr(website_routes, "WEBSITE_ROOT", tmp_path)
+    with TestClient(app) as client:
+        for content in ("First draft", "Updated draft\n<script>literal text</script>"):
+            source.write_text(content, encoding="utf-8", newline="\n")
+            response = client.get("/legal/agb-draft.txt")
+            assert response.status_code == 200
+            assert response.text == content
+            assert response.headers["cache-control"] == "no-store"
+            assert response.headers["content-type"].startswith("text/plain")
+
+
 def test_shell_views_and_scripts_are_public():
     html = (WEBSITE / "index.html").read_text(encoding="utf-8")
     sources = application_scripts(html)

@@ -179,6 +179,28 @@ def test_published_terms_gate_features_and_revisions(client, monkeypatch, docume
     )
 
 
+def test_publish_text_freezes_content_and_rejects_live_viewer(tmp_path):
+    import hashlib
+    from scripts.publish_terms import publish
+
+    source = tmp_path / "working.txt"
+    source.write_text("ENTWURF\nAGB\n<script>alert('text')</script>", encoding="utf-8")
+    with pytest.raises(ValueError, match="Finish and review"):
+        publish(source, "v1", "https://app.example.com", tmp_path)
+    snapshot = publish(source, "test-v1", "https://app.example.com", tmp_path, allow_draft=True)
+    frozen = snapshot.read_bytes()
+    assert b"&lt;script&gt;" in frozen
+    assert b"<script>" not in frozen
+    assert b"fetch(" not in frozen
+    assert hashlib.sha256(frozen).hexdigest() in (tmp_path / ".env").read_text()
+    source.write_text("Later edit", encoding="utf-8")
+    assert snapshot.read_bytes() == frozen
+    viewer = tmp_path / "viewer.html"
+    viewer.write_text('<html><main data-terms-source="working.txt"></main></html>')
+    with pytest.raises(ValueError, match="source .txt"):
+        publish(viewer, "v2", "https://app.example.com", tmp_path)
+
+
 def test_publish_terms_preserves_versions_and_other_settings(tmp_path):
     import hashlib
     from scripts.publish_terms import publish

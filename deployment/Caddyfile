@@ -29,6 +29,11 @@
     }
 
     redir /reference /reference/ 308
+    handle /legal/* {
+        root * /srv/reference
+        header Cache-Control no-store
+        file_server
+    }
     handle_path /reference/* {
         root * /srv/reference
         header Cache-Control no-store

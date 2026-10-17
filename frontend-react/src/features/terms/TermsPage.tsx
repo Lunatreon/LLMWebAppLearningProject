@@ -9,6 +9,7 @@ import { isPublishedTerms } from './types';
 import type { TermsConfiguration } from './types';
 import { useTermsAcceptance } from './useTermsAcceptance';
 import { reflectionPracticeId } from '../reflection/types';
+import { legacySignInUrl } from '../../services/config';
 
 type PublicState =
   | { status: 'loading' }
@@ -145,6 +146,15 @@ export default function TermsPage() {
           </div>
         )}
       </section>
+      <p>
+        <a
+          href={new URL('legal/agb-draft.html', legacySignInUrl()).href}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Preview updated German AGB draft (unfinished)
+        </a>
+      </p>
     </div>
   );
 }
