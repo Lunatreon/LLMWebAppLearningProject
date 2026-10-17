@@ -12,7 +12,6 @@ export function freeSubscription(): SubscriptionResponse {
     plan: 'free',
     premium: false,
     my_map_access: false,
-    journal_access: false,
     chat_daily_limit: 10,
     cancel_at_period_end: false,
     current_period_end: null,

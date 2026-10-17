@@ -93,24 +93,6 @@ export default function Sidebar({
         onClose={onClose}
       />
       <button
-        id="journal-workspace-button"
-        className={`sidebar-journal-link${workspace === 'journal' ? ' active' : ''}`}
-        type="button"
-        aria-pressed={workspace === 'journal'}
-        title={session.journalAccess ? 'Open Journal' : 'Journal is included with Premium'}
-        onClick={() => onNavigate('/journal')}
-      >
-        <span aria-hidden="true">✎</span> Journal
-        <span
-          id="journal-plan-badge"
-          className="workspace-premium-badge"
-          hidden={session.journalAccess}
-          aria-hidden="true"
-        >
-          ✦
-        </span>
-      </button>
-      <button
         id="feedback-button"
         className={`sidebar-feedback-link${feature === 'feedback' ? ' active' : ''}`}
         type="button"

@@ -1,6 +1,6 @@
 import type { SessionContextValue } from '../context/SessionContext';
 import type { ShellSession } from '../types/navigation';
-import { hasJournalAccess, hasMapAccess } from './capabilities';
+import {hasMapAccess } from './capabilities';
 
 export function shellSession(context: SessionContextValue): ShellSession {
   const { session, feedback, controller } = context;
@@ -12,7 +12,6 @@ export function shellSession(context: SessionContextValue): ShellSession {
         email: session.account.email,
       },
       mapAccess: hasMapAccess(session.subscription),
-      journalAccess: hasJournalAccess(session.subscription),
       feedbackEnabled: feedback.enabled,
       onSignOut: () => controller.signOut(),
     };
@@ -30,7 +29,6 @@ export function shellSession(context: SessionContextValue): ShellSession {
       email: statusMessage,
     },
     mapAccess: false,
-    journalAccess: false,
     feedbackEnabled: false,
   };
 }

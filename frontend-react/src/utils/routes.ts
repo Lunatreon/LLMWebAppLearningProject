@@ -15,13 +15,6 @@ export const featureRoutes = {
     headerClass: 'map-header',
     workspace: 'map',
   },
-  journal: {
-    title: 'Write and reflect',
-    eyebrow: 'Private journal',
-    viewClass: 'journal-view',
-    headerClass: 'journal-header',
-    workspace: 'journal',
-  },
   reflection: {
     title: 'What happened when you tried it?',
     eyebrow: 'Review without shame',
@@ -62,14 +55,14 @@ export function workspaceFromRoute(feature: Feature | undefined, state: unknown)
   if (routeWorkspace) return routeWorkspace;
   const value =
     state && typeof state === 'object' ? (state as ShellRouteState).workspace : undefined;
-  return value === 'map' || value === 'journal' ? value : 'chat';
+  return value === 'map' ? value : 'chat';
 }
 
 export function workspaceReturnPath(workspace: Workspace, state: unknown): string {
   const value =
     state && typeof state === 'object' ? (state as ShellRouteState).returnTo : undefined;
   // Only return to a known primary workspace; never trust arbitrary route state.
-  return value === '/chat' || value === '/map' || value === '/journal' ? value : `/${workspace}`;
+  return value === '/chat' || value === '/map' ? value : `/${workspace}`;
 }
 
 export function termsReturnPath(workspace: Workspace, state: unknown): string {

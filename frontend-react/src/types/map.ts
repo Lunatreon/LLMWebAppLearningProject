@@ -27,7 +27,6 @@ export interface MapEntry {
   category: EntryCategory;
   text: string;
   source_chat_id?: string | null;
-  source_journal_date?: string | null;
   reason?: string | null;
   created_at?: string;
   updated_at?: string;
@@ -41,7 +40,6 @@ export interface MapTopic extends MapTopicChoice {
   parent_topic_id?: string | null;
   related_topic_ids?: string[];
   chat_ids?: string[];
-  journal_dates?: string[];
   entries?: MapEntry[];
   created_at?: string;
   updated_at?: string;

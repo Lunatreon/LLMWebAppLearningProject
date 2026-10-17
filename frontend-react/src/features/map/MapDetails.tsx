@@ -1,6 +1,5 @@
 import { useContext } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { formattedJournalDate } from '../journal/dates';
 import { categoryLabels, topicCategories, topicCategoryOf } from '../../types/map';
 import type { MapTopic } from '../../types/map';
 import { categoryCounts } from './mapLayout';
@@ -15,8 +14,7 @@ export default function MapDetails({ node }: { node: MapNodeData }) {
   const location = useLocation();
   const chat = useContext(ChatContext);
   const entries = node.entries || [],
-    chats = node.chat_ids?.length || 0,
-    journals = node.journal_dates?.length || 0;
+    chats = node.chat_ids?.length || 0
   const disabled =
     !snapshot.enabled || snapshot.errorStatus === 403 || Boolean(snapshot.pending.length);
   const topics = snapshot.data?.topic_spaces || [];
@@ -79,9 +77,6 @@ export default function MapDetails({ node }: { node: MapNodeData }) {
       <div className="map-node-stats">
         <span>
           {chats} {chats === 1 ? 'chat' : 'chats'}
-        </span>
-        <span>
-          {journals} {journals === 1 ? 'journal entry' : 'journal entries'}
         </span>
         <span>
           {entries.length} {entries.length === 1 ? 'entry' : 'entries'}
@@ -148,34 +143,6 @@ export default function MapDetails({ node }: { node: MapNodeData }) {
                       'Conversation'}
                   </Link>
                 ))}
-              </div>
-            </section>
-          )}
-          {journals > 0 && (
-            <section className="map-detail-section">
-              <h4>Connected journal entries</h4>
-              <div className="map-connected-journals">
-                {[...node.journal_dates!]
-                  .sort()
-                  .reverse()
-                  .map((date) => (
-                    <button
-                      key={date}
-                      type="button"
-                      onClick={() => {
-                        navigate(
-                          { pathname: '/journal', search: location.search },
-                          { state: { journalDate: date } },
-                        );
-                      }}
-                    >
-                      {formattedJournalDate(date, {
-                        month: 'long',
-                        day: 'numeric',
-                        year: 'numeric',
-                      })}
-                    </button>
-                  ))}
               </div>
             </section>
           )}

@@ -32,7 +32,6 @@ SPA_ROUTES = frozenset(
         "agb.html",
         "chat",
         "map",
-        "journal",
         "reflection",
         "account",
         "feedback",

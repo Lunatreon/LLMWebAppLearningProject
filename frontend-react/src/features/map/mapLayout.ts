@@ -45,13 +45,6 @@ export function overallNode(map?: MapData | null): MapNodeData {
         entries.map((entry) => entry.source_chat_id).filter((id): id is string => Boolean(id)),
       ),
     ],
-    journal_dates: [
-      ...new Set(
-        entries
-          .map((entry) => entry.source_journal_date)
-          .filter((date): date is string => Boolean(date)),
-      ),
-    ],
     entries,
     position: nodePosition(0),
   };

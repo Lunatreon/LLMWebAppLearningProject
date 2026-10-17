@@ -3,7 +3,6 @@ import type { Feature, Theme } from '../../types/navigation';
 import { featureRoutes } from '../../utils/routes';
 import ThemeToggle from './ThemeToggle';
 import { useContext } from 'react';
-import { JournalContext } from '../../features/journal/JournalContext';
 import { MapContext } from '../../features/map/MapContext';
 import { ChatContext } from '../../features/chat/ChatContext';
 
@@ -25,10 +24,9 @@ export default function WorkspaceHeader({
   onToggleTheme,
 }: Props) {
   const route = feature ? featureRoutes[feature] : undefined;
-  const journal = useContext(JournalContext);
   const map = useContext(MapContext);
   const chat = useContext(ChatContext);
-  const menuLabel = feature === 'journal' ? 'Open journal pages' : 'Open conversations';
+  const menuLabel =  'Open conversations';
   let heading: ReactNode = route?.title ?? 'FeelY preview';
   if (feature === 'map') {
     heading = (
@@ -83,27 +81,7 @@ export default function WorkspaceHeader({
             + Add topic
           </button>
         )}
-        {feature === 'journal' && journal?.snapshot.enabled && (
-          <button
-            id="journal-analyse-button"
-            className="journal-ai-button"
-            type="button"
-            disabled={
-              journal.snapshot.analysing ||
-              journal.snapshot.draft.loading ||
-              !journal.snapshot.draft.entry
-            }
-            onClick={() => void journal.controller.analyse()}
-          >
-            {journal.snapshot.analysing ? (
-              'Finding insights...'
-            ) : (
-              <>
-                <span aria-hidden="true">✦</span> Find map insights
-              </>
-            )}
-          </button>
-        )}
+        
         <ThemeToggle theme={theme} onToggle={onToggleTheme} />
       </div>
     </header>

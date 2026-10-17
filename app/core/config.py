@@ -109,34 +109,28 @@ class Settings(BaseSettings):
     llm_provider: str = "mock"
     chat_llm_provider: str | None = None
     topic_llm_provider: str | None = "local"
-    journal_llm_provider: str | None = None
     openai_api_key: str | None = None
     openai_timeout_seconds: float = Field(default=600.0, gt=0, le=600)
     openai_max_retries: int = Field(default=2, ge=0, le=3)
-    openai_model: str = "gpt-5.4-mini"
+    openai_model: str = "gpt-5.6-luna"
     openai_chat_model: str | None = None
     openai_topic_model: str | None = None
-    openai_journal_model: str | None = None
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-sonnet-4-6"
     anthropic_chat_model: str | None = None
     anthropic_topic_model: str | None = None
-    anthropic_journal_model: str | None = None
     anthropic_max_tokens: int = 4096
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "qwen3.5:4b"
     ollama_chat_model: str | None = None
     ollama_topic_model: str | None = None
-    ollama_journal_model: str | None = None
     ollama_timeout_seconds: float = 180.0
     ollama_context_window: int = 8192
     ollama_chat_temperature: float = Field(default=0.3, ge=0, le=2)
     ollama_chat_max_tokens: int = 1536
     ollama_topic_max_tokens: int = 768
-    ollama_journal_max_tokens: int = 768
     ollama_chat_num_gpu: int = 0
     ollama_topic_num_gpu: int = 0
-    ollama_journal_num_gpu: int | None = None
     ollama_keep_alive: int = 300
     ollama_prewarm: bool = False
     prompt_directory: str = "prompts"

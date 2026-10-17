@@ -10,7 +10,6 @@ import Sidebar from './Sidebar';
 import WorkspaceHeader from './WorkspaceHeader';
 import { useContext } from 'react';
 import TermsGate from '../../features/terms/TermsGate';
-import { JournalContext } from '../../features/journal/JournalContext';
 import { MapContext } from '../../features/map/MapContext';
 import { ReflectionContext } from '../../features/reflection/ReflectionContext';
 import { ChatContext } from '../../features/chat/ChatContext';
@@ -21,7 +20,6 @@ interface Props {
 
 export default function AppShell({ session: supplied }: Props) {
   const context = useContext(SessionContext);
-  const journal = useContext(JournalContext);
   const map = useContext(MapContext);
   const reflection = useContext(ReflectionContext);
   const chat = useContext(ChatContext);
@@ -39,7 +37,6 @@ export default function AppShell({ session: supplied }: Props) {
 
   function navigateTo(path: string) {
     sidebar.closeSidebar();
-    if (path === '/journal' && location.pathname === '/journal') void journal?.controller.visit();
     if (path === '/map' && location.pathname === '/map') void map?.controller.visit();
     navigate(
       { pathname: path, search: location.search },
@@ -54,8 +51,6 @@ export default function AppShell({ session: supplied }: Props) {
   let title: string;
   if (visibleFeature === 'map') {
     title = 'My Map | FeelY';
-  } else if (feature === 'journal') {
-    title = 'Journal | FeelY';
   } else if (feature === 'chat' && chat) {
     const conversationTitle =
       chat.snapshot.chats.find((item) => item.chat_id === chat.snapshot.active)?.title ||

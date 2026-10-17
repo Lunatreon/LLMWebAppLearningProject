@@ -20,7 +20,6 @@ export interface SubscriptionResponse {
   plan: 'free' | 'monthly' | 'yearly' | 'premium';
   premium: boolean;
   my_map_access: boolean;
-  journal_access?: boolean;
   chat_daily_limit: number;
   free_test_phase?: boolean;
   cancel_at_period_end: boolean;

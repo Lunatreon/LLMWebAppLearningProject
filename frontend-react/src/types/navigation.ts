@@ -1,4 +1,4 @@
-export type Workspace = 'chat' | 'map' | 'journal';
+export type Workspace = 'chat' | 'map';
 export type Feature = Workspace | 'reflection' | 'account' | 'feedback' | 'terms';
 export type Theme = 'dark' | 'light';
 
@@ -7,7 +7,6 @@ export interface ShellSession {
   mode: 'preview' | 'authenticated' | 'loading' | 'unauthenticated' | 'error';
   user: { displayName: string; email: string };
   mapAccess: boolean;
-  journalAccess: boolean;
   feedbackEnabled: boolean;
   onSignOut?: () => void;
 }
