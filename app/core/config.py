@@ -104,7 +104,7 @@ class Settings(BaseSettings):
     stripe_checkout_success_url: str | None = None
     stripe_checkout_cancel_url: str | None = None
     stripe_portal_return_url: str | None = None
-    premium_features_enabled: bool = True
+    premium_features_enabled: bool = False
 
     llm_provider: str = "mock"
     chat_llm_provider: str | None = None
