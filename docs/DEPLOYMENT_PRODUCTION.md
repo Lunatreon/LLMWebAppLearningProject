@@ -9,7 +9,7 @@ Read [the complete configuration inventory](PRODUCTION_CONFIG_AUDIT.md) first.
 
 ```text
 Internet :80/:443 → Caddy → backend:8000 → postgres:5432
-                         ↘ React static files + /reference/ compatibility files
+                         ↘ React static files and administrator/mail tools
 ```
 
 Only Caddy publishes host ports. PostgreSQL joins an internal Docker network;
@@ -270,57 +270,14 @@ scrubs it and keeps the mounted reset form. Activation mail is a six-digit PIN,
 not an activation URL, so do not invent link behavior. No newly generated mail
 should contain localhost, 127.0.0.1, :5500 or :5173.
 
-## 9. React deployment and legacy dependencies
+## 9. React deployment
 
-**Recommended initial option A:** Caddy serves the production React build plus
-`/api/v1` on one domain. Set `VITE_API_BASE_URL=/api/v1`, and both reference
-destinations to `/reference/`. The image includes a read-only copy of the
-legacy website at that prefix. Source files remain unchanged; the image's generated
-HTML API meta value and API resolver are fixed to the validated public build
-setting. Query/storage overrides cannot send its shared JWT to another server.
-Its relative assets/views still work.
-React's production reference-account link passes the configured absolute API
-base, avoiding the legacy HTML's old public API meta default. Same-origin local
-storage shares the existing session key; no JWT is put in a URL.
+React is the only consumer frontend. Caddy packages frontend-react/dist, including
+admin/mail tools, assets and legal documents. The /reference/ site and its build
+settings have been removed. Account billing, deletion and old activation links
+are implemented in React. VITE_API_BASE_URL is the only public build input.
 
-**Option B:** host the same React `dist/` on an external static host with SPA
-fallbacks. Build with an absolute HTTPS `VITE_API_BASE_URL`; Caddy's
-`INGRESS_DOMAIN` is then the API hostname. Set `PUBLIC_APP_URL` and CORS to the
-external frontend origin, and ALLOWED_HOSTS to the API hostname. Serve the unchanged
-reference frontend under `/reference/` on the **frontend's origin**, or configure
-an explicit HTTPS reference destination and accept a separate login there.
-Cross-origin hosting does not share localStorage. The unused bundled React copy
-on the API host is harmless; Caddy still serves API requests at `/api/v1`.
-
-For an external static build, copy `frontend-react/.env.production.example` to
-`frontend-react/.env.production`, set its public HTTPS destinations, then run
-`npm ci` and `npm run build` in that directory. Upload only `dist/`. Never copy
-the backend master env into the frontend directory or its hosting provider.
-
-Only documented public VITE settings enter the build. Production builds reject
-HTTP/loopback URLs and unknown VITE variables (including keys). The runtime selects
-configured/same-origin API values and ignores query/local-storage API overrides;
-development retains those comparison conveniences. A VITE change requires rebuilding
-the frontend image; changing backend env alone does not rewrite a static bundle.
-Bundle inspection still finds React Router's internal `http://localhost` URL-parsing
-sentinels. They are not API/network destinations; application build inputs and
-runtime API selection do not depend on a development host or port.
-
-| Remaining dependency | Initial production handling |
-| --- | --- |
-| Billing checkout/portal/cancellation and return parameters | Retain `/reference/` account flow. If enabling Stripe, configure success/cancel/portal URLs to that frontend, including `view=account`, existing `checkout=success` / `checkout=cancelled` handling and `api_base` for the configured API. Test exact return behavior before enabling paid plans. |
-| Account deletion | React still opens the retained reference Account screen. Backend DELETE contract is unchanged. |
-| Historical `verify_email_token` links | React does not consume them. The reference `js/account.js` still confirms them through the legacy token API. Caddy redirects root/index/chat aliases carrying that parameter into `/reference/`, preserving the query. Separate frontend hosts need the equivalent redirect or users can request a fresh PIN. Do not log tokens. No new token links are issued. |
-| Password reset links | React handles root and historical `/index.html`/`chat.html` reset query aliases. Point new mail at PUBLIC_APP_URL. |
-| CSS/fonts/images | The build still consumes existing reference CSS/assets; Vite packages the needed assets. Legacy source remains in the repository. |
-| Admin/webmail UI | Optional reference pages, not part of the primary React feature set. Leave integrations disabled unless their separate access policy is reviewed. |
-
-A React-only artifact without any reference hosting still lacks billing and
-deletion. This phase supplies hosting/configuration compatibility, not new React
-features. API query/storage overrides remain available only in the original
-development/reference source; the generated production reference copy locks its
-destination. Give users generated trusted destinations and plan eventual removal
-with full feature parity, not a deployment cleanup.
+See [native deployment](DEPLOYMENT_NATIVE.md) for installation without Docker.
 
 ## 10. Headers, logging and limits
 
@@ -488,8 +445,8 @@ DB restore can lose writes since the backup; agree the recovery point before cut
   flush_interval; inspect safe provider status/class, model access and retry limits.
 - Activation/reset delivery: verify TLS/auth/sender and PUBLIC_APP_URL. Never paste
   PINs/reset URLs/provider exceptions into issue logs.
-- Broken billing/deletion: verify `/reference/` files/relative assets, configured
-  absolute api_base and same-origin session storage. Do not remove the reference tree.
+- Broken billing/deletion: verify the React /account page, API routing, session
+  authentication and the corresponding backend billing/account endpoints.
 
 The Docker integration workflow retains the full Mailpit/mock HTTP lifecycle and
 adds a separate production job: synthetic config/missing-secret guards, normalized

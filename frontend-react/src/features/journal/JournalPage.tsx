@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useSession } from '../../hooks/useSession';
 import { hasJournalAccess } from '../../services/capabilities';
-import { referenceAccountUrl } from '../../services/referenceFrontend';
 import { useJournal } from './JournalContext';
 import { useJournalAutosave } from './useJournalAutosave';
 import JournalEditor from './JournalEditor';
@@ -44,13 +43,7 @@ export default function JournalPage() {
             <li>User-confirmed topics, practices, and observations</li>
           </ul>
           <div className="map-paywall-actions">
-            <a
-              id="journal-upgrade-button"
-              className="primary-button"
-              href={referenceAccountUrl()}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+            <a id="journal-upgrade-button" className="primary-button" href="/account">
               View Premium
             </a>
             <Link

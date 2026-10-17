@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>FeelY - AGB-Entwurf</title>
+    <style>
+      body {
+        font: 18px/1.6 system-ui;
+        max-width: 800px;
+        margin: 3rem auto;
+        padding: 0 1.2rem;
+        color: #26212c;
+        overflow-wrap: anywhere;
+      }
+      pre {
+        font: inherit;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      a {
+        color: #743972;
+      }
+      @media print {
+        nav,
+        #status {
+          display: none;
+        }
+        body {
+          margin: 0;
+          max-width: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main data-terms-source="agb-draft.txt">
+      <nav><a href="agb-draft.txt" download>AGB als Textdatei herunterladen</a></nav>
+      <p id="status" role="status">AGB werden geladen ...</p>
+      <pre id="terms-text" hidden></pre>
+      <noscript
+        >Bitte JavaScript aktivieren oder die Textdatei &uuml;ber den Link oben
+        &ouml;ffnen.</noscript
+      >
+    </main>
+    <script src="draft-page.js"></script>
+  </body>
+</html>

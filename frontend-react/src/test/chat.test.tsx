@@ -265,7 +265,7 @@ describe('real Chat shell/composer/history/stream', () => {
       new URL(
         (screen.getByRole('link', { name: 'Want more? Click here.' }) as HTMLAnchorElement).href,
       ).pathname,
-    ).toBe('/reference/');
+    ).toBe('/account');
   });
   test('free quota handling retains message and original upgrade text without fake usage permissions', async () => {
     mount({

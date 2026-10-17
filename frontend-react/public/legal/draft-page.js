@@ -11,6 +11,7 @@
     text.hidden = false;
     status.hidden = true;
   } catch {
-    status.textContent = 'Die AGB konnten nicht geladen werden. Bitte die Seite neu laden oder die Textdatei über den Link oben öffnen.';
+    status.textContent =
+      'Die AGB konnten nicht geladen werden. Bitte die Seite neu laden oder die Textdatei über den Link oben öffnen.';
   }
 })();

@@ -9,7 +9,7 @@ async function load(fetch) {
     fetch,
     document: { querySelector: selector => elements[selector] },
   });
-  await vm.runInContext(fs.readFileSync('website/legal/draft-page.js', 'utf8'), context);
+  await vm.runInContext(fs.readFileSync('frontend-react/public/legal/draft-page.js', 'utf8'), context);
   return elements;
 }
 

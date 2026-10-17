@@ -2,7 +2,6 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useChat } from './ChatContext';
 import { useSession } from '../../hooks/useSession';
-import { referenceAccountUrl } from '../../services/referenceFrontend';
 import { lenses } from './types';
 export default function ChatComposer() {
   const { controller, snapshot } = useChat();
@@ -161,13 +160,7 @@ export default function ChatComposer() {
         <span id="chat-plan-note" className="chat-plan-note">
           <span id="chat-plan-copy">{plan}</span>
           {!snapshot.mapAccess && (
-            <a
-              id="chat-plan-upgrade"
-              className="chat-plan-upgrade"
-              href={referenceAccountUrl()}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+            <a id="chat-plan-upgrade" className="chat-plan-upgrade" href="/account">
               Want more? Click here.
             </a>
           )}

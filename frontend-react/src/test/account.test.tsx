@@ -11,6 +11,7 @@ import { account, deferred, json, jwt, mockBackend, subscription } from './backe
 
 function mount(
   options: {
+    path?: string;
     signedIn?: boolean;
     data?: AccountResponse;
     overrides?: Record<string, () => Response | Promise<Response>>;
@@ -33,7 +34,7 @@ function mount(
         ),
       },
     ],
-    { initialEntries: ['/account'] },
+    { initialEntries: [options.path ?? '/account'] },
   );
   render(<RouterProvider router={router} />);
   const patches = () => fetch.mock.calls.filter((call) => call[1]?.method === 'PATCH');
@@ -314,24 +315,152 @@ describe('real account/profile feature', () => {
     ).toBe(true);
   });
 
-  test('billing/deletion links delegate to reference account, with no privileged mutation', async () => {
+  test('deletion requires confirmation and a password, and sends only one request', async () => {
+    const { fetch, controller } = mount();
+    await screen.findByLabelText('Email');
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Delete account' }));
+    const dialog = screen.getByRole('dialog', { name: 'Delete your account' });
+    const remove = within(dialog).getByRole('button', {
+      name: 'Permanently delete account',
+    }) as HTMLButtonElement;
+    expect(remove.disabled).toBe(true);
+    expect(fetch.mock.calls.some((call) => call[1]?.method === 'DELETE')).toBe(false);
+    await user.type(within(dialog).getByLabelText('Password to confirm deletion'), 'my password');
+    await user.click(within(dialog).getByRole('checkbox'));
+    const result = deferred<Response>();
+    fetch.mockReturnValueOnce(result.promise);
+    await user.click(remove);
+    fireEvent.submit(within(dialog).getByRole('form', { name: 'Confirm account deletion' }));
+    const deletes = () => fetch.mock.calls.filter((call) => call[1]?.method === 'DELETE');
+    expect(deletes()).toHaveLength(1);
+    expect(JSON.parse(String(deletes()[0][1]?.body))).toEqual({ password: 'my password' });
+    await act(() => result.resolve(new Response(null, { status: 204 })));
+    expect(controller.getSnapshot().session.status).toBe('unauthenticated');
+    expect(localStorage.getItem('feely_token')).toBeNull();
+  });
+
+  test('canceling deletion never sends a mutation and clears credentials', async () => {
     const { fetch } = mount();
     await screen.findByLabelText('Email');
     const user = userEvent.setup();
-    for (const name of ['Manage billing in Stripe', 'Delete account']) {
-      const link = screen.getByRole('link', { name }) as HTMLAnchorElement;
-      expect(new URL(link.href).pathname).toBe('/reference/');
-      expect(new URL(link.href).searchParams.get('view')).toBe('account');
-      expect(link.target).toBe('_blank');
-      const preventNavigation = (event: Event) => event.preventDefault();
-      link.addEventListener('click', preventNavigation, { once: true });
-      await user.click(link);
-    }
-    expect(
-      screen.getByText('Billing and account deletion open the reference website.'),
-    ).toBeDefined();
+    await user.click(screen.getByRole('button', { name: 'Delete account' }));
+    await user.type(screen.getByLabelText('Password to confirm deletion'), 'secret');
+    await user.click(screen.getByRole('button', { name: 'Keep my account' }));
+    expect(screen.queryByRole('dialog', { name: 'Delete your account' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Delete account' }));
+    expect((screen.getByLabelText('Password to confirm deletion') as HTMLInputElement).value).toBe(
+      '',
+    );
     expect(fetch.mock.calls.every((call) => !call[1]?.method || call[1].method === 'GET')).toBe(
       true,
+    );
+  });
+
+  test('billing uses the authenticated backend and displays provider failures', async () => {
+    const { fetch } = mount();
+    await screen.findByLabelText('Email');
+    fetch.mockResolvedValueOnce(json({ detail: 'Stripe is unavailable.' }, 502));
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Manage billing in Stripe' }));
+    await screen.findByText('Stripe is unavailable.');
+    const post = fetch.mock.calls.find((call) => String(call[0]).endsWith('/billing/portal'))!;
+    expect(post[1]?.method).toBe('POST');
+    expect(JSON.parse(String(post[1]?.body))).toEqual({
+      return_url: `${window.location.origin}/account`,
+    });
+    expect(new Headers(post[1]?.headers).get('Authorization')).toBe(
+      `Bearer ${localStorage.getItem('feely_token')}`,
+    );
+  });
+
+  test('checkout return syncs once, removes its query and applies backend capabilities', async () => {
+    const result = deferred<Response>();
+    const { fetch, router, controller } = mount({
+      path: '/?checkout=success&session_id=cs_test_example',
+      overrides: { '/billing/checkout/sync': () => result.promise },
+    });
+    await screen.findByText('Confirming your payment...');
+    expect(router.state.location.pathname).toBe('/account');
+    expect(router.state.location.search).toBe('');
+    await act(() => result.resolve(json({ ...subscription, plan: 'yearly' })));
+    await screen.findByText('Premium yearly');
+    const calls = fetch.mock.calls.filter((call) =>
+      String(call[0]).endsWith('/billing/checkout/sync'),
+    );
+    expect(calls).toHaveLength(1);
+    expect(JSON.parse(String(calls[0][1]?.body))).toEqual({ session_id: 'cs_test_example' });
+    expect(controller.getSnapshot().session).toMatchObject({ subscription: { plan: 'yearly' } });
+  });
+
+  test('signed-out checkout returns reach sign-in without a redirect loop', async () => {
+    const { router, fetch } = mount({
+      signedIn: false,
+      path: '/?checkout=success&session_id=cs_test_example',
+    });
+    await screen.findByRole('form', { name: 'Login' });
+    expect(router.state.location.pathname).toBe('/login');
+    expect(router.state.location.search).toContain('checkout=success');
+    expect(fetch.mock.calls.some((call) => call[1]?.method === 'POST')).toBe(false);
+  });
+
+  test('canceled checkout never sends a payment mutation', async () => {
+    const { fetch } = mount({ path: '/account?checkout=cancelled' });
+    await screen.findByText('Checkout was canceled. You were not charged.');
+    expect(fetch.mock.calls.every((call) => !call[1]?.method || call[1].method === 'GET')).toBe(
+      true,
+    );
+  });
+
+  test('subscription resume is authenticated and updates the displayed status', async () => {
+    const { fetch } = mount({
+      overrides: {
+        '/billing/subscription': () =>
+          json({ ...subscription, cancel_at_period_end: true, can_resume: true }),
+        '/billing/subscription/resume': () => json(subscription),
+      },
+    });
+    await userEvent
+      .setup()
+      .click(await screen.findByRole('button', { name: 'Keep subscription active' }));
+    await screen.findByText('Your Premium subscription is active.');
+    expect(screen.queryByRole('button', { name: 'Keep subscription active' })).toBeNull();
+    expect(
+      fetch.mock.calls.filter((call) => String(call[0]).endsWith('/billing/subscription/resume')),
+    ).toHaveLength(1);
+  });
+
+  test('available checkout plans call the existing endpoint and reject unsafe redirect URLs', async () => {
+    const { fetch } = mount({
+      overrides: {
+        '/billing/subscription': () =>
+          json({ ...subscription, premium: false, plan: 'free', management_available: false }),
+        '/billing/checkout': () => json({ url: 'javascript:alert(1)' }),
+      },
+    });
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Subscribe monthly' }));
+    await screen.findByText('Billing returned an invalid payment link.');
+    const checkout = fetch.mock.calls.filter((call) =>
+      String(call[0]).endsWith('/billing/checkout'),
+    );
+    expect(checkout).toHaveLength(1);
+    expect(JSON.parse(String(checkout[0][1]?.body))).toEqual({ plan: 'monthly' });
+  });
+
+  test('rejected deletion preserves the session and clears the submitted password', async () => {
+    const { fetch, controller } = mount();
+    await screen.findByLabelText('Email');
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Delete account' }));
+    await user.type(screen.getByLabelText('Password to confirm deletion'), 'wrong');
+    await user.click(screen.getByRole('checkbox'));
+    fetch.mockResolvedValueOnce(
+      json({ detail: 'Password is required to delete this account' }, 403),
+    );
+    await user.click(screen.getByRole('button', { name: 'Permanently delete account' }));
+    await screen.findByText('Password is required to delete this account');
+    expect(controller.getSnapshot().session.status).toBe('authenticated');
+    expect((screen.getByLabelText('Password to confirm deletion') as HTMLInputElement).value).toBe(
+      '',
     );
   });
 

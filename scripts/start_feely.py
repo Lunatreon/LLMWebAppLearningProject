@@ -1,4 +1,4 @@
-"""Start FeelY's local servers and existing Cloudflare tunnel on Windows."""
+"""Build React and run the native backend; PostgreSQL runs separately."""
 
 import argparse
 from contextlib import ExitStack
@@ -14,10 +14,9 @@ import threading
 import time
 import webbrowser
 
-
 ROOT = Path(__file__).resolve().parents[1]
 ANSI_COLOR = re.compile(r"\x1b\[[0-9;]*m")
-SERVICE_COLORS = {"backend": "36", "website": "32", "tunnel": "35"}
+SERVICE_COLORS = {"backend": "36", "tunnel": "35"}
 
 
 def stream_logs(name, pipe, log, color=False):
@@ -40,83 +39,122 @@ def port_open(port):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true", help="Check prerequisites without starting services")
-    parser.add_argument("--color", action="store_true", help="Enable colored service labels and backend logs")
-    parser.add_argument("--no-browser", action="store_true", help="Start services without opening a browser")
+    parser.add_argument(
+        "--check", action="store_true", help="Check prerequisites without starting services"
+    )
+    parser.add_argument(
+        "--color", action="store_true", help="Enable colored service labels and backend logs"
+    )
+    parser.add_argument(
+        "--no-browser", action="store_true", help="Start services without opening a browser"
+    )
+    parser.add_argument(
+        "--tunnel", action="store_true", help="Also start the configured public Cloudflare tunnel"
+    )
     args = parser.parse_args()
     processes = []
     readers = []
     try:
         cloudflared = shutil.which("cloudflared") or str(
             Path(os.environ.get("ProgramFiles", "C:/Program Files"))
-            / "cloudflared" / "cloudflared.exe"
+            / "cloudflared"
+            / "cloudflared.exe"
         )
         config = ROOT / "scripts" / "cloudflared-public.yml"
-        for path in (Path(cloudflared), config, ROOT / ".env", ROOT / "website" / "index.html"):
+        for path in (ROOT / ".env", ROOT / "frontend-react" / "index.html"):
             if not path.exists():
-                raise RuntimeError(f"Missing {path}. See README.md and scripts/CLOUDFLARED_README.md.")
-        subprocess.run([sys.executable, "-c", "import uvicorn; import fastapi"], check=True, cwd=ROOT)
-        # Cloudflared validates routing locally; this does not connect the tunnel.
-        subprocess.run([cloudflared, "tunnel", "--config", str(config), "ingress", "validate"], check=True, cwd=ROOT)
-        for line in config.read_text().splitlines():
-            if line.startswith("credentials-file:"):
-                credentials = Path(line.split(":", 1)[1].strip().strip("\"'"))
-                if not credentials.is_file():
-                    raise RuntimeError(f"Tunnel credentials missing: {credentials}")
-        for port in (8000, 5500):
-            if port_open(port):
-                raise RuntimeError(f"Port {port} is already in use. Stop the existing server before starting FeelY.")
+                raise RuntimeError(f"Missing {path}. See README.md.")
+        npm = shutil.which("npm.cmd") or shutil.which("npm")
+        if not npm or not (ROOT / "frontend-react" / "node_modules").is_dir():
+            raise RuntimeError("Install Node 24 and run npm ci in frontend-react first.")
+        subprocess.run(
+            [sys.executable, "-c", "import uvicorn; import fastapi"], check=True, cwd=ROOT
+        )
+        if args.tunnel:
+            if not Path(cloudflared).is_file() or not config.is_file():
+                raise RuntimeError("Cloudflare executable or tunnel configuration is missing.")
+            subprocess.run(
+                [cloudflared, "tunnel", "--config", str(config), "ingress", "validate"],
+                check=True,
+                cwd=ROOT,
+            )
+        if port_open(8000):
+            raise RuntimeError("Port 8000 is already in use. Stop the existing backend first.")
         if args.check:
             print("Startup checks passed. No services were started.")
             return 0
 
+        subprocess.run([npm, "run", "build"], check=True, cwd=ROOT / "frontend-react")
         logs = ROOT / "logs"
         logs.mkdir(exist_ok=True)
         with ExitStack() as stack:
+
             def start(name, command):
                 log = stack.enter_context((logs / f"{name}.log").open("a", encoding="utf-8"))
-                log.write(f"\n--- Starting {name} at {datetime.now().isoformat(timespec='seconds')} ---\n")
+                log.write(
+                    f"\n--- Starting {name} at {datetime.now().isoformat(timespec='seconds')} ---\n"
+                )
                 log.flush()
                 environment = os.environ.copy()
                 environment.update(PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")
-                process = subprocess.Popen(command, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                           text=True, encoding="utf-8", errors="replace", bufsize=1,
-                                           env=environment,
-                                           creationflags=subprocess.CREATE_NO_WINDOW)
+                process = subprocess.Popen(
+                    command,
+                    cwd=ROOT,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    bufsize=1,
+                    env=environment,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                )
                 processes.append((name, process))
                 print(f"Starting {name}; log: {logs / (name + '.log')}", flush=True)
-                reader = threading.Thread(target=stream_logs, args=(name, process.stdout, log, args.color))
+                reader = threading.Thread(
+                    target=stream_logs, args=(name, process.stdout, log, args.color)
+                )
                 reader.start()
                 readers.append(reader)
                 return process
 
             try:
-                for name, port, command in (
-                    ("backend", 8000, [sys.executable, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000"]),
-                    ("website", 5500, [sys.executable, "-m", "uvicorn", "app.website:app", "--host", "127.0.0.1", "--port", "5500"]),
-                ):
-                    command.extend(["--proxy-headers", "--forwarded-allow-ips", "127.0.0.1", "--no-server-header"])
-                    if name == "backend" and args.color:
-                        command.append("--use-colors")
-                    process = start(name, command)
-                    deadline = time.monotonic() + 90
-                    while not port_open(port):
-                        if process.poll() is not None or time.monotonic() >= deadline:
-                            detail = (f"exit code {process.returncode}" if process.returncode is not None
-                                      else "startup timed out after 90 seconds")
-                            raise RuntimeError(f"{name} failed to start ({detail}). See logs/{name}.log.")
-                        time.sleep(0.25)
-                start("tunnel", [cloudflared, "tunnel", "--config", str(config), "run"])
-                print("\nLocal website: http://127.0.0.1:5500\nPublic website: https://app.feel-y.com\n"
-                      "Live logs below are labeled [backend], [website], and [tunnel].\n"
-                      "Keep this window open. Press Ctrl+C to stop all three services.", flush=True)
+                command = [
+                    sys.executable,
+                    "-m",
+                    "uvicorn",
+                    "app.main:app",
+                    "--host",
+                    "127.0.0.1",
+                    "--port",
+                    "8000",
+                    "--no-server-header",
+                ]
+                if args.color:
+                    command.append("--use-colors")
+                process = start("backend", command)
+                deadline = time.monotonic() + 90
+                while not port_open(8000):
+                    if process.poll() is not None or time.monotonic() > deadline:
+                        raise RuntimeError(
+                            "Backend failed to start. Check PostgreSQL, migrations and logs/backend.log."
+                        )
+                    time.sleep(0.25)
+                if args.tunnel:
+                    start("tunnel", [cloudflared, "tunnel", "--config", str(config), "run"])
+                print(
+                    "\nFeelY: http://127.0.0.1:8000\nKeep this window open. Press Ctrl+C to stop.",
+                    flush=True,
+                )
                 if not args.no_browser:
-                    webbrowser.open("http://127.0.0.1:5500")
+                    webbrowser.open("http://127.0.0.1:8000")
                 while True:
                     for name, process in processes:
                         if process.poll() is not None:
-                            raise RuntimeError(f"{name} stopped unexpectedly (exit code {process.returncode}). "
-                                               f"See logs/{name}.log.")
+                            raise RuntimeError(
+                                f"{name} stopped unexpectedly (exit code {process.returncode}). "
+                                f"See logs/{name}.log."
+                            )
                     time.sleep(1)
             finally:
                 for _, process in reversed(processes):

@@ -167,15 +167,15 @@ describe('real My Map route/graph/forms', () => {
     await screen.findByRole('link', { name: 'Review terms' });
     expect(fetch.mock.calls.some((call) => String(call[0]).endsWith('/users/me/map'))).toBe(false);
   });
-  test('locked Map preserves premium copy and delegates actual billing to reference Account', async () => {
+  test('locked Map preserves premium copy and links to React Account', async () => {
     const { fetch } = mount({ access: false });
     await screen.findByText('Turn conversations into your personal map');
     expect(screen.getByText('My Map is a Premium space')).toBeDefined();
     const url = new URL(
       (screen.getByRole('link', { name: 'Unlock My Map' }) as HTMLAnchorElement).href,
     );
-    expect(url.pathname).toBe('/reference/');
-    expect(url.searchParams.get('view')).toBe('account');
+    expect(url.pathname).toBe('/account');
+    expect(url.searchParams.get('view')).toBeNull();
     expect(fetch.mock.calls.some((call) => String(call[0]).endsWith('/users/me/map'))).toBe(false);
   });
   test('backend 402 is authoritative and verified refresh restores graph', async () => {

@@ -1,3 +1,5 @@
+> Current update: React now owns styles/assets, billing and account deletion. Admin, webmail and legal files live in public/. See README.md for current startup. Delegation references below describe the previous migration phase.
+
 # Frontend architecture
 
 Read this first when extending the application. [README.md](README.md) covers

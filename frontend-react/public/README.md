@@ -1,5 +1,3 @@
-Only assets needed by the React entry point belong here. `feely-favicon.png`
-is an unchanged copy of `website/assets/feely-favicon.png`.
-
-The lake image remains in `website/assets/` and is resolved by Vite through
-the imported reference stylesheet. Do not copy legacy views or scripts here.
+Public assets for the active React frontend: shared styles, favicon/lake images,
+standalone admin and webmail tools, and legal documents. No consumer website shell
+or legacy feature scripts are served here. Rebuild after changing public files.

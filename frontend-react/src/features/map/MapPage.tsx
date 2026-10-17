@@ -1,7 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useSession } from '../../hooks/useSession';
 import { hasMapAccess } from '../../services/capabilities';
-import { referenceAccountUrl } from '../../services/referenceFrontend';
 import { topicCategories, topicCategoryOf } from '../../types/map';
 import { useMap } from './MapContext';
 import { mapNodes, plurals } from './mapLayout';
@@ -45,12 +44,7 @@ export default function MapPage() {
             <li>Revisit what matters to you and how your perspective changes</li>
           </ul>
           <div className="map-paywall-actions">
-            <a
-              className="primary-button"
-              href={referenceAccountUrl()}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+            <a className="primary-button" href="/account">
               {session.status === 'authenticated' &&
               session.subscription.available_plans.includes('monthly')
                 ? 'Unlock My Map'

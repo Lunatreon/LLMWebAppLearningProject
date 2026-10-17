@@ -5,3 +5,6 @@ dist/
 package-lock.json
 .env*
 __pycache__/
+
+# Published terms are immutable: formatting would invalidate configured hashes.
+public/legal/agb/

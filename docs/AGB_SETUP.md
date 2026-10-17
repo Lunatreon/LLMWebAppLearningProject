@@ -17,33 +17,32 @@ chat retention, training/opt-in/opt-out policy, other providers, optional use/B2
 clauses, B2B venue and dispute resolution details. Bracketed fields remain visible.
 This draft has not been published as a new mandatory acceptance version.
 
-Both the legacy AGB page and React `/terms` link to the same draft preview.
-Locally React uses `/reference/`; keep the legacy website server on port 5500.
-Production serves `/legal/` from the reference copy for versioned document URLs.
+React `/terms` links to `/legal/agb-draft.html` on the active frontend.
+Vite serves it on port 5173; the native compiled build serves it on port 8000.
+Production packages the same legal files. There is no reference website server.
 
 ## Active test version
 
 At the operator's request, `test-2026-10-05-v2` contains unfinished test terms.
-Its immutable snapshot is `website/legal/agb/test-2026-10-05-v2.html`.
+Its immutable snapshot is `frontend-react/public/legal/agb/test-2026-10-05-v2.html`.
 New email/password accounts must explicitly accept it at registration; existing
 accounts use the acceptance screen before app use. The signup screen
 labels this as unfinished test text. This applies to everyone using this deployment,
 not only accounts with the `test` role. Acceptance tests the workflow, not legal adequacy.
 
-Continue editing `website/legal/agb-draft.txt`, not the published snapshot.
+Continue editing `frontend-react/public/legal/agb-draft.txt`, not the published snapshot.
 Publish finished terms under a new version without `--allow-draft`; all users will
 need to accept that version separately. For another explicitly intended draft test,
 `scripts/publish_terms.py --version test-YYYY-MM-DD-v2 --allow-draft` is available.
 
 ## Working document
 
-Edit **`website/legal/agb-draft.txt`** in any text editor and save it as UTF-8.
+Edit **`frontend-react/public/legal/agb-draft.txt`** in any text editor and save it as UTF-8.
 The draft viewer loads this file directly on every page load, preserving line
 breaks and displaying all text literally. No HTML editing or conversion is needed.
-Refresh the draft preview linked from either website to see saved changes:
-`http://localhost:5500/legal/agb-draft.html` (legacy) or
-`http://localhost:5173/reference/legal/agb-draft.html` (React development).
-Both local servers must be running for the React reference bridge.
+Refresh `http://localhost:5173/legal/agb-draft.html` during development.
+Rebuild React after publishing legal files for native or production deployment.
+Run the backend and Vite during development; a native build needs only the backend server.
 Use the download link in the viewer to save the current text; if loading fails,
 the viewer shows an error and the direct text link remains available.
 
@@ -65,8 +64,8 @@ After completing all open fields and removing the draft warning:
 .\.venv\Scripts\python.exe scripts/publish_terms.py --version 2026-10-04-v1
 ```
 
-By default this reads `website/legal/agb-draft.txt` and freezes the escaped text
-into standalone HTML at `website/legal/agb/2026-10-04-v1.html`. It computes the
+By default this reads `frontend-react/public/legal/agb-draft.txt` and freezes the escaped text
+into standalone HTML at `frontend-react/public/legal/agb/2026-10-04-v1.html`. It computes the
 snapshot's SHA-256 hash and updates only the three `TERMS_*` settings in `.env`.
 Published snapshots never load the editable text file, so later edits cannot
 silently change the version a user accepted. Explicit HTML inputs remain supported;
@@ -97,8 +96,8 @@ document in place. The backend trusts the configured document hash and does not
 download the static document to verify it.
 
 Relevant code: `app/services/terms.py`, `app/api/routes/terms.py`,
-`app/api/dependencies.py`, `website/js/terms.js`, and `website/agb.html`.
-Refresh the website after changing frontend JS or views; no HTML build is needed.
+`app/api/dependencies.py` and `frontend-react/src/features/terms/`.
+Vite updates development assets automatically. Rebuild React after changing public files for native or production deployment.
 
 AGB acceptance is separate from privacy and marketing consent. For German consumer
 contracts, review the notice, access and agreement requirements in

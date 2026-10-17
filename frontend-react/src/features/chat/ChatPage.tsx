@@ -3,7 +3,6 @@ import { useChat } from './ChatContext';
 import { emptyPrompts } from './types';
 import ChatHistory from './ChatHistory';
 import ChatComposer from './ChatComposer';
-import { referenceAccountUrl } from '../../services/referenceFrontend';
 export default function ChatPage() {
   const { controller, snapshot } = useChat();
   const container = useRef<HTMLDivElement>(null),
@@ -110,12 +109,7 @@ export default function ChatPage() {
             {!snapshot.mapAccess &&
               snapshot.errorStatus === 429 &&
               snapshot.error.toLowerCase().includes('free messages') && (
-                <a
-                  className="message-upgrade-button"
-                  href={referenceAccountUrl()}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
+                <a className="message-upgrade-button" href="/account">
                   Subscribe with Stripe
                 </a>
               )}

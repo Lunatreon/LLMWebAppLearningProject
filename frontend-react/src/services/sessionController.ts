@@ -208,6 +208,15 @@ export class SessionController {
     return true;
   };
 
+  applySubscriptionResponse = (subscription: SubscriptionResponse, requestToken: string) => {
+    const session = this.snapshot.session;
+    if (requestToken !== this.getToken() || session.status !== 'authenticated') return false;
+    this.revision++;
+    this.pending = null;
+    this.update({ session: { ...session, subscription } });
+    return true;
+  };
+
   validateOnReturn = async () => {
     if (savedToken() !== this.token) {
       await this.reload();

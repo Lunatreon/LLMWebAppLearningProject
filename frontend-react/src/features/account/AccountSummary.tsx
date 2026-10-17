@@ -1,5 +1,5 @@
 import type { AccountResponse, SubscriptionResponse } from '../../types/api';
-import { referenceAccountUrl } from '../../services/referenceFrontend';
+import BillingActions from './BillingActions';
 
 export function AccountHeader({ account }: { account?: AccountResponse }) {
   const avatar =
@@ -110,18 +110,7 @@ export default function AccountSummary({ subscription }: { subscription: Subscri
           </div>
         )}
       </dl>
-      <div className="billing-actions">
-        <a
-          className="secondary-button"
-          href={referenceAccountUrl()}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          {subscription.management_available
-            ? 'Manage billing in Stripe'
-            : 'Billing / Subscription'}
-        </a>
-      </div>
+      <BillingActions subscription={subscription} />
     </section>
   );
 }

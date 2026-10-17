@@ -130,8 +130,6 @@ production template contains only placeholders and safe non-secret configuration
 | `FEELY_BACKEND_IP` | REQUIRED PRODUCTION CONFIG | Different reserved backend address; avoids allocation collision before Caddy starts. |
 | `FEELY_PRODUCTION_APP_ENV_FILE` | REQUIRED PRODUCTION CONFIG | Path to filtered raw backend env; generated from the private master file. |
 | `VITE_API_BASE_URL` | OPTIONAL | Public build-time value: defaults to /api/v1; absolute HTTPS API URL for external frontend hosting. |
-| `VITE_LEGACY_APP_URL` | OPTIONAL | Public build-time reference destination, default /reference/. Production rejects loopback URLs. |
-| `VITE_LEGACY_SIGN_IN_URL` | OPTIONAL | Public build-time reference account bridge, default /reference/; same origin recommended for shared session storage. |
 | `FEELY_HEALTH_PORT` | OPTIONAL | Internal readiness probe port, default 8000; do not point it at an external host. |
 | `FEELY_DOCKER_ENV_FILE` | DEVELOPMENT ONLY | Existing local stack env selection; production file uses the filtered production env instead. |
 | `FEELY_API_PORT` | DEVELOPMENT ONLY | Existing loopback host API port; production backend publishes none. |

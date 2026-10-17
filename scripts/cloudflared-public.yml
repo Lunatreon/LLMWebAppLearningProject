@@ -5,7 +5,7 @@ ingress:
   - hostname: api.feel-y.com
     service: http://127.0.0.1:8000
   - hostname: app.feel-y.com
-    service: http://127.0.0.1:5500
+    service: http://127.0.0.1:8000
   - hostname: dev.feel-y.com
     service: http_status:404
   - service: http_status:404

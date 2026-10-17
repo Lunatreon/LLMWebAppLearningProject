@@ -139,7 +139,7 @@ describe('real Journal route/editor/navigation', () => {
     expect(
       new URL((screen.getByRole('link', { name: 'View Premium' }) as HTMLAnchorElement).href)
         .pathname,
-    ).toBe('/reference/');
+    ).toBe('/account');
     expect(fetch.mock.calls.some((call) => String(call[0]).includes('/journal/'))).toBe(false);
   });
   test('Terms gate prevents loading/editing until existing terms acceptance says access is allowed', async () => {

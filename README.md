@@ -26,7 +26,7 @@ per-user LLM requests, and persistent user profiles.
 - A self-authorship map for inherited scripts, personal perceptions, values, body signals, evidence, and repeatable choices
 - Premium daily journal with automatic saving, entry history, and optional AI map suggestions
 - One-time password-reset links delivered through a configurable SMTP email provider
-- Static website in `website/` with public content pages, login, registration, chat list, chat view, and topic confirmation
+- React website in `frontend-react/` with authentication, chat, journal, My Map, account settings and billing
 - Swappable LLM service with mock, OpenAI, Anthropic, and local Ollama providers
 
 ## Documentation
@@ -55,160 +55,59 @@ My Map, suggestion-confirmation, and practice lifecycle architecture.
 
 ## Setup
 
-### Windows PowerShell
+The only consumer frontend is **frontend-react/**. The old website/ application
+has been removed. Admin, webmail, legal files, styles and images are now owned by
+frontend-react/public/. No reference server or port 5500 is needed.
 
-Use these commands from the repository root. Do not activate the virtual
-environment; the commands call the venv Python directly.
+See [native Windows, MacBook and Hetzner setup](docs/DEPLOYMENT_NATIVE.md) for
+PostgreSQL and data transfer without Docker. Native startup reads the root .env;
+.env.docker is only used by Compose.
 
-First-time setup:
+### Native Windows
+
+Install PostgreSQL 17 and Node 24, start PostgreSQL, and set DATABASE_URL in .env
+to your PostgreSQL application login. Preserve SECRET_KEY. With servers stopped:
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-Copy-Item .env.example .env
-.\.venv\Scripts\python.exe scripts\setup_secret.py
+npm ci --prefix frontend-react
+.\.venv\Scripts\python.exe scripts/setup_secret.py
+.\.venv\Scripts\python.exe -m alembic upgrade head
+.\start-feely.bat
 ```
 
-### One-click Windows start
+The launcher builds React and opens http://127.0.0.1:8000. It does not start
+PostgreSQL. Keep it open; Ctrl+C stops the backend. --check checks prerequisites.
+Public Cloudflare access is opt-in with start-feely.bat --tunnel.
 
-After first-time setup, double-click `start-feely.bat` in the repository root.
-It starts the backend (8000), website (5500), and your existing Cloudflare tunnel
-using `scripts/cloudflared-public.yml`, then opens the local website.
-Cloudflared must be on PATH or installed in `C:\Program Files\cloudflared`,
-with the credentials file referenced by the tunnel config already present.
+### Frontend development
 
-Keep the launcher window open and press **Ctrl+C** to stop all three services.
-Live logs from all three services appear in the launcher window, labeled
-`[backend]`, `[website]`, and `[tunnel]`.
-Logs are also written to `logs/backend.log`, `logs/website.log`, and `logs/tunnel.log`
-and preserved between starts. If either local port is busy, stop the existing
-server first. The launcher runs without auto-reload; restart it after code changes.
-The public development hostname returns 404; the tunnel exposes only the API
-and the approved website files. See [server security](docs/SECURITY.md).
-
-To check prerequisites without launching anything, run `.\start-feely.bat --check`
-from PowerShell.
-
-### Manual start
-
-In VS Code, use **Terminal > Run Task > FeelY: Start all** to start everything
-in the integrated terminal with colored service labels and backend logs.
-Press **Ctrl+C** in that terminal to stop the services. Alternatively, run
-`.\start-feely.bat --color` in the VS Code terminal. Saved log files remain plain text.
-
-Daily start, terminal 1:
+Run these in separate terminals from the repository root:
 
 ```powershell
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
-
-Daily start, terminal 2:
 
 ```powershell
-.\.venv\Scripts\python.exe -m uvicorn app.website:app --host 127.0.0.1 --port 5500 --proxy-headers --forwarded-allow-ips 127.0.0.1 --no-server-header
+npm run dev --prefix frontend-react
 ```
 
-Then open `http://127.0.0.1:5500`; the root page redirects directly to
-`http://127.0.0.1:5500/`.
-
-The API runs at `http://127.0.0.1:8000`.
-API documentation is disabled by default. For local development with the public
-tunnel stopped, set `API_DOCS_ENABLED=true` and restart to use `/docs`.
+Open http://127.0.0.1:5173. API docs remain opt-in with API_DOCS_ENABLED=true.
 
 ### Administrator login
 
-The administration page accepts configured administrator credentials or a FeelY
-account with the Admin role. Its login token remains separate from normal user
-tokens. After creating `.env`, configure the initial administrator
-password from the repository root:
-
 ```powershell
-.\.venv\Scripts\python.exe scripts\set_admin_password.py --username admin
+.\.venv\Scripts\python.exe scripts/set_admin_password.py --username admin
 ```
 
-Enter the new password twice when prompted. PowerShell does not display the
-characters while you type; this is expected. The password must contain at least
-12 characters. The script updates `ADMIN_USERNAME` and writes only a PBKDF2
-password hash to `ADMIN_PASSWORD_HASH` in `.env`—do not paste the original
-password or invent a hash manually.
-
-Restart Uvicorn after running the command. Then open
-`http://127.0.0.1:5500/admin.html` locally, or
-`https://app.feel-y.com/admin.html` in production, and sign in using the chosen
-username and the original password (not the hash).
-
-In the admin page, create accounts or change their role to Member, Test, or Admin.
-Only Admin accounts can manage users and prompts. Premium access remains separate from roles.
+Enter a password of at least 12 characters; the script saves a hash. Restart the
+backend and open /admin.html on the active frontend. Administrator tokens remain
+separate from user tokens.
 
 ### Editing the frontend
 
-See [the frontend editing guide](website/EDITING.md) for the HTML and JavaScript
-file for each feature. Edit `website/views/chat.html`, `website/views/map.html`,
-or `website/views/journal.html`. `website/index.html` is the editable shared layout
-with references to those views. `js/load-views.js` loads the view markup before
-starting the application scripts. HTML, CSS, and JavaScript are served as separate
-files. Serve the whole `website/` directory and refresh after edits; no frontend
-build step is required.
-
-### Important
-
-- Do not run `python -m venv .venv` after setup is complete.
-- Do not run `pip install` while the backend or website server is running.
-- Stop running servers with `Ctrl+C` before reinstalling packages.
-- Do not paste Markdown backticks into PowerShell.
-- If the prompt starts with `(.venv)`, you can still use the commands above.
-
-If port `8000` is already busy, start the backend on another port:
-
-```powershell
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8001
-```
-
-If you use port `8001`, update the website API URL in the browser console:
-
-```javascript
-localStorage.setItem("feely_api_base", "http://127.0.0.1:8001/api/v1")
-```
-
-Then refresh the website.
-
-The HTML points `feely-api-base` to `https://api.feel-y.com/api/v1`. Pages
-served from localhost or opened directly from disk automatically use
-`http://127.0.0.1:8000/api/v1`; the `api_base` query parameter can explicitly
-override either behavior. Include every public frontend origin in
-`CORS_ORIGINS`.
-
-For Cloudflare-deployed usage with your current tunnel, set the API base to:
-
-```javascript
-localStorage.setItem("feely_api_base", "https://api.feel-y.com/api/v1")
-```
-
-Then refresh the website.
-
-In `.env`, add or keep:
-
-```env
-PUBLIC_APP_URL="https://app.feel-y.com"
-CORS_ORIGINS='["https://app.feel-y.com", "http://localhost:3000", "http://localhost:5173", "http://localhost:5500", "http://127.0.0.1:5500", "http://localhost:8080", "http://127.0.0.1:8080", "http://0.0.0.0:8080", "null"]'
-```
-
-### Reset The Environment
-
-Only use this if the venv is broken. First close every terminal running the
-backend or website. Then open a fresh PowerShell in the repository root and run:
-
-```powershell
-Remove-Item -Recurse -Force .venv
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-```
-
-If Windows says files inside `.venv` are in use, a Python process is still
-running. Close the backend and website terminals, or restart PowerShell and try
-again.
+Use frontend-react/src/ for features and frontend-react/public/ for tools,
+images, legal snapshots and shared styles. See [the frontend guide](frontend-react/README.md).
 
 ## Configuration
 
@@ -543,16 +442,14 @@ provided, the backend creates a new chat.
 
 ## Website
 
-The frontend lives in `website/` and calls the API at
-`http://127.0.0.1:8000/api/v1` by default.
+React is the only consumer frontend. Billing, subscriptions and account deletion
+call the existing backend directly from /account. Historical /index.html,
+/chat.html, /agb.html and email verification links are handled by React.
 
-Login, registration, account management, billing, conversations, and My Map live
-in `website/index.html`. The standalone marketing pages were moved out of this
-backend repository; embed or copy this app page from the repository that owns the
-public website.
-
-The in-app sidebar follows the active workspace: Chat lists conversations, My
-Map lists topics in their parent/child hierarchy, and Journal lists dated pages.
+Build with npm run build --prefix frontend-react. Native app.main serves the
+compiled frontend-react/dist/ alongside /api/v1 on port 8000. Production Caddy
+serves the same build and proxies /api/. The optional app.website entry point
+now serves compiled React, not the old website.
 
 ## Adding New API Functions
 

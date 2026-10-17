@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import { resolveApiBase, legacySignInUrl } from '../services/config';
+import { resolveApiBase } from '../services/config';
 import { validateProductionPublicConfig } from '../../production-config';
 
 afterEach(() => vi.unstubAllEnvs());
@@ -17,12 +17,10 @@ test('production uses the configured API and ignores local query/storage overrid
   ).toBe('https://api.example.invalid/api/v1');
 });
 
-test('production defaults to same-origin API and passes its absolute base to the reference bridge', () => {
+test('production defaults to the same-origin API', () => {
   vi.stubEnv('PROD', true);
   vi.stubEnv('VITE_API_BASE_URL', '');
   expect(resolveApiBase()).toBe('/api/v1');
-  const reference = new URL(legacySignInUrl('?api_base=https://untrusted.invalid/api/v1'));
-  expect(reference.searchParams.get('api_base')).toBe(`${window.location.origin}/api/v1`);
 });
 
 test.each([

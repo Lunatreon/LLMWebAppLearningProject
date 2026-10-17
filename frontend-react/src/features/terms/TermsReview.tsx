@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { referenceAccountUrl } from '../../services/referenceFrontend';
+import { Link, useLocation } from 'react-router-dom';
 import type { PublishedTerms } from './types';
 
 interface Props {
@@ -12,6 +12,7 @@ interface Props {
 
 // Presentation only: reusable later inside a modal, with no own capability model.
 export default function TermsReview({ current, pending, error, onAccept, onSignOut }: Props) {
+  const location = useLocation();
   const [checked, setChecked] = useState(false);
   return (
     <form
@@ -60,25 +61,21 @@ export default function TermsReview({ current, pending, error, onAccept, onSignO
       </button>
       <p>
         You can{' '}
-        <a
+        <Link
           id="terms-account"
           className="auth-link-button"
-          href={referenceAccountUrl()}
-          target="_blank"
-          rel="noopener noreferrer"
+          to={{ pathname: '/account', search: location.search }}
         >
           manage or delete your account
-        </a>{' '}
+        </Link>{' '}
         or{' '}
-        <a
+        <Link
           id="terms-billing"
           className="auth-link-button"
-          href={referenceAccountUrl()}
-          target="_blank"
-          rel="noopener noreferrer"
+          to={{ pathname: '/account', search: location.search }}
         >
           manage your subscription
-        </a>{' '}
+        </Link>{' '}
         without accepting.
       </p>
     </form>

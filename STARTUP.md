@@ -1,37 +1,28 @@
+# Native startup
+
+Start PostgreSQL 17 first and configure the root .env with your PostgreSQL
+DATABASE_URL. Do not copy Docker hostnames or container paths into native config.
+See [native setup](docs/DEPLOYMENT_NATIVE.md) for Windows, MacBook and Hetzner.
+
+From the repository root in Windows PowerShell, after first-time dependency setup:
+
 ```powershell
-# Run each block in a separate VS Code PowerShell terminal, from the FeelY folder.
-# Terminal 1: Ollama (quit the Ollama tray app first if it is already running)
-$env:OLLAMA_KEEP_ALIVE = "300"
-ollama serve
+.\.venv\Scripts\python.exe -m alembic upgrade head
+.\start-feely.bat
+```
+
+Open http://127.0.0.1:8000. The launcher builds and serves React with the backend.
+Ctrl+C stops the backend. PostgreSQL remains running. No port 5500 is needed.
+
+For frontend development, run the backend and Vite in separate terminals:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 ```powershell
-# Terminal 2: backend with colored logs
-# Load models only when needed and release them after five idle minutes.
-# Current configuration: qwen3.5:4b on CPU and qwen3.5:2b on GPU.
-$env:OLLAMA_PREWARM = "false"
-$env:OLLAMA_KEEP_ALIVE = "300"
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --use-colors --proxy-headers --forwarded-allow-ips 127.0.0.1 --no-server-header
+npm run dev --prefix frontend-react
 ```
 
-```powershell
-# Terminal 3: website (serves HTML views, CSS, and JavaScript directly)
-.\.venv\Scripts\python.exe -m uvicorn app.website:app --host 127.0.0.1 --port 5500 --proxy-headers --forwarded-allow-ips 127.0.0.1 --no-server-header
-```
-
-```powershell
-# Terminal 4: Cloudflare tunnel
-& "C:\Program Files\cloudflared\cloudflared.exe" tunnel --config .\scripts\cloudflared-public.yml run
-```
-
-```powershell
-# Terminal 5: inspect loaded models (an empty list before the first chat is normal), then open the website
-ollama ps
-Start-Process "http://127.0.0.1:5500"
-```
-
-```powershell
-# Alternative to terminals 2-4: start backend, website, and tunnel together
-# Start Ollama in terminal 1 first. Do not also run the individual servers above.
-.\start-feely.bat --color
-```
+Open http://127.0.0.1:5173. Admin: /admin.html. Mail: /webmail.html (requires
+configured webmail backend). Public Cloudflare access requires --tunnel.

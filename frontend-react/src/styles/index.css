@@ -1,6 +1,5 @@
-/* Keep the reference stylesheet as the source of truth during migration.
-   Vite resolves its relative image URLs from website/ and bundles the assets. */
-@import '../../../website/styles.css';
+/* Shared application and administrator styles, owned by the React frontend. */
+@import '../../public/styles.css';
 
 /* Inactive auth tabs are Router links with the original button geometry. */
 .auth-tabs a.tab {
@@ -94,7 +93,7 @@ html[data-theme='light'] .sidebar-journal-link.active {
   text-decoration: none;
 }
 
-/* Premium is still a reference action; retain the original button geometry. */
+/* Premium actions open Account; retain the shared button geometry. */
 .map-paywall-actions a {
   display: inline-flex;
   align-items: center;

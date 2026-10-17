@@ -84,6 +84,11 @@ def create_app(init_database: bool = True) -> FastAPI:
         app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
 
     app.include_router(api_router, prefix=settings.api_v1_prefix)
+    # Native installations can serve the same compiled React build as Caddy.
+    # This router only exposes built assets and known application routes.
+    from app.api.routes.website import router as frontend_router
+
+    app.include_router(frontend_router, include_in_schema=False)
     return app
 
 

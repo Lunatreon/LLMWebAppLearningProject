@@ -536,3 +536,20 @@ describe('React email activation and resend', () => {
     expect(router.state.location.pathname).toBe('/chat');
   });
 });
+
+test('old verification links remove the token and require explicit confirmation in React', async () => {
+  const { router, confirms } = mount({
+    entry: '/?verify_email_token=private-token&api_base=custom',
+  });
+  await screen.findByRole('button', { name: 'Confirm email address' });
+  expect(router.state.location.pathname).toBe('/activate-link');
+  expect(router.state.location.search).toBe('?api_base=custom');
+  expect(confirms()).toHaveLength(0);
+  for (const link of screen.getAllByRole('link'))
+    expect((link as HTMLAnchorElement).href).not.toContain('private-token');
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Confirm email address' }));
+  await screen.findByText('Email verified.');
+  expect(confirms()).toHaveLength(1);
+  expect(JSON.parse(String(confirms()[0][1]?.body))).toEqual({ token: 'private-token' });
+  expect(screen.queryByRole('button', { name: 'Confirm email address' })).toBeNull();
+});

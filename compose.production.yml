@@ -66,8 +66,6 @@ services:
       dockerfile: deployment/frontend.Dockerfile
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
-        VITE_LEGACY_APP_URL: ${VITE_LEGACY_APP_URL:-/reference/}
-        VITE_LEGACY_SIGN_IN_URL: ${VITE_LEGACY_SIGN_IN_URL:-/reference/}
     environment:
       INGRESS_DOMAIN: ${INGRESS_DOMAIN:?Configure the public Caddy hostname}
       ACME_EMAIL: ${ACME_EMAIL:?Configure the certificate contact email}

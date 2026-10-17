@@ -15,6 +15,7 @@ import { JournalProvider } from './features/journal/JournalContext';
 import { MapProvider } from './features/map/MapContext';
 import { ReflectionProvider } from './features/reflection/ReflectionContext';
 import { ChatProvider } from './features/chat/ChatContext';
+import ActivationLinkPage from './features/auth/activation/ActivationLinkPage';
 const FeedbackPage = lazy(() => import('./features/feedback/FeedbackPage'));
 const AccountPage = lazy(() => import('./features/account/AccountPage'));
 const LoginPage = lazy(() => import('./features/auth/LoginPage'));
@@ -75,6 +76,23 @@ function AppRoutes({
     new URLSearchParams(location.search).has(resetTokenParameter)
   )
     return <ResetPasswordPage />;
+  if (
+    location.pathname === '/activate-link' ||
+    new URLSearchParams(location.search).has('verify_email_token')
+  )
+    return <ActivationLinkPage />;
+  if (
+    new URLSearchParams(location.search).has('checkout') &&
+    !['/account', '/login', '/register', '/activate', '/forgot-password', '/terms'].includes(
+      location.pathname,
+    )
+  )
+    return (
+      <Navigate
+        replace
+        to={{ pathname: '/account', search: location.search, hash: location.hash }}
+      />
+    );
   // A page change must unmount local credentials even while the next chunk loads.
   // Feature providers stay mounted above these pathname-keyed boundaries.
   return (

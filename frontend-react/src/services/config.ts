@@ -1,9 +1,3 @@
-export const legacyAppUrl =
-  import.meta.env.VITE_LEGACY_APP_URL?.trim() ||
-  (import.meta.env.PROD ? '/reference/' : 'http://127.0.0.1:5500/');
-
-// Vite replaces the reference entry's public meta configuration. Keep the actual
-// legacy precedence, including local hosts taking priority over stored/config bases.
 export function resolveApiBase(
   location: Pick<Location, 'search' | 'hostname' | 'protocol' | 'origin'> = window.location,
 ) {
@@ -28,17 +22,4 @@ export function resolveApiBase(
     /* A blocked store must not prevent configuration. */
   }
   return `${location.origin}/api/v1`;
-}
-
-export function legacySignInUrl(search = window.location.search) {
-  // The development proxy runs the unchanged reference login on React's origin.
-  const url = new URL(
-    import.meta.env.VITE_LEGACY_SIGN_IN_URL || '/reference/',
-    window.location.origin,
-  );
-  const apiBase = import.meta.env.PROD
-    ? new URL(resolveApiBase(), window.location.origin).href
-    : new URLSearchParams(search).get('api_base');
-  if (apiBase) url.searchParams.set('api_base', apiBase);
-  return url.href;
 }

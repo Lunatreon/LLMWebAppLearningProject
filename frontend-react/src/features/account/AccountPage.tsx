@@ -4,7 +4,7 @@ import { useSession } from '../../hooks/useSession';
 import { workspaceReturnPath, workspaceFromRoute } from '../../utils/routes';
 import AccountSummary, { AccountHeader } from './AccountSummary';
 import ProfileForm from './ProfileForm';
-import { referenceAccountUrl } from '../../services/referenceFrontend';
+import DeleteAccount from './DeleteAccount';
 import ChangePasswordForm from './password/ChangePasswordForm';
 
 export default function AccountPage() {
@@ -52,26 +52,11 @@ export default function AccountPage() {
                 token={session.token}
               />
               <AccountSummary subscription={session.subscription} />
-              <section className="account-section account-danger">
-                <div className="account-section-heading">
-                  <div>
-                    <p className="eyebrow">Danger zone</p>
-                    <h3>Delete account</h3>
-                  </div>
-                  <p>Permanently remove your account and private FeelY data.</p>
-                </div>
-                <a
-                  className="secondary-button danger"
-                  href={referenceAccountUrl()}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Delete account
-                </a>
-              </section>
-              <p className="billing-management-note">
-                Billing and account deletion open the reference website.
-              </p>
+              <DeleteAccount
+                key={`delete:${session.token}:${session.account.id}`}
+                account={session.account}
+                token={session.token}
+              />
             </>
           )}
         </div>

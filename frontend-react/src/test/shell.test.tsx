@@ -92,8 +92,8 @@ describe('shared React shell', () => {
     const { router } = mount('/?view=unknown');
     await waitFor(() => expect(router.state.location.pathname).toBe('/chat'));
     await act(() => router.navigate('/missing'));
-    expect(screen.getByRole('heading', { name: 'Page unavailable in this preview' })).toBeDefined();
-    await user.click(screen.getByRole('link', { name: 'Return to preview' }));
+    expect(screen.getByRole('heading', { name: 'Page not found' })).toBeDefined();
+    await user.click(screen.getByRole('link', { name: 'Return to FeelY' }));
     expect(router.state.location.pathname).toBe('/chat');
   });
 

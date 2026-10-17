@@ -105,7 +105,7 @@ def validate_deployment_values(config, values):
         ) from None
     for key, value in values.items():
         if key.startswith("VITE_"):
-            if key not in {"VITE_API_BASE_URL", "VITE_LEGACY_APP_URL", "VITE_LEGACY_SIGN_IN_URL"}:
+            if key not in {"VITE_API_BASE_URL"}:
                 raise RuntimeError("Only documented public VITE_* build settings are allowed.")
             if value and not value.startswith("/"):
                 from app.core.production import public_https_url
