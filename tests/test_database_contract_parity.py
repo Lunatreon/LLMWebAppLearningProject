@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_db
-from app.api.routes import auth, billing, journal, llm, webmail as mail_routes
+from app.api.routes import auth, billing, llm, webmail as mail_routes
 from app.core.config import settings
 from app.core.rate_limit import rate_limiter
 from app.core.security import create_admin_access_token
@@ -17,7 +17,7 @@ from app.db.base import Base
 from app.db.session import create_database_engine
 from app.db.types import LegacyDateTime
 from app.main import create_app
-from app.services import email_verification, password_reset, self_authorship, webmail
+from app.services import chat_storage, email_verification, password_reset, self_authorship, webmail
 
 FIXED_TIME = datetime(2026, 10, 13, 12, tzinfo=timezone.utc)
 
@@ -47,12 +47,12 @@ def workflow_transcript(engine, monkeypatch):
         }.items():
             patch.setattr(settings, name, value)
         patch.setattr(auth, "utc_now", lambda: FIXED_TIME)
-        patch.setattr(journal, "utc_now", lambda: FIXED_TIME)
+        patch.setattr(chat_storage, "utc_now", lambda: FIXED_TIME)
         for module in (email_verification, password_reset):
             patch.setattr(module, "current_timestamp", lambda: FIXED_TIME)
         for module in (llm, self_authorship):
             patch.setattr(module, "current_timestamp", lambda: FIXED_TIME.isoformat())
-        for module in (llm, journal, self_authorship):
+        for module in (llm, self_authorship):
             patch.setattr(module, "uuid4", lambda: UUID(int=next(identifiers)))
         for table in Base.metadata.tables.values():
             for column in table.columns:
@@ -158,13 +158,6 @@ def workflow_transcript(engine, monkeypatch):
                 "/auth/login",
                 json={"email_or_username": "parity-user", "password": "replacement-password"},
             )
-            request(
-                "PUT",
-                "/journal/entries/2026-03-29",
-                headers=headers,
-                json={"content": "A local calendar date across the daylight saving boundary."},
-            )
-            request("GET", "/journal/entries/2026-03-29", headers=headers)
             topic = request(
                 "POST",
                 "/users/me/map/topics",

@@ -159,7 +159,7 @@ def migration_source(tmp_path):
     }
     with engine.begin() as connection:
         for table in Base.metadata.sorted_tables:
-            rows = payloads[table.name]
+            rows = payloads.get(table.name, [])
             for row in rows:
                 for column in table.columns:
                     if isinstance(column.type, LegacyDateTime) and not column.nullable:
@@ -186,7 +186,7 @@ def test_initial_revision_matches_metadata_on_sqlite(tmp_path):
             config.attributes["connection"] = connection
             command.upgrade(config, "head")
             assert compare_metadata(MigrationContext.configure(connection), Base.metadata) == []
-            assert len(inspect(connection).get_table_names()) == 11  # Ten plus Alembic's version.
+            assert len(inspect(connection).get_table_names()) == 12  # Eleven domain tables plus Alembic's version.
     finally:
         engine.dispose()
 

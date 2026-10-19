@@ -26,11 +26,6 @@ class TopicLLMResult:
     map_suggestion: dict[str, Any] | None = None
 
 
-@dataclass
-class JournalLLMResult:
-    suggestions: list[dict[str, str]]
-
-
 class ChatLLMClient(Protocol):
     async def respond(
         self,

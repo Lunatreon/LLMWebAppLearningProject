@@ -142,7 +142,6 @@ def validate_production_config(config) -> None:
     providers = {
         "CHAT": config.chat_llm_provider or config.llm_provider,
         "TOPIC": config.topic_llm_provider or config.llm_provider,
-        "JOURNAL": config.journal_llm_provider or config.topic_llm_provider or config.llm_provider,
     }
     for role, value in providers.items():
         provider = value.lower()

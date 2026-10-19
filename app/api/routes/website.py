@@ -5,6 +5,10 @@ import re
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
+from fastapi.routing import APIRoute
+from starlette.routing import Match
+
+from app.core.config import settings
 
 WEBSITE_ROOT = Path(__file__).resolve().parents[3] / "frontend-react" / "dist"
 PUBLIC_FILES = frozenset(
@@ -44,7 +48,20 @@ SPA_ROUTES = frozenset(
         "reset-password",
     }
 )
-router = APIRouter()
+
+
+class FrontendRoute(APIRoute):
+    def matches(self, scope):
+        # Retired/unknown API endpoints must remain 404s. The static catch-all
+        # must not turn their POST/PUT requests into frontend method errors.
+        prefix = settings.api_v1_prefix.rstrip("/")
+        path = scope.get("path", "")
+        if scope.get("type") == "http" and (path == prefix or path.startswith(prefix + "/")):
+            return Match.NONE, {}
+        return super().matches(scope)
+
+
+router = APIRouter(route_class=FrontendRoute)
 
 
 @router.api_route("/{path:path}", methods=["GET", "HEAD"])

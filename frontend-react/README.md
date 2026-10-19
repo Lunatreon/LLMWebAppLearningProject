@@ -1,7 +1,7 @@
 # FeelY frontend
 
 This is the only consumer website. Login, registration, activation, recovery,
-Account, billing, deletion, Feedback, Terms, Chat, Journal, My Map and Reflection
+Account, billing, deletion, Feedback, Terms, Chat, My Map and Reflection
 use the backend directly. There is no reference website server.
 
 ## Development

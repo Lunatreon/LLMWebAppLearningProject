@@ -153,10 +153,7 @@ export default function TopicForm({ popup }: { popup: Extract<MapPopup, { kind: 
         {edit && others.length > 0 && (
           <section className="map-topic-merge">
             <strong>Duplicate topic?</strong>
-            <p>
-              Move this topic’s chats, journals, and entries into another topic, then remove this
-              bubble.
-            </p>
+            <p>Move this topic’s chats and entries into another topic, then remove this bubble.</p>
             <select
               aria-describedby="map-topic-error"
               ref={bind}

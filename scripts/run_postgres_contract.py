@@ -20,7 +20,7 @@ from sqlalchemy.schema import CreateSchema, DropSchema
 def main() -> None:
     os.environ["SECRET_KEY"] = "isolated-registration-key-never-for-deployment"
     os.environ["ENVIRONMENT"] = "local"
-    for name in ("LLM_PROVIDER", "CHAT_LLM_PROVIDER", "TOPIC_LLM_PROVIDER", "JOURNAL_LLM_PROVIDER"):
+    for name in ("LLM_PROVIDER", "CHAT_LLM_PROVIDER", "TOPIC_LLM_PROVIDER"):
         os.environ[name] = "mock"
     from app.db.base import Base
     from app.db.session import create_database_engine, database_url

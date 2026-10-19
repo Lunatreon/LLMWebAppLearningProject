@@ -65,16 +65,38 @@ export function conversation(value: ChatConversation, id?: string) {
     throw invalid();
   return value;
 }
-export async function loadConversations(api: ApiClient, signal?: AbortSignal) {
-  const value = await api.request<ChatConversation[]>(root, { authenticated: true, signal });
-  if (!Array.isArray(value)) throw invalid();
-  value.forEach((chat) => conversation(chat));
-  if (new Set(value.map((chat) => chat.chat_id)).size !== value.length) throw invalid();
-  return value;
+export async function loadConversationPage(api: ApiClient, signal?: AbortSignal, cursor?: string) {
+  const query = new URLSearchParams({ paginated: 'true' });
+  if (cursor) query.set('cursor', cursor);
+  const value = await api.request<
+    ChatConversation[] | { items: ChatConversation[]; next_cursor: string | null }
+  >(`${root}?${query}`, { authenticated: true, signal });
+  // Retain compatibility with older servers during a rolling frontend upgrade.
+  const page = Array.isArray(value) ? { items: value, next_cursor: null } : value;
+  if (
+    !page ||
+    !Array.isArray(page.items) ||
+    (page.next_cursor !== null && typeof page.next_cursor !== 'string')
+  )
+    throw invalid();
+  page.items.forEach((chat) => conversation(chat));
+  if (new Set(page.items.map((chat) => chat.chat_id)).size !== page.items.length) throw invalid();
+  return page;
 }
-export async function loadConversation(api: ApiClient, id: string, signal?: AbortSignal) {
+export async function loadConversations(api: ApiClient, signal?: AbortSignal) {
+  return (await loadConversationPage(api, signal)).items;
+}
+export async function loadConversation(
+  api: ApiClient,
+  id: string,
+  signal?: AbortSignal,
+  before?: number,
+) {
   return conversation(
-    await api.request<ChatConversation>(path(id), { authenticated: true, signal }),
+    await api.request<ChatConversation>(
+      `${path(id)}${before === undefined ? '' : `?before_position=${before}`}`,
+      { authenticated: true, signal },
+    ),
     id,
   );
 }
@@ -124,7 +146,10 @@ export async function generate(
           (data.chat_info.chat_id !== undefined && data.chat_info.chat_id !== id)
         )
           throw invalid();
-        const exchange = data.chat_info.messages.slice(-2);
+        const exchange =
+          data.turn_id === undefined
+            ? data.chat_info.messages.slice(-2)
+            : data.chat_info.messages.filter((message) => message.turn_id === data.turn_id);
         if (
           exchange[0]?.role !== 'user' ||
           exchange[0].content !== context ||
@@ -173,11 +198,17 @@ export const retryAnalysis = (api: ApiClient, id: string) =>
     authenticated: true,
     method: 'POST',
   });
-export async function react(api: ApiClient, id: string, created_at: string, reaction: Reaction) {
+export async function react(
+  api: ApiClient,
+  id: string,
+  created_at: string,
+  reaction: Reaction,
+  turn_id?: number,
+) {
   const value = await api.request<{ reaction: Reaction }>(`${path(id)}/reaction`, {
     method: 'PUT',
     authenticated: true,
-    body: JSON.stringify({ created_at, reaction }),
+    body: JSON.stringify({ created_at, reaction, ...(turn_id ? { turn_id } : {}) }),
   });
   if (!value || ![null, 'like', 'dislike'].includes(value.reaction)) throw invalid();
   return value.reaction;

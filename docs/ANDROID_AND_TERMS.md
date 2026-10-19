@@ -1,7 +1,7 @@
 # Android clients and AGB acceptance
 
 The website and a native FeelY Android app can use the same backend at
-`https://api.feel-y.com/api/v1`. They share accounts, journals, chats, quotas,
+`https://api.feel-y.com/api/v1`. They share accounts, chats, quotas,
 subscriptions, and terms history. A separate product needing isolated users or
 data should use a separate backend deployment/database; this backend has no
 application/tenant isolation. Client package names are metadata, not authorization.

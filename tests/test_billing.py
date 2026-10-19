@@ -50,7 +50,6 @@ def test_subscription_status_normalizes_to_safe_free_state():
         "premium": False,
         "free_test_phase": False,
         "my_map_access": False,
-        "journal_access": False,
         "chat_daily_limit": 10,
         "plan": "free",
         "cancel_at_period_end": False,
@@ -256,7 +255,6 @@ def test_disabled_billing_returns_free_state_and_safe_error(client):
         "premium": False,
         "free_test_phase": False,
         "my_map_access": False,
-        "journal_access": False,
         "chat_daily_limit": 10,
         "plan": "free",
         "cancel_at_period_end": False,
@@ -451,7 +449,6 @@ def test_free_test_phase_unlocks_features_and_blocks_checkout(client, monkeypatc
     response = client.get("/api/v1/billing/subscription", headers=headers).json()
     assert response["free_test_phase"] is True
     assert response["my_map_access"] is True
-    assert response["journal_access"] is True
     assert response["premium"] is False
     assert response["available_plans"] == []
     assert (
@@ -464,7 +461,6 @@ def test_free_test_phase_unlocks_features_and_blocks_checkout(client, monkeypatc
     response = client.get("/api/v1/billing/subscription", headers=headers).json()
     assert response["free_test_phase"] is False
     assert response["my_map_access"] is False
-    assert response["journal_access"] is False
 
 
 def test_reply_reactions_persist_toggle_and_require_chat_owner(client):

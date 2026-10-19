@@ -6,6 +6,7 @@ import ChatComposer from './ChatComposer';
 export default function ChatPage() {
   const { controller, snapshot } = useChat();
   const container = useRef<HTMLDivElement>(null),
+    historyAnchor = useRef<{ height: number; top: number } | null>(null),
     follow = useRef(true),
     lastScroll = useRef(-1);
   const chat = snapshot.chats.find((item) => item.chat_id === snapshot.active),
@@ -14,8 +15,12 @@ export default function ChatPage() {
   useLayoutEffect(() => {
     const node = container.current;
     if (!node) return;
-    if (lastScroll.current !== snapshot.scrollVersion || follow.current) {
+    if (lastScroll.current === snapshot.scrollVersion && historyAnchor.current) {
+      node.scrollTop = historyAnchor.current.top + node.scrollHeight - historyAnchor.current.height;
+      historyAnchor.current = null;
+    } else if (lastScroll.current !== snapshot.scrollVersion || follow.current) {
       node.scrollTo({ top: node.scrollHeight });
+      historyAnchor.current = null;
       follow.current = true;
     }
     lastScroll.current = snapshot.scrollVersion;
@@ -65,6 +70,20 @@ export default function ChatPage() {
               ))}
             </div>
           </section>
+        )}
+        {chat?.next_before_position && (
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={snapshot.historyLoading || Boolean(q)}
+            onClick={() => {
+              const node = container.current;
+              if (node) historyAnchor.current = { height: node.scrollHeight, top: node.scrollTop };
+              void controller.loadOlder();
+            }}
+          >
+            {snapshot.historyLoading ? 'Loading older messages...' : 'Load older messages'}
+          </button>
         )}
         <ChatHistory
           messages={messages}

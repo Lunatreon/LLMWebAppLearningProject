@@ -18,7 +18,6 @@ function mount(path = '/chat', session?: ShellSession) {
             session={session ?? previewSession}
             feedbackElement={<FeaturePlaceholderPage feature="feedback" />}
             accountElement={<FeaturePlaceholderPage feature="account" />}
-            journalElement={<FeaturePlaceholderPage feature="journal" />}
             mapElement={<FeaturePlaceholderPage feature="map" />}
             reflectionElement={<FeaturePlaceholderPage feature="reflection" />}
             chatElement={<FeaturePlaceholderPage feature="chat" />}
@@ -55,7 +54,7 @@ describe('shared React shell', () => {
       }
     },
   );
-  test.each(['chat', 'map', 'journal', 'reflection', 'account', 'feedback'])(
+  test.each(['chat', 'map', 'reflection', 'account', 'feedback'])(
     'opens /%s directly with a placeholder',
     (feature) => {
       const { router } = mount(`/${feature}`);
@@ -76,9 +75,9 @@ describe('shared React shell', () => {
     'maps the legacy entry %s and preserves remaining query/hash',
     async (path) => {
       const { router } = mount(
-        `${path}?view=journal&api_base=http%3A%2F%2F127.0.0.1%3A8001%2Fapi%2Fv1#compare`,
+        `${path}?view=map&api_base=http%3A%2F%2F127.0.0.1%3A8001%2Fapi%2Fv1#compare`,
       );
-      await waitFor(() => expect(router.state.location.pathname).toBe('/journal'));
+      await waitFor(() => expect(router.state.location.pathname).toBe('/map'));
       expect(new URLSearchParams(router.state.location.search).get('api_base')).toBe(
         'http://127.0.0.1:8001/api/v1',
       );
@@ -97,29 +96,19 @@ describe('shared React shell', () => {
     expect(router.state.location.pathname).toBe('/chat');
   });
 
-  test('switches workspace tabs and context while keeping Journal outside the main tabs', async () => {
+  test('switches workspace tabs and context', async () => {
     const user = userEvent.setup();
     const { router } = mount();
     const tablist = screen.getByRole('tablist', { name: 'Workspace view' });
-    expect(within(tablist).getAllByRole('tab').length).toBe(2);
-    expect(within(tablist).queryByText('Journal')).toBeNull();
+    expect(within(tablist).getAllByRole('tab')).toHaveLength(2);
     await user.click(screen.getByRole('tab', { name: 'Map' }));
     expect(router.state.location.pathname).toBe('/map');
     expect(screen.getByRole('tab', { name: 'Map' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByText('My Map is a Premium space')).toBeDefined();
-    expect(screen.queryByRole('navigation', { name: 'Chats' })).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Journal' }));
-    expect(router.state.location.pathname).toBe('/journal');
-    expect(screen.getByRole('button', { name: 'Journal' }).getAttribute('aria-pressed')).toBe(
-      'true',
-    );
-    expect(screen.getByRole('button', { name: 'Journal' }).classList.contains('active')).toBe(true);
-    expect(screen.getByRole('heading', { name: 'Your journal' })).toBeDefined();
     await user.click(screen.getByRole('tab', { name: 'Chat' }));
     await user.click(screen.getByRole('button', { name: 'New conversation' }));
     expect(router.state.location.pathname).toBe('/chat');
     expect(screen.getByRole('navigation', { name: 'Chats' })).toBeDefined();
-    expect(screen.getByText('Conversations are not loaded in this preview.')).toBeDefined();
   });
 
   test('Arrow keys select and focus Chat/Map tabs with roving tabindex', async () => {
@@ -141,32 +130,31 @@ describe('shared React shell', () => {
     const user = userEvent.setup();
     const { router } = mount();
     await user.click(screen.getByRole('tab', { name: 'Map' }));
-    await user.click(screen.getByRole('button', { name: 'Journal' }));
+    await user.click(screen.getByRole('tab', { name: 'Chat' }));
     await act(() => router.navigate(-1));
     expect(router.state.location.pathname).toBe('/map');
-    expect(screen.getByRole('tab', { name: 'Map' }).getAttribute('aria-selected')).toBe('true');
     expect(document.title).toBe('My Map | FeelY');
     await act(() => router.navigate(1));
-    expect(router.state.location.pathname).toBe('/journal');
-    expect(document.title).toBe('Journal | FeelY');
+    expect(router.state.location.pathname).toBe('/chat');
+    expect(document.title).toBe('New conversation | FeelY');
   });
 
   test('account and feedback preserve the current workspace and offer a return route', async () => {
     const user = userEvent.setup();
-    const { router } = mount('/journal');
+    const { router } = mount('/map');
     await user.click(screen.getByRole('button', { name: 'Account settings' }));
     expect(router.state.location.pathname).toBe('/account');
     expect(
       screen.getByRole('button', { name: 'Account settings' }).getAttribute('aria-current'),
     ).toBe('page');
-    expect(screen.getByRole('heading', { name: 'Your journal' })).toBeDefined();
+    expect(screen.getByRole('tab', { name: 'Map' }).getAttribute('aria-selected')).toBe('true');
     await user.click(screen.getByRole('button', { name: 'Share test feedback' }));
     expect(router.state.location.pathname).toBe('/feedback');
     expect(
       screen.getByRole('button', { name: 'Share test feedback' }).getAttribute('aria-current'),
     ).toBe('page');
     await user.click(screen.getByRole('link', { name: 'Return to workspace' }));
-    expect(router.state.location.pathname).toBe('/journal');
+    expect(router.state.location.pathname).toBe('/map');
   });
 
   test('active tab clicks avoid duplicate history entries and keep query overrides', async () => {
@@ -319,23 +307,16 @@ describe('shared React shell', () => {
   });
 
   test('layout capability inputs control feedback and premium sidebar structure without loading data', async () => {
-    const user = userEvent.setup();
     mount('/map', {
       ...previewSession,
       feedbackEnabled: false,
       mapAccess: true,
-      journalAccess: true,
     });
     expect(screen.queryByRole('button', { name: 'Share test feedback' })).toBeNull();
     expect(screen.queryByText('My Map is a Premium space')).toBeNull();
     expect(screen.getByRole('navigation', { name: 'Map topics' })).toBeDefined();
     expect(
       (screen.getByRole('button', { name: 'Create topic' }) as HTMLButtonElement).disabled,
-    ).toBe(true);
-    await user.click(screen.getByRole('button', { name: 'Journal' }));
-    expect(screen.getByRole('navigation', { name: 'Journal entries' })).toBeDefined();
-    expect(
-      (screen.getByRole('button', { name: 'Previous day' }) as HTMLButtonElement).disabled,
     ).toBe(true);
   });
 });

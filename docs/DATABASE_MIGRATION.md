@@ -222,7 +222,7 @@ node --test --test-concurrency=1 tests/*.test.cjs
 ```
 
 The deterministic HTTP comparison executes activation, registration/login/reset,
-Terms, account, Journal, Map, Reflection, Chat NDJSON/history, fake Stripe webhook
+Terms, account, Map, Reflection, Chat NDJSON/history, fake Stripe webhook
 deduplication and durable webmail against SQLite and the selected database. Only
 JWT contents and scheduler-dependent stream status heartbeats are excluded from
 transcript equality; timestamps, data and stream results are compared exactly.
@@ -241,7 +241,7 @@ node scripts/validate-chat-contract.mjs
 
 The wrapper substitutes only fixture engine creation/create_all with an isolated
 PostgreSQL schema/Alembic. Other existing modes include --activation, --recovery,
---password-change, --journal, --map and --reflection with their existing ports.
+--password-change, --map and --reflection with their existing ports.
 Run the wrapper without a mode and with --verified in two terminals for the
 registration contract's two fixtures. Use --login-fixture for the existing
 isolated-auth-server.py and validate-login-contract.mjs on port 18006.

@@ -227,7 +227,7 @@ document.querySelectorAll('.admin-prompt-form').forEach((form) => {
       headers: authHeaders(),
       body: JSON.stringify({ text: textarea.value }),
     });
-    const labels = { chat: 'Chat', topic: 'Topic', journal: 'Journal' };
+    const labels = { chat: 'Chat', topic: 'Topic' };
     textarea.value = updated.text;
     setStatus(`${labels[kind] || kind} prompt saved and active for the next request.`);
   });

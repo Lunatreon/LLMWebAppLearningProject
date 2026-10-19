@@ -79,7 +79,7 @@ export class MapController {
     if (!this.unsubscribe)
       this.unsubscribe = subscribeMapWrites(this.session.api, () => {
         this.cancelRead();
-        // Our writes already return the whole authoritative Map. External Journal
+        // Our writes already return the whole authoritative Map. External Chat
         // review needs a read; never fetch an intermediate full-profile snapshot.
         if (this.active && this.snapshot.enabled && !this.snapshot.pending.length) void this.load();
         else if (this.snapshot.loading) this.emit({ loading: false });

@@ -4,7 +4,7 @@ interface Props {
   item: Message;
   pending: boolean;
   enabled: boolean;
-  onReaction: (createdAt: string, reaction: Reaction) => void;
+  onReaction: (createdAt: string, reaction: Reaction, turnId?: number) => void;
 }
 
 export default function ChatMessage({ item, pending, enabled, onReaction }: Props) {
@@ -28,6 +28,7 @@ export default function ChatMessage({ item, pending, enabled, onReaction }: Prop
                 onReaction(
                   item.created_at!,
                   item.reaction === value ? null : (value as 'like' | 'dislike'),
+                  item.turn_id,
                 )
               }
             >

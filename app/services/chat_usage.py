@@ -4,11 +4,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models.user import ChatSession, DailyLLMUsage
+from app.models.user import ChatSession, ChatTurn, DailyLLMUsage
 
 
 def _message_date(value: Any) -> str | None:
@@ -26,14 +26,20 @@ def _message_date(value: Any) -> str | None:
 def saved_user_messages_for_date(db: Session, user_id: int, usage_date: str) -> int:
     """Count saved messages when initializing quotas for existing installations."""
 
-    chat_infos = db.execute(
-        select(ChatSession.info).where(ChatSession.user_id == user_id)
-    ).scalars()
-    return sum(
-        1
-        for info in chat_infos
-        for message in (info or {}).get("messages", [])
-        if message.get("role") == "user" and _message_date(message.get("created_at")) == usage_date
+    start = datetime.fromisoformat(usage_date).replace(tzinfo=timezone.utc)
+    return (
+        db.scalar(
+            select(func.count(ChatTurn.id))
+            .join(ChatSession)
+            .where(
+                ChatSession.user_id == user_id,
+                ChatTurn.status.in_(("completed", "legacy")),
+                ChatTurn.user_input.is_not(None),
+                ChatTurn.created_at >= start,
+                ChatTurn.created_at < start + timedelta(days=1),
+            )
+        )
+        or 0
     )
 
 
@@ -57,7 +63,9 @@ def reserve_daily_message(
             DailyLLMUsage.usage_date == usage_date,
         )
     ).scalar_one_or_none()
-    saved_count = saved_user_messages_for_date(db, user_id, usage_date)
+    # The persisted reservation counter is authoritative after initialization.
+    # Do not rescan years of conversation history for each new message.
+    saved_count = saved_user_messages_for_date(db, user_id, usage_date) if usage is None else 0
     used_messages = max(usage.message_count if usage else 0, saved_count)
     if used_messages >= daily_limit:
         tomorrow = datetime.combine(

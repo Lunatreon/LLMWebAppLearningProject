@@ -53,22 +53,6 @@ async def warm_ollama_model() -> None:
                 settings.ollama_topic_num_gpu,
             )
         )
-    journal_provider = (
-        settings.journal_llm_provider or settings.topic_llm_provider or settings.llm_provider
-    ).lower()
-    journal_model = (
-        settings.ollama_journal_model or settings.ollama_topic_model or settings.ollama_model
-    )
-    journal_num_gpu = (
-        settings.ollama_journal_num_gpu
-        if settings.ollama_journal_num_gpu is not None
-        else settings.ollama_topic_num_gpu
-    )
-    if journal_provider == "ollama" and not any(
-        model == journal_model and num_gpu == journal_num_gpu for _, model, num_gpu in role_models
-    ):
-        role_models.append(("journal", journal_model, journal_num_gpu))
-
     for role, model, num_gpu in role_models:
         try:
             async with (

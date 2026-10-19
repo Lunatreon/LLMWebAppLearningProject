@@ -127,6 +127,16 @@ export default function ChatConversationList({
             </div>
           );
         })}
+        {snapshot.listNextCursor && (
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={snapshot.listLoading}
+            onClick={() => void controller.loadList(true)}
+          >
+            Load more conversations
+          </button>
+        )}
       </nav>
       {snapshot.menu &&
         createPortal(

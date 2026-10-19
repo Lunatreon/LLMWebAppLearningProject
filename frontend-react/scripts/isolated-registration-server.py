@@ -16,16 +16,15 @@ parser.add_argument('--verified', action='store_true', help='Model verification-
 parser.add_argument('--activation', action='store_true', help='Enable real activation/resend rate limits on port 18010.')
 parser.add_argument('--recovery', action='store_true', help='Capture real reset emails and enable recovery contracts on port 18011.')
 parser.add_argument('--password-change', action='store_true', help='Exercise authenticated password contracts on port 18012.')
-parser.add_argument('--journal', action='store_true', help='Exercise premium-gated Journal with mock analysis on port 18013.')
-parser.add_argument('--map', action='store_true', help='Exercise real Map and Journal integration contracts on port 18014.')
+parser.add_argument('--map', action='store_true', help='Exercise real Map integration contracts on port 18014.')
 parser.add_argument('--reflection', action='store_true', help='Exercise atomic Practice/Reflection contracts on port 18015.')
 parser.add_argument('--chat', action='store_true', help='Exercise real Chat streams/history/source contracts on port 18016.')
 options = parser.parse_args()
-port = 18016 if options.chat else 18015 if options.reflection else 18014 if options.map else 18013 if options.journal else 18012 if options.password_change else 18011 if options.recovery else 18010 if options.activation else 18008 if options.verified else 18007
+port = 18016 if options.chat else 18015 if options.reflection else 18014 if options.map else 18012 if options.password_change else 18011 if options.recovery else 18010 if options.activation else 18008 if options.verified else 18007
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 os.environ['ENVIRONMENT'] = 'local'
 os.environ['SECRET_KEY'] = 'isolated-registration-key-never-for-deployment'
-for name in ['LLM_PROVIDER', 'CHAT_LLM_PROVIDER', 'TOPIC_LLM_PROVIDER', 'JOURNAL_LLM_PROVIDER']:
+for name in ['LLM_PROVIDER', 'CHAT_LLM_PROVIDER', 'TOPIC_LLM_PROVIDER']:
     os.environ[name] = 'mock'
 
 from sqlalchemy import create_engine, select
@@ -49,15 +48,15 @@ settings.captcha_provider = 'turnstile'
 settings.turnstile_site_key = 'isolated-public-site-key'
 settings.turnstile_secret_key = 'isolated-siteverify-secret'
 settings.turnstile_action = 'register'
-settings.email_verification_enabled = not (options.verified or options.recovery or options.password_change or options.journal or options.map or options.reflection or options.chat)
-settings.email_verification_required = not (options.verified or options.recovery or options.password_change or options.journal or options.map or options.reflection or options.chat)
+settings.email_verification_enabled = not (options.verified or options.recovery or options.password_change or options.map or options.reflection or options.chat)
+settings.email_verification_required = not (options.verified or options.recovery or options.password_change or options.map or options.reflection or options.chat)
 settings.feedback_enabled = True
 settings.feedback_email_to = None
 settings.terms_version = 'isolated-registration-v1'
 settings.terms_document_url = 'https://example.com/agb/isolated-registration-v1.pdf'
 settings.terms_document_sha256 = 'a' * 64
 settings.stripe_enabled = False
-settings.premium_features_enabled = options.journal or options.map or options.reflection or options.chat
+settings.premium_features_enabled = options.map or options.reflection or options.chat
 settings.rate_limit_enabled = options.activation or options.recovery or options.password_change or options.chat
 if options.activation or options.recovery or options.password_change or options.chat:
     # Keep the actual per-email resend/confirm limits; avoid unrelated IP quotas.
@@ -163,7 +162,7 @@ with tempfile.TemporaryDirectory(prefix='feely-registration-contract-') as scrat
                 user = db.scalar(select(User).where(User.email == email))
                 return {'access_token': create_access_token(str(user.id), expires_delta=timedelta(minutes=5))}
 
-    if options.activation or options.recovery or options.password_change or options.journal or options.map or options.reflection or options.chat:
+    if options.activation or options.recovery or options.password_change or options.map or options.reflection or options.chat:
         @application.post('/__contract/state')
         def fixture_state(payload: dict):
             # Only this disposable fixture can expire/disable synthetic accounts

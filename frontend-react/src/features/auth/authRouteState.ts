@@ -6,7 +6,7 @@ export interface AuthHandoffState {
   email?: string;
   notice?: 'registered' | 'activated' | 'verification-required' | 'password-reset';
   afterLogin: string;
-  workspace: 'chat' | 'map' | 'journal';
+  workspace: 'chat' | 'map';
 }
 export function authDestinationState(state: unknown, search: string) {
   const afterLogin = loginReturnPath(state, search);

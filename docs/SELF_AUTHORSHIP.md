@@ -65,7 +65,6 @@ topic space in the self-authorship map. A topic space contains:
 
 - A user-confirmed title and description
 - The chats connected to the topic
-- The dated journal pages connected to the topic
 - An optional broader parent topic
 - Optional peer-topic relationships
 - Confirmed map entries
@@ -117,7 +116,6 @@ The map lives under `profile.data["self_authorship_map"]`:
       "title": "Family expectations and autonomy",
       "description": "Separating inherited expectations from personal direction.",
       "chat_ids": ["chat-id"],
-      "journal_dates": ["2026-09-01"],
       "parent_topic_id": null,
       "related_topic_ids": ["another-topic-id"],
       "entries": [
@@ -145,10 +143,7 @@ that topic too. Moving the entry to a different topic also connects that source
 chat to the new topic, so a practice learned in one conversation can become part
 of another topic without losing its origin.
 
-Journal suggestions follow the same rule. Saving an insight under a topic, or
-connecting a journal topic suggestion to an existing topic, adds that journal
-date to the topic. Dates are deduplicated, so several saved insights from one
-daily page count as one connected journal entry.
+Legacy journal metadata remains in stored records for database compatibility.
 
 ## Ownership Boundary
 
@@ -178,5 +173,5 @@ content.
 8. `PATCH /api/v1/users/me/map/practices/{entry_id}` changes a practice state
    and optionally records a reflection.
 
-The frontend implementation is in `website/index.html`, `website/app.js`, and
-`website/styles.css`.
+The frontend implementation is in `frontend-react/src/features/map/` and
+`frontend-react/src/features/chat/`.

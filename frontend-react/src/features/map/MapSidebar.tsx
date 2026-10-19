@@ -15,9 +15,8 @@ export default function MapSidebar({
   const topics = accessible ? (map?.snapshot.data?.topic_spaces ?? []) : [];
   function topicButton(topic: MapTopic, depth = 0) {
     const chats = topic.chat_ids?.length || 0,
-      journals = topic.journal_dates?.length || 0,
       entries = topic.entries?.length || 0;
-    const meta = `${chats} ${chats === 1 ? 'chat' : 'chats'} · ${journals} ${journals === 1 ? 'journal' : 'journals'} · ${entries} ${entries === 1 ? 'entry' : 'entries'}`;
+    const meta = `${chats} ${chats === 1 ? 'chat' : 'chats'} · ${entries} ${entries === 1 ? 'entry' : 'entries'}`;
     return (
       <button
         key={topic.id}
@@ -40,10 +39,10 @@ export default function MapSidebar({
   return (
     <section id="map-sidebar-content" className="sidebar-context map-sidebar-content">
       {!accessible ? (
-        <div id="map-sidebar-locked" className="journal-sidebar-locked">
+        <div id="map-sidebar-locked" className="map-sidebar-locked">
           <span className="workspace-premium-badge">Pro</span>
           <strong>My Map is a Premium space</strong>
-          <p>Unlock connected topics, conversations, journal pages, and practices.</p>
+          <p>Unlock connected topics, conversations, and practices.</p>
         </div>
       ) : (
         <div id="map-sidebar-access" className="map-sidebar-access">

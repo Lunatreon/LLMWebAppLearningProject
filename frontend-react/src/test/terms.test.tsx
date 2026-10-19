@@ -212,8 +212,7 @@ describe('React terms and feature gating', () => {
           return json(acceptance);
         },
         '/users/me/account': () => (accepted ? refreshedAccount.promise : json(account)),
-        '/billing/subscription': () =>
-          json({ ...subscription, my_map_access: accepted, journal_access: accepted }),
+        '/billing/subscription': () => json({ ...subscription, my_map_access: accepted }),
       },
     });
     const user = userEvent.setup();
@@ -227,7 +226,7 @@ describe('React terms and feature gating', () => {
     await screen.findByLabelText('Your feedback');
     expect(router.state.location.pathname).toBe('/feedback');
     expect(controller.getSnapshot().session).toMatchObject({
-      subscription: { my_map_access: true, journal_access: true },
+      subscription: { my_map_access: true },
     });
   });
 

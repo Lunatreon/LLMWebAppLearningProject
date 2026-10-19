@@ -19,15 +19,19 @@ export default memo(function ChatHistory({
   reactionPending,
   controller,
 }: Props) {
-  function react(createdAt: string, reaction: Reaction) {
+  function react(createdAt: string, reaction: Reaction, turnId?: number) {
     if (controller.getSnapshot().active === chatId) {
-      void controller.react(createdAt, reaction);
+      void controller.react(createdAt, reaction, turnId);
     }
   }
 
   return messages.map((item, index) => (
     <ChatMessage
-      key={`${index}:${item.role}:${item.created_at || ''}`}
+      key={
+        item.turn_id
+          ? `${item.turn_id}:${item.role}`
+          : `${index}:${item.role}:${item.created_at || ''}`
+      }
       item={item}
       pending={reactionPending.includes(`${chatId}:${item.created_at}`)}
       enabled={enabled}

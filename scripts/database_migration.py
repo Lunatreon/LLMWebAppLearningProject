@@ -212,7 +212,12 @@ def validate_rows(rows: dict) -> None:
     for row in rows["user_profiles"]:
         if isinstance(row["data"], dict):
             validate_map(row["data"])
-    for table, column in (("chat_sessions", "info"), ("journal_entries", "analysis")):
+    for table, column in (
+        ("chat_sessions", "info"),
+        ("chat_turns", "user_metadata"),
+        ("chat_turns", "response_metadata"),
+        ("journal_entries", "analysis"),
+    ):
         for row in rows[table]:
             validate_embedded_timestamps(row[column], f"{table}.{column}")
 
@@ -227,7 +232,10 @@ def read_source(path: Path, *, assume_naive_utc: bool = False) -> dict:
             connection.exec_driver_sql("BEGIN")
             table_names = set(inspect(connection).get_table_names()) - {"alembic_version"}
             if table_names != set(Base.metadata.tables):
-                fail("source", "table inventory differs from the ten-table schema")
+                fail(
+                    "source",
+                    "table inventory differs from the current schema; migrate and audit a source copy first",
+                )
             rows = {}
             for table in TABLES:
                 quoted = connection.dialect.identifier_preparer.quote(table.name)

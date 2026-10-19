@@ -44,7 +44,6 @@ class SubscriptionResponse(BaseModel):
     status: SubscriptionStatus
     premium: bool
     my_map_access: bool
-    journal_access: bool
     chat_daily_limit: int
     plan: Literal["free", "monthly", "yearly", "premium"]
     cancel_at_period_end: bool

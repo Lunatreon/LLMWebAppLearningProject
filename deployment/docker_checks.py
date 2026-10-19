@@ -20,6 +20,7 @@ TABLES = {
     "users",
     "user_profiles",
     "chat_sessions",
+    "chat_turns",
     "daily_llm_usage",
     "journal_entries",
     "billing_subscriptions",
@@ -77,7 +78,6 @@ def check_runtime():
         for provider in (
             settings.chat_llm_provider,
             settings.topic_llm_provider,
-            settings.journal_llm_provider,
         )
     )
     assert not Path("/app/.env").exists(), "Host environment was baked into image"

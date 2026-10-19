@@ -36,7 +36,6 @@ def test_private_files_and_docs_are_not_public(client, path):
         "/api/v1/users/me/profile",
         "/api/v1/users/me/map",
         "/api/v1/llm/chats",
-        "/api/v1/journal/entries",
         "/api/v1/admin/users",
     ],
 )

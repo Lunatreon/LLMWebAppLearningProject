@@ -34,6 +34,12 @@ class ChatRead(BaseModel):
     pending_topics: list[dict[str, Any]] = Field(default_factory=list)
     pending_map_suggestion: dict[str, Any] | None = None
     messages: list[dict[str, Any]] = Field(default_factory=list)
+    next_before_position: int | None = None
+
+
+class ChatListPage(BaseModel):
+    items: list[ChatRead]
+    next_cursor: str | None = None
 
 
 class TopicSuggestion(BaseModel):
@@ -59,6 +65,8 @@ class LLMResponse(BaseModel):
     chat_info: dict[str, Any]
     map_suggestion: dict[str, Any] | None = None
     topic_analysis_status: str = "queued"
+    turn_id: int | None = None
+    position: int | None = None
 
 
 class TopicSuggestionResponse(BaseModel):
@@ -111,4 +119,5 @@ class MapSuggestionConfirmationResponse(BaseModel):
 
 class ReplyReactionRequest(BaseModel):
     created_at: str = Field(min_length=1, max_length=64)
+    turn_id: int | None = Field(default=None, ge=1)
     reaction: Literal["like", "dislike"] | None = None

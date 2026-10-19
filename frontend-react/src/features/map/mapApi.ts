@@ -33,7 +33,6 @@ function validTopic(topic: MapTopic) {
     typeof topic.title === 'string' &&
     (topic.description === undefined || typeof topic.description === 'string') &&
     strings(topic.chat_ids) &&
-    strings(topic.journal_dates) &&
     strings(topic.related_topic_ids) &&
     (topic.parent_topic_id == null || typeof topic.parent_topic_id === 'string') &&
     (topic.entries === undefined ||

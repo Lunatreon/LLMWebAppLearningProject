@@ -1,5 +1,5 @@
 import { useContext } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { categoryLabels, topicCategories, topicCategoryOf } from '../../types/map';
 import type { MapTopic } from '../../types/map';
 import { categoryCounts } from './mapLayout';
@@ -10,7 +10,6 @@ import EntryPreview from './EntryPreview';
 
 export default function MapDetails({ node }: { node: MapNodeData }) {
   const { controller, snapshot } = useMap();
-  const navigate = useNavigate();
   const location = useLocation();
   const chat = useContext(ChatContext);
   const entries = node.entries || [],

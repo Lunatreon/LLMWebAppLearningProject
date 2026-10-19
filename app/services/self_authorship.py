@@ -80,13 +80,6 @@ def read_map(profile_data: dict[str, Any] | None) -> dict[str, Any]:
             )
         )
         space["chat_ids"] = list(dict.fromkeys(space.get("chat_ids", [])))
-        space["journal_dates"] = list(
-            dict.fromkeys(
-                journal_date
-                for journal_date in space.get("journal_dates", [])
-                if isinstance(journal_date, str) and journal_date
-            )
-        )
         space["entries"] = list(space.get("entries", []))
     return result
 
@@ -296,7 +289,6 @@ def create_topic_space(
     description: str = "",
     category: str | None = None,
     chat_id: str | None = None,
-    journal_date: str | None = None,
     parent_topic_id: str | None = None,
     related_topic_ids: list[str] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -315,11 +307,6 @@ def create_topic_space(
             if chat_id not in chat_ids:
                 chat_ids.append(chat_id)
             space["chat_ids"] = chat_ids
-        if journal_date:
-            journal_dates = list(space.get("journal_dates", []))
-            if journal_date not in journal_dates:
-                journal_dates.append(journal_date)
-            space["journal_dates"] = journal_dates
         if description.strip():
             space["description"] = description.strip()
         if category is not None:
@@ -346,7 +333,6 @@ def create_topic_space(
         "description": description.strip(),
         "chat_ids": [chat_id] if chat_id else [],
         "category": normalize_topic_category(category),
-        "journal_dates": [journal_date] if journal_date else [],
         "entries": [],
         "parent_topic_id": parent_topic_id,
         "related_topic_ids": [],
@@ -380,22 +366,6 @@ def link_chat_to_topic_space(
     if chat_id not in chat_ids:
         chat_ids.append(chat_id)
     space["chat_ids"] = chat_ids
-    space["updated_at"] = current_timestamp()
-    return write_map(profile_data, map_data), space
-
-
-def link_journal_to_topic_space(
-    profile_data: dict[str, Any] | None,
-    *,
-    topic_space_id: str,
-    journal_date: str,
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    map_data = read_map(profile_data)
-    space = find_topic_space(map_data, topic_space_id)
-    journal_dates = list(space.get("journal_dates", []))
-    if journal_date not in journal_dates:
-        journal_dates.append(journal_date)
-    space["journal_dates"] = journal_dates
     space["updated_at"] = current_timestamp()
     return write_map(profile_data, map_data), space
 
@@ -467,7 +437,9 @@ def merge_topic_spaces(
         ancestor_id = find_topic_space(map_data, ancestor_id).get("parent_topic_id")
 
     for field in ("chat_ids", "journal_dates"):
-        target[field] = list(dict.fromkeys([*target.get(field, []), *source.get(field, [])]))
+        # Preserve existing legacy links during merges, without adding them to new maps.
+        if field == "chat_ids" or field in target or field in source:
+            target[field] = list(dict.fromkeys([*target.get(field, []), *source.get(field, [])]))
 
     entries_by_id: dict[str, dict[str, Any]] = {}
     entries_without_id: list[dict[str, Any]] = []
@@ -491,7 +463,6 @@ def merge_topic_spaces(
             "category": "merged_topic",
             "text": preserved_text,
             "source_chat_id": None,
-            "source_journal_date": None,
             "source_topic_id": source_topic_space_id,
             "source_topic_title": source_title,
             "reason": f"Preserved when this topic was merged into {target.get('title') or 'another topic'}.",
@@ -583,7 +554,6 @@ def add_map_entry(
     text: str,
     topic_space_id: str | None = None,
     source_chat_id: str | None = None,
-    source_journal_date: str | None = None,
     reason: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     if category not in ENTRY_CATEGORIES:
@@ -595,7 +565,6 @@ def add_map_entry(
         "category": category,
         "text": text.strip(),
         "source_chat_id": source_chat_id,
-        "source_journal_date": source_journal_date,
         "reason": reason.strip() if reason else None,
         "created_at": now,
         "updated_at": now,
@@ -613,10 +582,6 @@ def add_map_entry(
                     chat_ids = space.setdefault("chat_ids", [])
                     if source_chat_id not in chat_ids:
                         chat_ids.append(source_chat_id)
-                if source_journal_date:
-                    journal_dates = space.setdefault("journal_dates", [])
-                    if source_journal_date not in journal_dates:
-                        journal_dates.append(source_journal_date)
                 space["updated_at"] = now
                 return write_map(profile_data, map_data), entry
         raise LookupError("Topic space not found")
@@ -679,11 +644,6 @@ def update_map_entry(
             chat_ids = target_space.setdefault("chat_ids", [])
             if entry["source_chat_id"] not in chat_ids:
                 chat_ids.append(entry["source_chat_id"])
-            target_space["updated_at"] = current_timestamp()
-        if target_space and entry.get("source_journal_date"):
-            journal_dates = target_space.setdefault("journal_dates", [])
-            if entry["source_journal_date"] not in journal_dates:
-                journal_dates.append(entry["source_journal_date"])
             target_space["updated_at"] = current_timestamp()
     entry["updated_at"] = current_timestamp()
     return write_map(profile_data, map_data), entry

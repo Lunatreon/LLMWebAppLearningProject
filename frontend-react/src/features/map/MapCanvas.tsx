@@ -40,18 +40,16 @@ export default function MapCanvas() {
       </svg>
       {layout.nodes.map((node, index) => {
         const chats = node.chat_ids?.length || 0,
-          journals = node.journal_dates?.length || 0,
           entries = node.entries?.length || 0;
-        const journalLabel = `${journals} ${journals === 1 ? 'journal entry' : 'journal entries'}`;
         let meta: string;
         if (node.id === snapshot.selected && !snapshot.detailOpen) {
           meta = 'Open details';
         } else if (node.parent_title) {
-          meta = `Under ${node.parent_title} · ${journalLabel}`;
+          meta = `Under ${node.parent_title} `;
         } else {
           const chatLabel = `${chats} ${chats === 1 ? 'chat' : 'chats'}`;
           const entryLabel = `${entries} ${entries === 1 ? 'entry' : 'entries'}`;
-          meta = `${chatLabel} · ${journalLabel} · ${entryLabel}`;
+          meta = `${chatLabel} · ${entryLabel}`;
         }
         return (
           <button

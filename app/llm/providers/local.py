@@ -6,7 +6,6 @@ from typing import Any
 from app.llm.context import topic_chat_context
 from app.llm.types import (
     ChatLLMResult,
-    JournalLLMResult,
     TextChunkCallback,
     TopicLLMResult,
 )
@@ -469,31 +468,3 @@ class LocalTopicLLMClient:
                 else None
             ),
         )
-
-
-def local_journal_analysis(journal_text: str) -> JournalLLMResult:
-    suggestions: list[dict[str, str]] = []
-    words = journal_text.split()
-    if len(words) >= 20:
-        topic = infer_local_freeform_topic([journal_text])
-        suggestions.append(
-            {
-                "kind": "topic",
-                "category": "topic",
-                "title": topic,
-                "text": f"A recurring journal thread concerning {topic.lower()}.",
-                "reason": "This theme appears repeatedly in today's journal entry.",
-            }
-        )
-    map_suggestion = LocalChatLLMClient().local_map_suggestion(journal_text)
-    if map_suggestion:
-        suggestions.append(
-            {
-                "kind": "map_entry",
-                "category": map_suggestion["category"],
-                "title": "",
-                "text": map_suggestion["text"],
-                "reason": map_suggestion["reason"],
-            }
-        )
-    return JournalLLMResult(suggestions=suggestions)

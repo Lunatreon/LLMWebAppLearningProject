@@ -33,7 +33,6 @@ def create_snapshot(path: Path) -> None:
             title="Snapshot topic",
             description="Preserved migration data.",
             category="experience",
-            journal_date=SNAPSHOT_DATE,
         )
         profile, practice = add_map_entry(
             profile,
@@ -41,7 +40,6 @@ def create_snapshot(path: Path) -> None:
             text="Snapshot practice.",
             topic_space_id=topic["id"],
             source_chat_id="snapshot-chat",
-            source_journal_date=SNAPSHOT_DATE,
         )
         profile, _ = update_practice(
             profile,

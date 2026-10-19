@@ -22,7 +22,7 @@ describe('real session foundation', () => {
     expect(controller.getSnapshot().session).toMatchObject({
       status: 'authenticated',
       account,
-      subscription: { my_map_access: true, journal_access: true },
+      subscription: { my_map_access: true },
     });
     expect(
       fetch.mock.calls.every(
@@ -107,7 +107,7 @@ describe('real session foundation', () => {
     await controller.reload();
     expect(controller.getSnapshot().session).toMatchObject({
       status: 'authenticated',
-      subscription: { my_map_access: false, journal_access: false },
+      subscription: { my_map_access: false },
       termsRequired: true,
     });
     controller.stop();

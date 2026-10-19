@@ -4,7 +4,7 @@ import logging
 from typing import Any
 
 from app.llm.json_response import raise_bad_gateway
-from app.llm.types import ChatLLMResult, JournalLLMResult, TopicLLMResult
+from app.llm.types import ChatLLMResult, TopicLLMResult
 from app.services.self_authorship import normalize_topic_category
 
 logger = logging.getLogger(__name__)
@@ -112,46 +112,6 @@ TOPIC_RESPONSE_SCHEMA["properties"]["map_suggestion"] = MAP_SUGGESTION_SCHEMA
 TOPIC_RESPONSE_SCHEMA["required"].append("map_suggestion")
 
 
-JOURNAL_RESPONSE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "suggestions": {
-            "type": "array",
-            "maxItems": 6,
-            "items": {
-                "type": "object",
-                "properties": {
-                    "kind": {"type": "string", "enum": ["topic", "map_entry"]},
-                    "category": {
-                        "type": "string",
-                        "enum": [
-                            "topic",
-                            "inherited_script",
-                            "own_perception",
-                            "value",
-                            "body_signal",
-                            "practice",
-                            "evidence",
-                        ],
-                    },
-                    "topic_category": {
-                        "type": "string",
-                        "enum": ["person", "trait", "experience", "other"],
-                    },
-                    "title": {"type": "string"},
-                    "text": {"type": "string"},
-                    "reason": {"type": "string"},
-                },
-                "required": ["kind", "category", "topic_category", "title", "text", "reason"],
-                "additionalProperties": False,
-            },
-        }
-    },
-    "required": ["suggestions"],
-    "additionalProperties": False,
-}
-
-
 def map_suggestion_from_payload(value: Any) -> dict[str, str] | None:
     """Discard malformed optional suggestions without losing a valid response."""
     if value is None:
@@ -240,43 +200,3 @@ def topic_result_from_payload(payload: dict[str, Any]) -> TopicLLMResult:
         additional_topics=additional_topics,
         map_suggestion=map_suggestion_from_payload(payload.get("map_suggestion")),
     )
-
-
-def journal_result_from_payload(payload: dict[str, Any]) -> JournalLLMResult:
-    raw_suggestions = payload.get("suggestions")
-    if not isinstance(raw_suggestions, list):
-        raise_bad_gateway("Journal-LLM response did not match the expected schema")
-
-    suggestions: list[dict[str, str]] = []
-    for raw in raw_suggestions[:6]:
-        if not isinstance(raw, dict):
-            continue
-        kind = raw.get("kind")
-        category = raw.get("category")
-        title = raw.get("title")
-        text = raw.get("text")
-        reason = raw.get("reason")
-        if not all(isinstance(value, str) for value in (category, title, text, reason)):
-            continue
-        if kind == "topic" and category == "topic" and title.strip() and text.strip():
-            suggestions.append(
-                {
-                    "kind": "topic",
-                    "category": "topic",
-                    "topic_category": normalize_topic_category(raw.get("topic_category")),
-                    "title": title.strip()[:120],
-                    "text": text.strip()[:1000],
-                    "reason": reason.strip()[:1000],
-                }
-            )
-        elif kind == "map_entry" and category in MAP_SUGGESTION_CATEGORIES and text.strip():
-            suggestions.append(
-                {
-                    "kind": "map_entry",
-                    "category": category,
-                    "title": title.strip()[:120],
-                    "text": text.strip()[:1000],
-                    "reason": reason.strip()[:1000],
-                }
-            )
-    return JournalLLMResult(suggestions=suggestions)

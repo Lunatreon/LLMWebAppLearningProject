@@ -208,7 +208,6 @@ def normalize_subscription(
         "premium": premium,
         "free_test_phase": not settings.premium_features_enabled,
         "my_map_access": premium_feature_access,
-        "journal_access": premium_feature_access,
         "chat_daily_limit": (
             settings.rate_limit_llm_user_per_day
             if premium_feature_access

@@ -38,7 +38,7 @@ def test_snapshot_contains_all_tables_valid_credentials_and_never_overwrites(tmp
     create_snapshot(path)
     before = path.read_bytes()
     rows = read_source(path, assume_naive_utc=True)
-    assert len(rows) == 10 and all(len(table) == 1 for table in rows.values())
+    assert len(rows) == 11 and all(len(table) == 1 for table in rows.values())
     assert rows["users"][0]["id"] == 42
     assert verify_password(SNAPSHOT_PASSWORD, rows["users"][0]["hashed_password"])
     assert rows["users"][0]["is_email_verified"] is True

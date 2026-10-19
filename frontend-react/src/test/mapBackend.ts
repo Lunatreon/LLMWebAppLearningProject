@@ -9,7 +9,6 @@ export const topic = (id: string, title: string, extra: Partial<MapTopic> = {}):
   parent_topic_id: null,
   related_topic_ids: [],
   chat_ids: [],
-  journal_dates: [],
   entries: [],
   created_at: mapTimestamp,
   updated_at: mapTimestamp,
@@ -25,7 +24,6 @@ export const mapEntry = (
   text,
   category,
   source_chat_id: null,
-  source_journal_date: null,
   reason: null,
   created_at: mapTimestamp,
   updated_at: mapTimestamp,
@@ -90,9 +88,6 @@ export function mapBackend(
           ...(value.entries || []),
           mapEntry('preserved-source', value.title, 'merged_topic'),
         );
-        target.journal_dates = [
-          ...new Set([...(target.journal_dates || []), ...(value.journal_dates || [])]),
-        ];
         data.topic_spaces = data.topic_spaces.filter((item) => item.id !== id);
         return json({ topic: target, map: data });
       }

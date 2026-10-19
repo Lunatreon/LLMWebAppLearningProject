@@ -17,8 +17,6 @@ import { topicCategoryOf } from '../types/map';
 import { mapBackend, topic, mapEntry, mapData } from './mapBackend';
 import { deferred, json, jwt, subscription } from './backend';
 import type { TopicPayload } from '../types/map';
-import { decideJournalSuggestion } from '../features/journal/journalApi';
-import { topicSuggestion } from './journalBackend';
 const payload: TopicPayload = {
   title: 'Created',
   category: 'experience',
@@ -61,7 +59,6 @@ describe('Map renderer/layout ports', () => {
         [
           mapEntry('a', 'One', 'value', {
             source_chat_id: 'chat',
-            source_journal_date: '2026-10-12',
           }),
           mapEntry('b', 'Two', 'practice', { source_chat_id: 'chat' }),
         ],
@@ -70,7 +67,6 @@ describe('Map renderer/layout ports', () => {
     expect(nodes).toHaveLength(1);
     expect(nodes[0].id).toBe(OVERALL_ID);
     expect(nodes[0].chat_ids).toEqual(['chat']);
-    expect(nodes[0].journal_dates).toEqual(['2026-10-12']);
   });
   test('mobile two-column board grows without overlap and keeps every bubble inside', () => {
     const data = mapData(Array.from({ length: 30 }, (_, i) => topic(String(i), String(i))));
@@ -467,48 +463,7 @@ describe('Map API/state/ownership and full-response races', () => {
     expect(controller.getSnapshot().selected).toBe('b');
     expect(controller.getSnapshot().data?.topic_spaces.map((topic) => topic.id)).toEqual(['b']);
   });
-  test('Journal review waits for Map write and invalidates an already-running graph read', async () => {
-    const oldRead = deferred<Response>(),
-      mapWrite = deferred<Response>();
-    let graphReads = 0,
-      journalCalls = 0;
-    const { controller, session } = await setup({
-      read: () =>
-        ++graphReads === 1
-          ? oldRead.promise
-          : json(mapData([topic('m', 'Manual'), topic('j', 'Journal')])),
-      write: () => mapWrite.promise,
-      overrides: {
-        '/journal/entries/2026-10-12/suggestions/topic-1': () => {
-          journalCalls++;
-          return json({
-            suggestion: { ...topicSuggestion, status: 'saved', saved_item_id: 'j' },
-            map: mapData([topic('m', 'Manual'), topic('j', 'Journal')]),
-          });
-        },
-      },
-    });
-    const reading = controller.visit();
-    await ticks();
-    const saving = controller.saveTopic(payload);
-    await ticks();
-    const review = decideJournalSuggestion(session.api, '2026-10-12', 'topic-1', {
-      accepted: true,
-    });
-    await ticks();
-    expect(journalCalls).toBe(0);
-    mapWrite.resolve(json({ topic: topic('m', 'Manual'), map: mapData([topic('m', 'Manual')]) }));
-    await saving;
-    await review;
-    await controller.load();
-    oldRead.resolve(json(mapData()));
-    await reading;
-    expect(controller.getSnapshot().data?.topic_spaces.map((topic) => topic.id)).toEqual([
-      'm',
-      'j',
-    ]);
-    expect(journalCalls).toBe(1);
-  });
+
   test('Map mutation completion after route leave closes no newer UI and still persists server data', async () => {
     const response = deferred<Response>();
     const { controller } = await setup({ write: () => response.promise });

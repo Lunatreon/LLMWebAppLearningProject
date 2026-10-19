@@ -90,8 +90,7 @@ export default function DeleteAccount({
           >
             <h2>Delete your account?</h2>
             <p>
-              Your chats, journal, and saved reflections will be permanently deleted. This cannot be
-              undone.
+              Your chats and saved reflections will be permanently deleted. This cannot be undone.
             </p>
             <p>
               If you have a paid subscription, cancel it in Stripe before deleting your account.

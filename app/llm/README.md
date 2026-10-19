@@ -6,7 +6,6 @@ Start with the kind of change you want to make:
 | --- | --- |
 | How an API or local model is called | `providers/` |
 | Which provider and model a role uses | `providers/factory.py` and `app/core/config.py` |
-| Journal analysis behavior | `tasks/` |
 | Information sent to a model | `context.py` |
 | Expected responses and their validation | `responses.py` |
 | Shared client interfaces and result types | `types.py` |
@@ -29,9 +28,8 @@ not need additional Python files. OpenAI credentials still use `OPENAI_API_KEY`.
 
 ## Tasks
 
-`tasks/journal.py` runs journal analysis and returns suggestions for user review.
 Conversation summaries, pattern recognition, suggestion cooldown rules and topic
-matching are grouped alongside it. These helpers may be deterministic; being a
+matching are grouped under `tasks/`. These helpers may be deterministic; being a
 task does not imply an external model call.
 
 The existing chat and topic protocols are implemented by the provider classes;

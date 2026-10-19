@@ -129,7 +129,7 @@ describe('existing-user React sign-in', () => {
     expect(controller.getSnapshot().session).toMatchObject({
       status: 'authenticated',
       account,
-      subscription: { my_map_access: true, journal_access: true },
+      subscription: { my_map_access: true },
       termsRequired: false,
     });
     for (const path of ['/users/me/account', '/billing/subscription', '/terms/me']) {

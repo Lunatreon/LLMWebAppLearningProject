@@ -1,6 +1,8 @@
 import type { TopicCategory, EntryCategory } from '../../types/map';
 export type Reaction = 'like' | 'dislike' | null;
 export interface ChatMessage {
+  turn_id?: number;
+  position?: number;
   role: string;
   content: string;
   created_at?: string;
@@ -35,12 +37,15 @@ export interface ChatConversation {
   message_count: number;
   updated_at?: string | null;
   messages: ChatMessage[];
+  next_before_position?: number | null;
   pending_topic?: TopicSuggestion | null;
   pending_topics?: TopicSuggestion[];
   pending_map_suggestion?: MapSuggestion | null;
   analysis_status?: string;
 }
 export interface GenerationResult {
+  turn_id?: number;
+  position?: number;
   chat_id: string;
   assistant_message: string;
   chat_info: Omit<ChatConversation, 'chat_id'> & { chat_id?: string };
@@ -91,6 +96,8 @@ export interface ChatSnapshot {
   draft: string;
   loading: boolean;
   listLoading: boolean;
+  listNextCursor: string | null;
+  historyLoading: boolean;
   listError: string;
   error: string;
   errorStatus: number | null;

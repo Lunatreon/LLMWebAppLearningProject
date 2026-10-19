@@ -82,34 +82,28 @@ production template contains only placeholders and safe non-secret configuration
 | `LLM_PROVIDER` | REQUIRED PRODUCTION CONFIG | Existing application setting; preserve its default unless deployment requirements justify an explicit value. |
 | `CHAT_LLM_PROVIDER` | REQUIRED PRODUCTION CONFIG | Existing application setting; preserve its default unless deployment requirements justify an explicit value. |
 | `TOPIC_LLM_PROVIDER` | REQUIRED PRODUCTION CONFIG | Explicitly select openai in production; legacy default local would otherwise override the base provider. |
-| `JOURNAL_LLM_PROVIDER` | REQUIRED PRODUCTION CONFIG | Falls back through Topic then base provider; production template selects openai explicitly. |
-| `OPENAI_API_KEY` | REQUIRED PRODUCTION SECRET | Required when any effective Chat/Topic/Journal provider is openai. Backend only. |
+| `OPENAI_API_KEY` | REQUIRED PRODUCTION SECRET | Required when any effective Chat/Topic provider is openai. Backend only. |
 | `OPENAI_TIMEOUT_SECONDS` | OPTIONAL | Per-attempt SDK timeout; default 600 preserves SDK behavior, production template 60. SDK retries are separate. |
 | `OPENAI_MAX_RETRIES` | OPTIONAL | SDK retries 0..3; default 2, no application retry layer added. |
 | `OPENAI_MODEL` | REQUIRED PRODUCTION CONFIG | Optional per-role model override; falls back to OPENAI_MODEL. Model access must be verified by the operator. |
 | `OPENAI_CHAT_MODEL` | OPTIONAL | Optional per-role model override; falls back to OPENAI_MODEL. Model access must be verified by the operator. |
 | `OPENAI_TOPIC_MODEL` | OPTIONAL | Optional per-role model override; falls back to OPENAI_MODEL. Model access must be verified by the operator. |
-| `OPENAI_JOURNAL_MODEL` | OPTIONAL | Optional per-role model override; falls back to OPENAI_MODEL. Model access must be verified by the operator. |
 | `ANTHROPIC_API_KEY` | REQUIRED PRODUCTION SECRET | Required only if an Anthropic role is selected; backend only. |
 | `ANTHROPIC_MODEL` | OPTIONAL | Optional Anthropic provider/model setting; relevant only when selected. |
 | `ANTHROPIC_CHAT_MODEL` | OPTIONAL | Optional Anthropic provider/model setting; relevant only when selected. |
 | `ANTHROPIC_TOPIC_MODEL` | OPTIONAL | Optional Anthropic provider/model setting; relevant only when selected. |
-| `ANTHROPIC_JOURNAL_MODEL` | OPTIONAL | Optional Anthropic provider/model setting; relevant only when selected. |
 | `ANTHROPIC_MAX_TOKENS` | OPTIONAL | Optional Anthropic provider/model setting; relevant only when selected. |
 | `OLLAMA_BASE_URL` | OPTIONAL | Optional external Ollama configuration; mock/local are development-only. No Ollama service is deployed here. |
 | `OLLAMA_MODEL` | OPTIONAL | Optional external Ollama configuration; mock/local are development-only. No Ollama service is deployed here. |
 | `OLLAMA_CHAT_MODEL` | OPTIONAL | Optional external Ollama configuration; mock/local are development-only. No Ollama service is deployed here. |
 | `OLLAMA_TOPIC_MODEL` | OPTIONAL | Optional external Ollama configuration; mock/local are development-only. No Ollama service is deployed here. |
-| `OLLAMA_JOURNAL_MODEL` | OPTIONAL | Optional external Ollama configuration; mock/local are development-only. No Ollama service is deployed here. |
 | `OLLAMA_TIMEOUT_SECONDS` | OPTIONAL | Optional external Ollama configuration; mock/local are development-only. No Ollama service is deployed here. |
 | `OLLAMA_CONTEXT_WINDOW` | OPTIONAL | Optional external Ollama configuration; mock/local are development-only. No Ollama service is deployed here. |
 | `OLLAMA_CHAT_TEMPERATURE` | OPTIONAL | Optional external Ollama configuration; mock/local are development-only. No Ollama service is deployed here. |
 | `OLLAMA_CHAT_MAX_TOKENS` | OPTIONAL | Optional external Ollama configuration; mock/local are development-only. No Ollama service is deployed here. |
 | `OLLAMA_TOPIC_MAX_TOKENS` | OPTIONAL | Optional external Ollama configuration; mock/local are development-only. No Ollama service is deployed here. |
-| `OLLAMA_JOURNAL_MAX_TOKENS` | OPTIONAL | Optional external Ollama configuration; mock/local are development-only. No Ollama service is deployed here. |
 | `OLLAMA_CHAT_NUM_GPU` | OPTIONAL | Optional external Ollama configuration; mock/local are development-only. No Ollama service is deployed here. |
 | `OLLAMA_TOPIC_NUM_GPU` | OPTIONAL | Optional external Ollama configuration; mock/local are development-only. No Ollama service is deployed here. |
-| `OLLAMA_JOURNAL_NUM_GPU` | OPTIONAL | Optional external Ollama configuration; mock/local are development-only. No Ollama service is deployed here. |
 | `OLLAMA_KEEP_ALIVE` | OPTIONAL | Optional external Ollama configuration; mock/local are development-only. No Ollama service is deployed here. |
 | `OLLAMA_PREWARM` | OPTIONAL | Keep false in this initial OpenAI production topology; relevant only to a separately configured Ollama deployment. |
 | `PROMPT_DIRECTORY` | REQUIRED PRODUCTION CONFIG | Existing application setting; preserve its default unless deployment requirements justify an explicit value. |

@@ -138,14 +138,3 @@ def topic_request_payload(
         },
         ensure_ascii=True,
     )
-
-
-def journal_request_payload(journal_text: str, entry_date: str) -> str:
-    return json.dumps(
-        {
-            "entry_date": entry_date,
-            "journal_text": journal_text,
-            "instruction": "Return only grounded suggestions. The user decides what to save.",
-        },
-        ensure_ascii=True,
-    )

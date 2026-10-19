@@ -59,7 +59,7 @@ app/
     prompts.py             Editable system-prompt loading and saving
     llm/
       types.py             Provider contracts and result types
-      context.py           Bounded chat, topic, and journal request payloads
+      context.py           Bounded chat and topic request payloads
       responses.py         Structured response schemas and validation
       streaming.py         Partial JSON assistant-text decoding
       json_response.py     Complete JSON decoding and upstream errors
@@ -70,7 +70,6 @@ app/
         ollama.py          Ollama HTTP calls, scheduling, and retries
         local.py           Deterministic development responses
       tasks/
-        journal.py         Journal analysis orchestration
 tests/
   conftest.py              Test app and temporary test database setup
   test_auth_and_llm.py     Basic register, login, and LLM flow test
@@ -246,7 +245,7 @@ Response body:
 The LLM package lives in `app/llm/`. Provider implementations depend on
 shared contracts, context builders, and response validators. Those shared modules
 do not import providers or HTTP routes. Provider implementations and selection
-live in `providers/`; operations such as journal analysis live in `tasks/`. Editable prompt files are handled by `app/llm/prompts.py`.
+live in `providers/`; operations such as conversation summaries live in `tasks/`. Editable prompt files are handled by `app/llm/prompts.py`.
 See `app/llm/README.md` for where to put a change.
 
 FastAPI, Pydantic, SQLAlchemy, and the official provider SDKs remain the framework

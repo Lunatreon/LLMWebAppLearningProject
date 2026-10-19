@@ -212,7 +212,6 @@ def test_admin_prompt_edits_are_loaded_from_files(monkeypatch, client, tmp_path)
     assert {prompt["kind"] for prompt in original.json()["prompts"]} == {
         "chat",
         "topic",
-        "journal",
     }
     assert all(prompt["text"] == "" for prompt in original.json()["prompts"])
     with pytest.raises(PromptConfigurationError):

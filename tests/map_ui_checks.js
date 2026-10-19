@@ -149,10 +149,8 @@ window.runMapUIChecks = async function () {
     document.querySelector(".map-connected-chats button").click();
     await wait(() => state.activeChatId === "fixture-chat" && !conversationView.classList.contains("hidden"), "Connected chat did not open");
     document.querySelector("#map-workspace-button").click(); await loadMap(); open("legacy-person");
-    document.querySelector(".map-connected-journals button").click();
-    await wait(() => state.activeJournalDate === "2026-09-01" && !journalView.classList.contains("hidden"), "Connected journal did not open");
     document.querySelector("#map-workspace-button").click(); await loadMap();
-    passed.push("All filters, connected chat, and connected journal navigation");
+    passed.push("All filters and connected chat navigation");
 
     return { passed, success: true };
   } catch (error) {

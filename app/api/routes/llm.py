@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
@@ -15,9 +15,10 @@ from app.api.dependencies import get_current_user, get_db
 from app.core.config import settings
 from app.core.rate_limit import enforce_rate_limit
 from app.db.session import SessionLocal
-from app.models.user import ChatSession, User, UserProfile
+from app.models.user import ChatSession, ChatTurn, User, UserProfile
 from app.schemas.llm import (
     ChatCreateRequest,
+    ChatListPage,
     ChatRead,
     LLMRequest,
     LLMResponse,
@@ -30,6 +31,14 @@ from app.schemas.llm import (
 )
 from app.services.billing import has_premium_feature_access
 from app.services.chat_usage import release_daily_message, reserve_daily_message
+from app.services.chat_storage import (
+    chat_context,
+    save_chat_context,
+    recent_turns,
+    turn_messages,
+    begin_turn,
+    complete_turn,
+)
 from app.llm.tasks.conversation_summary import update_conversation_summary
 from app.llm.providers.factory import get_chat_llm_client, get_topic_llm_client
 from app.llm.types import TextChunkCallback
@@ -146,8 +155,22 @@ def chat_info_for_access(
     return visible_info
 
 
-def chat_read(chat_session: ChatSession, *, premium_access: bool) -> ChatRead:
-    info = chat_info_for_access(chat_session.info, premium_access=premium_access)
+def chat_read(
+    db: Session,
+    chat_session: ChatSession,
+    *,
+    premium_access: bool,
+    history: bool = True,
+    before: int | None = None,
+    limit: int = 25,
+) -> ChatRead:
+    info = chat_info_for_access(
+        chat_context(db, chat_session, history=False), premium_access=premium_access
+    )
+    rows, next_before = (
+        recent_turns(db, chat_session, limit=limit, before=before) if history else ([], None)
+    )
+    info["messages"] = [message for turn in rows for message in turn_messages(turn)]
     queued_topics = pending_topic_queue(info)
     return ChatRead(
         chat_id=chat_session.chat_id,
@@ -158,6 +181,7 @@ def chat_read(chat_session: ChatSession, *, premium_access: bool) -> ChatRead:
         pending_topics=queued_topics,
         pending_map_suggestion=info.get("pending_map_suggestion"),
         messages=list(info.get("messages", [])),
+        next_before_position=next_before,
     )
 
 
@@ -224,6 +248,7 @@ def append_chat_exchange(
             {"role": "assistant", "content": assistant_message, "created_at": now},
         ]
     )
+    # This is bounded model/response context only. All exchanges remain in chat_turns.
     next_info["messages"] = messages[-80:]
     next_info["message_count"] = int(next_info.get("message_count", 0)) + 1
     next_info["last_user_message"] = user_input
@@ -253,7 +278,7 @@ async def analyse_chat_for_topic(
         if chat_session is None:
             return
 
-        info = dict(chat_session.info or {})
+        info = chat_context(db, chat_session)
         queued_topics = pending_topic_queue(info)
         replaced_generic_topic = False
         raw_pending_topic = info.get("pending_topic")
@@ -274,11 +299,11 @@ async def analyse_chat_for_topic(
 
         info["analysis_status"] = "analysing"
         info.pop("analysis_error", None)
-        chat_session.info = info
+        save_chat_context(chat_session, info)
         db.commit()
 
         analysis = ChatAnalyser().analyse(info)
-        info = dict(chat_session.info or {})
+        info = chat_context(db, chat_session)
         info["analysed_message_count"] = message_count
 
         user = db.get(User, user_id)
@@ -315,7 +340,7 @@ async def analyse_chat_for_topic(
         )
         # A newer exchange or review may have arrived during generation.
         db.refresh(chat_session)
-        info = dict(chat_session.info or {})
+        info = chat_context(db, chat_session)
         if int(info.get("message_count", 0)) != message_count:
             return
         info["analysed_message_count"] = message_count
@@ -357,7 +382,7 @@ async def analyse_chat_for_topic(
                 )
         if queued_topics:
             info["analysis_status"] = "topic_ready" if queued_topics else "idle"
-            chat_session.info = info
+            save_chat_context(chat_session, info)
             db.commit()
             return
         available_topic_ids = {topic.get("id") for topic in available_topics}
@@ -432,7 +457,7 @@ async def analyse_chat_for_topic(
 
         if not pending_topics:
             info["analysis_status"] = "idle"
-            chat_session.info = info
+            save_chat_context(chat_session, info)
             db.commit()
             return
 
@@ -451,7 +476,7 @@ async def analyse_chat_for_topic(
             info["initial_topic_title_set"] = True
 
         set_pending_topic_queue(info, pending_topics)
-        chat_session.info = info
+        save_chat_context(chat_session, info)
         db.commit()
     except Exception as exc:  # pragma: no cover - defensive for background jobs
         logger.warning(
@@ -468,10 +493,10 @@ async def analyse_chat_for_topic(
             )
         ).scalar_one_or_none()
         if chat_session is not None:
-            info = dict(chat_session.info or {})
+            info = chat_context(db, chat_session)
             info["analysis_status"] = "error"
             info["analysis_error"] = str(exc)
-            chat_session.info = info
+            save_chat_context(chat_session, info)
             db.commit()
     finally:
         db.close()
@@ -485,20 +510,20 @@ async def maintain_chat_insights(
     await analyse_chat_for_topic(user_id, chat_id, session_factory)
 
 
-@router.get("/chats", response_model=list[ChatRead])
+@router.get("/chats", response_model=list[ChatRead] | ChatListPage)
 def list_chats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> list[ChatRead]:
+    limit: int = Query(default=30, ge=1, le=100),
+    cursor: str | None = None,
+    paginated: bool = False,
+) -> list[ChatRead] | ChatListPage:
+    from app.services.chat_pagination import list_page
+
+    rows, next_cursor = list_page(db, current_user.id, limit, cursor)
     premium_access = has_premium_feature_access(db, current_user)
-    chat_sessions = db.execute(
-        select(ChatSession)
-        .where(ChatSession.user_id == current_user.id)
-        .order_by(ChatSession.updated_at.desc())
-    ).scalars()
-    return [
-        chat_read(chat_session, premium_access=premium_access) for chat_session in chat_sessions
-    ]
+    items = [chat_read(db, row, premium_access=premium_access, history=False) for row in rows]
+    return ChatListPage(items=items, next_cursor=next_cursor) if paginated else items
 
 
 @router.post("/chats", response_model=ChatRead, status_code=status.HTTP_201_CREATED)
@@ -511,6 +536,7 @@ def create_chat(
     db.commit()
     db.refresh(chat_session)
     return chat_read(
+        db,
         chat_session,
         premium_access=has_premium_feature_access(db, current_user),
     )
@@ -519,6 +545,8 @@ def create_chat(
 @router.get("/chats/{chat_id}", response_model=ChatRead)
 def read_chat(
     chat_id: str,
+    before_position: int | None = Query(default=None, ge=1),
+    limit: int = Query(default=25, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ChatRead:
@@ -526,7 +554,10 @@ def read_chat(
     if chat_session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")
     return chat_read(
+        db,
         chat_session,
+        before=before_position,
+        limit=limit,
         premium_access=has_premium_feature_access(db, current_user),
     )
 
@@ -541,22 +572,22 @@ def react_to_reply(
     chat = get_chat_session(db, current_user, chat_id)
     if chat is None:
         raise HTTPException(status_code=404, detail="Chat not found")
-    info = dict(chat.info or {})
-    messages = [dict(message) for message in info.get("messages", [])]
-    target = next(
-        (
-            message
-            for message in messages
-            if message.get("role") == "assistant"
-            and message.get("created_at") == payload.created_at
-        ),
-        None,
+    query = select(ChatTurn).where(
+        ChatTurn.chat_session_id == chat.id, ChatTurn.status.in_(("completed", "legacy"))
     )
-    if target is None:
+    if payload.turn_id is not None:
+        query = query.where(ChatTurn.id == payload.turn_id)
+    else:
+        query = query.where(ChatTurn.response_timestamp == payload.created_at)
+    target = db.scalar(query.order_by(ChatTurn.position.desc()).limit(1))
+    if target is None or target.llm_response is None:
         raise HTTPException(status_code=404, detail="Reply not found")
-    target["reaction"] = payload.reaction
-    info["messages"] = messages
-    chat.info = info
+    target.reaction = payload.reaction
+    metadata = dict(target.response_metadata or {})
+    metadata["reaction"] = payload.reaction
+    if "_original" in metadata:
+        metadata["_original"] = {**metadata["_original"], "reaction": payload.reaction}
+    target.response_metadata = metadata
     db.commit()
     return {"reaction": payload.reaction}
 
@@ -584,17 +615,18 @@ def read_topic_suggestion(
     chat_session = get_chat_session(db, current_user, chat_id)
     if chat_session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")
-    suggestions = pending_topic_queue(chat_session.info or {})
+    info = chat_context(db, chat_session, history=False)
+    suggestions = pending_topic_queue(info)
     return TopicSuggestionResponse(
         suggestion=suggestions[0] if suggestions else None,
         suggestions=suggestions,
-        chat_title=str((chat_session.info or {}).get("title") or "New chat"),
+        chat_title=chat_session.title,
         map_suggestion=(
-            (chat_session.info or {}).get("pending_map_suggestion")
+            info.get("pending_map_suggestion")
             if has_premium_feature_access(db, current_user)
             else None
         ),
-        analysis_status=str((chat_session.info or {}).get("analysis_status") or "idle"),
+        analysis_status=chat_session.analysis_status,
     )
 
 
@@ -608,14 +640,14 @@ def retry_topic_suggestion(
     chat_session = get_chat_session(db, current_user, chat_id)
     if chat_session is None:
         raise HTTPException(status_code=404, detail="Chat not found")
-    info = dict(chat_session.info or {})
+    info = chat_context(db, chat_session)
     if info.get("analysis_status") != "error":
         return {"analysis_status": str(info.get("analysis_status") or "idle")}
     enforce_rate_limit(f"map-retry:{current_user.id}", max_attempts=3, window_seconds=60)
     info["analysis_status"] = "queued"
     info.pop("analysed_message_count", None)
     info.pop("analysis_error", None)
-    chat_session.info = info
+    save_chat_context(chat_session, info)
     db.commit()
     factory = sessionmaker(autocommit=False, autoflush=False, bind=db.get_bind())
     background_tasks.add_task(maintain_chat_insights, current_user.id, chat_id, factory)
@@ -661,7 +693,8 @@ async def process_llm_message(
     profile = get_or_create_profile(db, current_user)
     chat_session = get_or_create_chat_session(db, current_user, payload.chat_id)
 
-    chat_client = get_chat_llm_client()
+    turn = begin_turn(db, chat_session, payload.input_text)
+    turn_id = turn.id
     chat_request = {
         "user_input": payload.input_text,
         "profile": profile_data_for_access(
@@ -669,12 +702,14 @@ async def process_llm_message(
             premium_access=premium_access,
         ),
         "chat_info": chat_info_for_access(
-            chat_session.info,
+            chat_context(db, chat_session),
             premium_access=premium_access,
         ),
         "chat_id": chat_session.chat_id,
     }
+    db.rollback()  # No write transaction is held during the external model call.
     try:
+        chat_client = get_chat_llm_client()
         if on_text_chunk is None:
             chat_result = await chat_client.respond(**chat_request)
         else:
@@ -684,6 +719,10 @@ async def process_llm_message(
             )
     except (Exception, asyncio.CancelledError):
         db.rollback()
+        failed_turn = db.get(ChatTurn, turn_id)
+        if failed_turn is not None:
+            failed_turn.status = "failed"
+            db.commit()
         release_daily_message(
             db,
             user_id=current_user.id,
@@ -701,18 +740,23 @@ async def process_llm_message(
     )
 
     db.refresh(chat_session)
-    base_chat_info = chat_session.info or {}
+    base_chat_info = chat_context(db, chat_session)
     map_suggestion = base_chat_info.get("pending_map_suggestion") if premium_access else None
     next_chat_info = append_chat_exchange(
-        chat_session.info or {},
+        chat_context(db, chat_session),
         user_id=current_user.id,
         chat_id=chat_session.chat_id,
         user_input=payload.input_text,
         assistant_message=chat_result.assistant_message,
         map_suggestion=map_suggestion,
     )
+    complete_turn(db, chat_session, db.get(ChatTurn, turn_id), chat_result.assistant_message)
+    next_chat_info["message_count"] = chat_session.message_count
+    next_chat_info = chat_context(db, chat_session) | next_chat_info
+    # Preserve the actual timestamps/identities assigned to the durable turn.
+    next_chat_info["messages"] = chat_context(db, chat_session)["messages"]
     next_chat_info = update_conversation_summary(next_chat_info)
-    chat_session.info = next_chat_info
+    save_chat_context(chat_session, next_chat_info)
     db.commit()
     db.refresh(profile)
     db.refresh(chat_session)
@@ -730,6 +774,8 @@ async def process_llm_message(
     )
 
     return LLMResponse(
+        turn_id=turn_id,
+        position=turn.position,
         assistant_message=chat_result.assistant_message,
         profile=profile_data_for_access(
             profile.data,
@@ -737,7 +783,7 @@ async def process_llm_message(
         ),
         chat_id=chat_session.chat_id,
         chat_info=chat_info_for_access(
-            chat_session.info,
+            chat_context(db, chat_session),
             premium_access=premium_access,
         ),
         map_suggestion=map_suggestion,
@@ -860,7 +906,7 @@ def confirm_topic(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")
 
     profile_data = dict(profile.data or {})
-    chat_info = dict(chat_session.info or {})
+    chat_info = chat_context(db, chat_session)
     queued_topics = pending_topic_queue(chat_info)
 
     if payload.suggestion_id and not any(
@@ -995,7 +1041,7 @@ def confirm_topic(
     else:
         set_pending_topic_queue(chat_info, [])
     chat_info["updated_at"] = current_timestamp()
-    chat_session.info = chat_info
+    save_chat_context(chat_session, chat_info)
     db.commit()
     db.refresh(profile)
 
@@ -1029,7 +1075,7 @@ def confirm_map_suggestion(
     if chat_session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")
 
-    chat_info = dict(chat_session.info or {})
+    chat_info = chat_context(db, chat_session)
     pending_map_suggestion = chat_info.get("pending_map_suggestion")
 
     entry = None
@@ -1064,7 +1110,7 @@ def confirm_map_suggestion(
     )
     chat_info.pop("pending_map_suggestion", None)
     chat_info["updated_at"] = current_timestamp()
-    chat_session.info = chat_info
+    save_chat_context(chat_session, chat_info)
     db.commit()
     db.refresh(profile)
     return MapSuggestionConfirmationResponse(

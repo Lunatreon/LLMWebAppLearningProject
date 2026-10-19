@@ -6,6 +6,5 @@ export const previewSession: ShellSession = {
   mode: 'preview',
   user: { displayName: 'Shell preview', email: 'No account signed in' },
   mapAccess: false,
-  journalAccess: false,
   feedbackEnabled: true,
 };

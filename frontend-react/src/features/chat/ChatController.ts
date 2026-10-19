@@ -26,6 +26,8 @@ const empty = (): ChatSnapshot => ({
   draft: '',
   loading: false,
   listLoading: false,
+  listNextCursor: null,
+  historyLoading: false,
   listError: '',
   error: '',
   errorStatus: null,
@@ -61,6 +63,7 @@ export class ChatController {
   private failed = new Map<string, { context: string; baseCount: number; error: string }>();
   private request: Request | null = null;
   private reader: AbortController | null = null;
+  private historyReader: AbortController | null = null;
   private listReader: AbortController | null = null;
   private pollReader: AbortController | null = null;
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
@@ -110,6 +113,26 @@ export class ChatController {
   }
   private upsert(chat: ChatConversation, move = true) {
     if (this.tombstones.has(chat.chat_id)) return;
+    const old = this.chat(chat.chat_id);
+    if (
+      old?.messages.length &&
+      chat.messages.length &&
+      old.messages.every((m) => m.position !== undefined) &&
+      chat.messages.every((m) => m.position !== undefined)
+    ) {
+      const merged = new Map(old.messages.map((m) => [`${m.position}:${m.role}`, m]));
+      chat.messages.forEach((m) => merged.set(`${m.position}:${m.role}`, m));
+      chat = {
+        ...chat,
+        messages: [...merged.values()].sort(
+          (a, b) => a.position! - b.position! || (a.role === 'user' ? -1 : 1),
+        ),
+        next_before_position:
+          old.messages[0].position! < chat.messages[0].position!
+            ? old.next_before_position
+            : chat.next_before_position,
+      };
+    }
     this.touch(chat.chat_id, move);
     const chats = this.snapshot.chats.filter((item) => item.chat_id !== chat.chat_id);
     if (move) chats.unshift(chat);
@@ -196,9 +219,11 @@ export class ChatController {
     if (!this.current(this.owner)) return;
     this.navigation++;
     this.reader?.abort();
+    this.historyReader?.abort();
     this.stopPolling();
     this.emit({
       active: null,
+      historyLoading: false,
       review: null,
       loading: false,
       error: '',
@@ -211,7 +236,8 @@ export class ChatController {
     this.map?.setChatSource(null);
     this.resetPlayer();
   }
-  async loadList() {
+  async loadList(append = false) {
+    if (append && !this.snapshot.listNextCursor) return;
     if (!this.snapshot.enabled || !this.current(this.owner)) return;
     this.listReader?.abort();
     const reader = new AbortController();
@@ -222,7 +248,13 @@ export class ChatController {
       versions = new Map(this.versions);
     this.emit({ listLoading: true, listError: '' });
     try {
-      let chats = await api.loadConversations(this.session.api, reader.signal);
+      const page = await api.loadConversationPage(
+        this.session.api,
+        reader.signal,
+        append ? this.snapshot.listNextCursor || undefined : undefined,
+      );
+      let chats = page.items;
+      if (append) chats = [...this.snapshot.chats, ...chats.filter((c) => !this.chat(c.chat_id))];
       if (!this.current(owner) || request !== this.listRequest || reader.signal.aborted) return;
       chats = chats
         .filter((chat) => !this.tombstones.has(chat.chat_id))
@@ -232,7 +264,14 @@ export class ChatController {
           if (changedSinceRead || hasActiveGeneration) {
             return this.chat(chat.chat_id) || chat;
           }
-          return chat;
+          const cached = this.chat(chat.chat_id);
+          return cached
+            ? {
+                ...chat,
+                messages: cached.messages,
+                next_before_position: cached.next_before_position,
+              }
+            : chat;
         });
       for (const change of this.changes.filter((change) => change.version > version)) {
         if (change.removed) chats = chats.filter((chat) => chat.chat_id !== change.id);
@@ -244,7 +283,7 @@ export class ChatController {
           }
         }
       }
-      this.emit({ chats, listError: '' });
+      this.emit({ chats, listError: '', listNextCursor: page.next_cursor });
     } catch (error) {
       if (this.current(owner) && request === this.listRequest && !reader.signal.aborted)
         this.emit({
@@ -261,12 +300,14 @@ export class ChatController {
       navigation = ++this.navigation,
       version = this.versions.get(id);
     this.reader?.abort();
+    this.historyReader?.abort();
     this.stopPolling();
     const reader = new AbortController();
     this.reader = reader;
     this.emit({
       active: id,
       loading: true,
+      historyLoading: false,
       retryError: false,
       review: null,
       error: '',
@@ -300,6 +341,40 @@ export class ChatController {
       return false;
     } finally {
       if (this.current(owner) && navigation === this.navigation) this.emit({ loading: false });
+    }
+  }
+  async loadOlder() {
+    const chat = this.chat();
+    if (!chat?.next_before_position || this.snapshot.historyLoading || !this.current(this.owner))
+      return;
+    const owner = this.owner,
+      navigation = this.navigation,
+      version = this.versions.get(chat.chat_id);
+    const reader = new AbortController();
+    this.historyReader?.abort();
+    this.historyReader = reader;
+    this.emit({ historyLoading: true });
+    try {
+      const page = await api.loadConversation(
+        this.session.api,
+        chat.chat_id,
+        reader.signal,
+        chat.next_before_position,
+      );
+      if (
+        !this.current(owner) ||
+        reader.signal.aborted ||
+        navigation !== this.navigation ||
+        version !== this.versions.get(chat.chat_id)
+      )
+        return;
+      this.upsert({ ...page, messages: [...page.messages, ...chat.messages] }, false);
+    } catch (error) {
+      if (this.current(owner) && navigation === this.navigation && !reader.signal.aborted)
+        this.error(error);
+    } finally {
+      if (this.current(owner) && navigation === this.navigation)
+        this.emit({ historyLoading: false });
     }
   }
   async send() {
@@ -652,7 +727,7 @@ export class ChatController {
       if (this.current(owner)) this.emit({ deleting: null });
     }
   }
-  async react(created_at: string, reaction: Reaction) {
+  async react(created_at: string, reaction: Reaction, turnId?: number) {
     const id = this.snapshot.active,
       owner = this.owner,
       key = `${id}:${created_at}`;
@@ -666,7 +741,7 @@ export class ChatController {
     this.touch(id);
     this.emit({ reactionPending: [...this.snapshot.reactionPending, key] });
     try {
-      const result = await api.react(this.session.api, id, created_at, reaction);
+      const result = await api.react(this.session.api, id, created_at, reaction, turnId);
       if (!this.current(owner) || this.tombstones.has(id)) return;
       const chat = this.chat(id);
       if (chat) {
@@ -675,7 +750,11 @@ export class ChatController {
           {
             ...chat,
             messages: chat.messages.map((message) => {
-              if (!matched && message.role === 'assistant' && message.created_at === created_at) {
+              if (
+                !matched &&
+                message.role === 'assistant' &&
+                (turnId ? message.turn_id === turnId : message.created_at === created_at)
+              ) {
                 matched = true;
                 return { ...message, reaction: result };
               }
@@ -698,6 +777,7 @@ export class ChatController {
     this.navigation++;
     this.listRequest++;
     this.reader?.abort();
+    this.historyReader?.abort();
     this.listReader?.abort();
     this.stopPolling();
     this.request?.controller.abort();

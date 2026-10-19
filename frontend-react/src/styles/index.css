@@ -17,10 +17,6 @@
   box-shadow: inset 0 0 0 1px var(--line-dark);
 }
 
-html[data-theme='light'] .sidebar-journal-link.active {
-  color: var(--ink);
-}
-
 .sidebar-profile .icon-button:disabled {
   cursor: default;
   opacity: 0.5;

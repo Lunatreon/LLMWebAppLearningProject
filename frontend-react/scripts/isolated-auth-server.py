@@ -7,7 +7,7 @@ import tempfile
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 os.environ['ENVIRONMENT'] = 'local'
 os.environ['SECRET_KEY'] = 'isolated-auth-contract-key-never-for-deployment'
-for name in ['LLM_PROVIDER', 'CHAT_LLM_PROVIDER', 'TOPIC_LLM_PROVIDER', 'JOURNAL_LLM_PROVIDER']:
+for name in ['LLM_PROVIDER', 'CHAT_LLM_PROVIDER', 'TOPIC_LLM_PROVIDER']:
     os.environ[name] = 'mock'
 
 from sqlalchemy import create_engine

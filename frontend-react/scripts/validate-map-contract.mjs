@@ -26,7 +26,6 @@ try {
   );
   const { login } = await vite.ssrLoadModule('/src/features/auth/authApi.ts');
   const mapApi = await vite.ssrLoadModule('/src/features/map/mapApi.ts');
-  const journalApi = await vite.ssrLoadModule('/src/features/journal/journalApi.ts');
   session = new SessionController(`${origin}/api/v1`);
   await session.reload();
   const captcha = await loadCaptchaConfig(session.api);
@@ -127,7 +126,6 @@ try {
   ).entry;
   assert.equal(note.text, 'Honesty matters');
   assert.ok(note.created_at);
-  assert.equal(note.source_journal_date, null);
   const practice = (
     await mapApi.createEntry(session.api, {
       category: 'practice',
@@ -191,75 +189,18 @@ try {
     mapApi.updateTopic(session.api, 'missing', { title: 'Missing' }),
     (error) => error.status === 404,
   );
-  // Real Journal review -> Map provider/controller: no graph copy or page reload.
-  const day = '2026-10-12';
-  await journalApi.saveJournalEntry(
-    session.api,
-    day,
-    'I value honest communication and want to practice pausing before reacting. Writing this journal entry helped me notice how much I care about calm relationships.',
-  );
-  const analysed = await journalApi.analyseJournalEntry(session.api, day);
-  const suggestedTopic = analysed.suggestions.find((item) => item.kind === 'topic');
-  const suggestedEntry = analysed.suggestions.find((item) => item.kind === 'map_entry');
-  assert.ok(suggestedTopic);
-  assert.ok(suggestedEntry);
   controller = new MapController(session);
   controller.configure(session.getToken(), true, session.getSnapshot().session.subscription);
   await controller.visit();
-  const reviewed = await journalApi.decideJournalSuggestion(session.api, day, suggestedTopic.id, {
-    accepted: true,
-    title: 'From Journal',
-    topic_category: 'experience',
-    text: suggestedTopic.text,
-    category: 'own_perception',
-    topic_space_id: null,
-  });
-  await controller.load();
-  const linkedId = reviewed.suggestion.saved_item_id;
-  assert.ok(
-    controller
-      .getSnapshot()
-      .data.topic_spaces.some(
-        (topic) => topic.id === linkedId && topic.journal_dates.includes(day),
-      ),
-  );
-  const savedEntry = await journalApi.decideJournalSuggestion(session.api, day, suggestedEntry.id, {
-    accepted: true,
-    title: null,
-    topic_category: null,
-    text: suggestedEntry.text,
-    category: 'value',
-    topic_space_id: linkedId,
-  });
-  await controller.load();
-  const linkedTopic = controller
-    .getSnapshot()
-    .data.topic_spaces.find((topic) => topic.id === linkedId);
-  assert.ok(
-    linkedTopic.entries.some(
-      (entry) =>
-        entry.id === savedEntry.suggestion.saved_item_id && entry.source_journal_date === day,
-    ),
-  );
-  await mapApi.updateEntry(session.api, savedEntry.suggestion.saved_item_id, {
-    category: 'evidence',
-    text: 'Journal evidence',
-    topic_space_id: null,
-  });
-  graph = await mapApi.loadMap(session.api);
-  assert.equal(
-    graph.unassigned_entries.find((entry) => entry.id === savedEntry.suggestion.saved_item_id)
-      .source_journal_date,
-    day,
-  );
+  const linkedId = (await make('Reviewed topic')).topic.id;
   // Serialize overlapping full-profile writes and retain both edits.
   const extra = (await make('Extra')).topic;
   await Promise.all([
-    mapApi.updateTopic(session.api, linkedId, { title: 'Journal updated' }),
+    mapApi.updateTopic(session.api, linkedId, { title: 'Reviewed topic updated' }),
     mapApi.updateTopic(session.api, extra.id, { title: 'Extra updated' }),
   ]);
   graph = await mapApi.loadMap(session.api);
-  assert.ok(graph.topic_spaces.some((topic) => topic.title === 'Journal updated'));
+  assert.ok(graph.topic_spaces.some((topic) => topic.title === 'Reviewed topic updated'));
   assert.ok(graph.topic_spaces.some((topic) => topic.title === 'Extra updated'));
   await setState({ terms_version: 'map-terms-v2' });
   await session.reload({ force: true });
@@ -280,7 +221,7 @@ try {
     (error) => error.status === 404,
   );
   console.log(
-    'PASS: real Map auth/premium/Terms/user isolation, topic/hierarchy/symmetric links/merge/delete, entry/practice CRUD/validation/metadata, serialized writes and real Journal review -> Map integration. No position/drag/zoom API exists or was added.',
+    'PASS: real Map auth/premium/Terms/user isolation, topic/hierarchy/symmetric links/merge/delete, entry/practice CRUD/validation/metadata, serialized writes. No position/drag/zoom API exists or was added.',
   );
 } finally {
   controller?.stop();

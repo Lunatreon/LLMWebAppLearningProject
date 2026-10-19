@@ -1,7 +1,17 @@
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Boolean, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    ForeignKey,
+    Index,
+    Integer,
+    JSON,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -115,11 +125,29 @@ class UserProfile(Base):
 
 class ChatSession(Base):
     __tablename__ = "chat_sessions"
-    __table_args__ = (UniqueConstraint("user_id", "chat_id", name="uq_chat_sessions_user_chat"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "chat_id", name="uq_chat_sessions_user_chat"),
+        Index("ix_chat_sessions_user_updated_id", "user_id", "updated_at", "id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     chat_id: Mapped[str] = mapped_column(String(120), index=True, nullable=False)
+    title: Mapped[str] = mapped_column(String(120), default="New chat", server_default="New chat")
+    title_source: Mapped[str] = mapped_column(
+        String(32), default="automatic", server_default="automatic"
+    )
+    initial_topic_title_set: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0"
+    )
+    message_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    next_position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    conversation_summary: Mapped[str | None] = mapped_column(Text)
+    summary_message_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    analysis_status: Mapped[str] = mapped_column(String(32), default="idle", server_default="idle")
+    analysed_message_count: Mapped[int | None] = mapped_column(Integer)
+    analysis_error: Mapped[str | None] = mapped_column(Text)
+    # Only bounded, structured suggestion metadata belongs here; never message bodies.
     info: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(LegacyDateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
@@ -129,6 +157,72 @@ class ChatSession(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="chat_sessions")
+    turns: Mapped[list["ChatTurn"]] = relationship(
+        back_populates="chat_session",
+        cascade="all, delete-orphan",
+        lazy="raise",
+    )
+
+    def __init__(self, **kwargs):
+        # Accept legacy application/test constructors while keeping storage normalized.
+        from migrations.chat_storage_v2 import DERIVED_FIELDS, SCALAR_FIELDS, split_messages
+
+        info = dict(kwargs.pop("info", {}) or {})
+        for field in SCALAR_FIELDS:
+            if field in info:
+                kwargs.setdefault(field, info[field])
+        messages = info.get("messages", [])
+        kwargs["info"] = {
+            key: value for key, value in info.items() if key not in SCALAR_FIELDS | DERIVED_FIELDS
+        }
+        kwargs.setdefault("next_position", int(info.get("message_count", 0)))
+        super().__init__(**kwargs)
+        if messages:
+            rows = split_messages(
+                messages,
+                None,
+                kwargs.get("created_at", utc_now()),
+                int(info.get("message_count", 0)),
+            )
+            self.turns = [
+                ChatTurn(**{key: value for key, value in row.items() if key != "chat_session_id"})
+                for row in rows
+            ]
+            self.next_position = rows[-1]["position"]
+            self.message_count = max(
+                int(info.get("message_count", 0)), sum(m.get("role") == "user" for m in messages)
+            )
+
+
+class ChatTurn(Base):
+    """One ordered user input / assistant response, including unfinished requests."""
+
+    __tablename__ = "chat_turns"
+    __table_args__ = (
+        UniqueConstraint("chat_session_id", "position", name="uq_chat_turns_session_position"),
+        CheckConstraint("position > 0", name="ck_chat_turns_positive_position"),
+        CheckConstraint(
+            "status IN ('pending', 'completed', 'failed', 'legacy')", name="ck_chat_turns_status"
+        ),
+        Index("ix_chat_turns_session_status_position", "chat_session_id", "status", "position"),
+        Index("ix_chat_turns_session_created", "chat_session_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    chat_session_id: Mapped[int] = mapped_column(ForeignKey("chat_sessions.id", ondelete="CASCADE"))
+    position: Mapped[int] = mapped_column(Integer)
+    user_input: Mapped[str | None] = mapped_column(Text)
+    llm_response: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(16), default="pending", server_default="pending")
+    created_at: Mapped[datetime] = mapped_column(LegacyDateTime(timezone=True), default=utc_now)
+    responded_at: Mapped[datetime | None] = mapped_column(LegacyDateTime(timezone=True))
+    # Preserve original timestamp spelling and per-message extras during migration.
+    user_timestamp: Mapped[str | None] = mapped_column(String(64))
+    response_timestamp: Mapped[str | None] = mapped_column(String(64))
+    user_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    response_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    reaction: Mapped[str | None] = mapped_column(String(16))
+    chat_session: Mapped[ChatSession] = relationship(back_populates="turns")
 
 
 class DailyLLMUsage(Base):
@@ -156,6 +250,8 @@ class DailyLLMUsage(Base):
 
 
 class JournalEntry(Base):
+    """Legacy records retained for backups/transfers; no journal feature is exposed."""
+
     __tablename__ = "journal_entries"
     __table_args__ = (
         UniqueConstraint("user_id", "entry_date", name="uq_journal_entries_user_date"),

@@ -19,7 +19,7 @@ app/
   services/              billing, usage, Map domain, Terms, email workflows, webmail
   llm/
     providers/           factory, OpenAI, Anthropic, Ollama, deterministic local provider
-    tasks/               journal, summaries, pattern/suggestion/topic helpers
+    tasks/               summaries, pattern/suggestion/topic helpers
     context.py, prompts.py, streaming.py, json_response.py, responses.py, types.py
   integrations/email.py  authenticated SMTP transport
   db/                    engine/session, datetime compatibility, local SQLite init, schema checks
@@ -76,7 +76,7 @@ follow the moved modules; message content and delivery/error behavior are unchan
 Large mixed modules remain explicit deferred work: LLM route orchestration
 (1074 formatted lines), Map/profile service (720), Stripe billing/webhook service
 (674), Ollama provider (530), local provider (499), users routes (431), auth routes
-(427) and Journal routes (316). Splitting their algorithms or transaction ownership
+(427). Splitting their algorithms or transaction ownership
 belongs in a separately validated architecture change, not this structural pass.
 
 ## Formatting and extending

@@ -7,9 +7,8 @@ import type { EntryCategory, TopicCategory, MapTopic } from '../../types/map';
 import type { TopicSuggestion } from './types';
 
 function contents(topic: MapTopic) {
-  const chats = topic.chat_ids?.length || 0,
-    journals = topic.journal_dates?.length || 0;
-  return `${chats} ${chats === 1 ? 'chat' : 'chats'} and ${journals} ${journals === 1 ? 'journal' : 'journals'}`;
+  const chats = topic.chat_ids?.length || 0;
+  return `${chats} ${chats === 1 ? 'chat' : 'chats'}`;
 }
 export default function TopicReview({
   suggestion,

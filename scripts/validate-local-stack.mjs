@@ -84,7 +84,6 @@ try {
     '/src/features/terms/termsApi.ts',
   );
   const { updateProfile } = await vite.ssrLoadModule('/src/features/account/accountApi.ts');
-  const journal = await vite.ssrLoadModule('/src/features/journal/journalApi.ts');
   const map = await vite.ssrLoadModule('/src/features/map/mapApi.ts');
   const chat = await vite.ssrLoadModule('/src/features/chat/chatApi.ts');
   const recovery = await vite.ssrLoadModule('/src/features/auth/recovery/recoveryApi.ts');
@@ -109,14 +108,12 @@ try {
   };
   const verifyRecords = async (saved) => {
     await signIn(saved.email, saved.password);
-    const account = await session.api.request('/users/me/account', { authenticated: true });
+    const account = await session.api.request('/users/me/account', {
+      authenticated: true,
+    });
     assert.equal(account.id, saved.memberId);
     assert.equal(account.display_name, 'Docker rehearsal');
     assert.equal(account.bio, 'Synthetic local integration account.');
-    assert.equal(
-      (await journal.loadJournalEntry(session.api, '2026-10-13')).content,
-      'A local rehearsal Journal entry that should survive a restart.',
-    );
     assert.equal((await chat.loadConversation(session.api, saved.chatId)).messages.length, 2);
     const entries = (await map.loadMap(session.api)).topic_spaces.flatMap(
       (topic) => topic.entries || [],
@@ -130,7 +127,9 @@ try {
       ),
     );
     if (saved.termsConfigured) {
-      const terms = await session.api.request('/terms/me', { authenticated: true });
+      const terms = await session.api.request('/terms/me', {
+        authenticated: true,
+      });
       assert.equal(terms.accepted_current, true);
     }
   };
@@ -139,16 +138,12 @@ try {
     assert.ok(privateDirectory);
     const saved = JSON.parse(readFileSync(path.join(privateDirectory, 'http-state.json'), 'utf8'));
     await verifyRecords(saved);
-    console.log('PASS: saved Account, Terms, Chat, Journal, Map and Reflection after restart.');
+    console.log('PASS: saved Account, Terms, Chat, Map and Reflection after restart.');
   } else {
     if (process.env.FEELY_CHECK_SNAPSHOT === '1') {
       stage = 'migrated/restored snapshot reads';
       await signIn('deployment-snapshot@example.com', 'Snapshot-only-password-42');
       assert.equal(session.getSnapshot().session.account.id, 42);
-      assert.equal(
-        (await journal.loadJournalEntry(session.api, '2026-10-13')).content,
-        'Synthetic source Journal.',
-      );
       const preserved = await map.loadMap(session.api);
       assert.ok(preserved.topic_spaces.some((topic) => topic.title === 'Snapshot topic'));
       assert.ok(
@@ -188,7 +183,9 @@ try {
     stage = 'Terms/Account';
     if (terms.configured) {
       assert.equal((await acceptTerms(session.api, terms)).version, terms.version);
-      const accepted = await session.api.request('/terms/me', { authenticated: true });
+      const accepted = await session.api.request('/terms/me', {
+        authenticated: true,
+      });
       assert.equal(accepted.accepted_current, true);
       assert.equal(accepted.acceptances.length, 1);
     }
@@ -222,17 +219,7 @@ try {
       (await chat.loadConversation(session.api, conversation.chat_id)).messages.length,
       2,
     );
-    stage = 'Journal/Map/Reflection persistence';
-    await journal.saveJournalEntry(
-      session.api,
-      '2026-10-13',
-      'A local rehearsal Journal entry that should survive a restart.',
-    );
-    assert.ok(
-      (await journal.loadJournalHistory(session.api)).some(
-        (entry) => entry.entry_date === '2026-10-13',
-      ),
-    );
+    stage = 'Map/Reflection persistence';
     const topic = (
       await map.createTopic(session.api, {
         title: 'Local rehearsal',
@@ -293,7 +280,7 @@ try {
       });
     }
     console.log(
-      'PASS: real SMTP/Mailpit activation/reset, unchanged React clients/session/link parsing, login, streamed Chat, Journal, Map and Reflection persistence. No credentials or email contents printed.',
+      'PASS: real SMTP/Mailpit activation/reset, unchanged React clients/session/link parsing, login, streamed Chat, Map and Reflection persistence. No credentials or email contents printed.',
     );
   }
 } catch {

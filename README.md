@@ -24,9 +24,8 @@ per-user LLM requests, and persistent user profiles.
 - User-confirmed topic spaces that can reuse chats, nest under broader topics,
   connect related topics, and collect observations and practices
 - A self-authorship map for inherited scripts, personal perceptions, values, body signals, evidence, and repeatable choices
-- Premium daily journal with automatic saving, entry history, and optional AI map suggestions
 - One-time password-reset links delivered through a configurable SMTP email provider
-- React website in `frontend-react/` with authentication, chat, journal, My Map, account settings and billing
+- React website in `frontend-react/` with authentication, chat, My Map, account settings and billing
 - Swappable LLM service with mock, OpenAI, Anthropic, and local Ollama providers
 
 ## Documentation
@@ -111,12 +110,15 @@ images, legal snapshots and shared styles. See [the frontend guide](frontend-rea
 
 ## Configuration
 
+Conversation storage now uses columns and a separate ordered exchange table.
+See [chat storage and migration](docs/CHAT_STORAGE.md) before starting an existing
+SQLite installation with the updated code.
+
 Local development works without an external LLM by keeping:
 
 ```env
 LLM_PROVIDER="mock"
 TOPIC_LLM_PROVIDER="local"
-JOURNAL_LLM_PROVIDER="local"
 ```
 
 To use OpenAI, set:
@@ -125,15 +127,13 @@ To use OpenAI, set:
 LLM_PROVIDER="openai"
 CHAT_LLM_PROVIDER="openai"
 TOPIC_LLM_PROVIDER="openai"
-JOURNAL_LLM_PROVIDER="openai"
 OPENAI_API_KEY="your-api-key"
 OPENAI_MODEL="gpt-5.4-mini"
 OPENAI_CHAT_MODEL="gpt-5.4-mini"
 OPENAI_TOPIC_MODEL="gpt-5.4-mini"
-OPENAI_JOURNAL_MODEL="gpt-5.4-mini"
 ```
 
-`OPENAI_CHAT_MODEL`, `OPENAI_TOPIC_MODEL`, and `OPENAI_JOURNAL_MODEL` can be changed independently.
+`OPENAI_CHAT_MODEL` and `OPENAI_TOPIC_MODEL` can be changed independently.
 When either is empty, the backend falls back to `OPENAI_MODEL`. The Chat-LLM
 prompt follows a consistent conversational pattern: reflect the main concern,
 separate feelings from actions when useful, offer one manageable next step, and
@@ -145,17 +145,15 @@ To use Claude through Anthropic, set:
 LLM_PROVIDER="anthropic"
 CHAT_LLM_PROVIDER="anthropic"
 TOPIC_LLM_PROVIDER="anthropic"
-JOURNAL_LLM_PROVIDER="anthropic"
 ANTHROPIC_API_KEY="your-api-key"
 ANTHROPIC_MODEL="claude-sonnet-4-6"
 ANTHROPIC_CHAT_MODEL="claude-sonnet-4-6"
 ANTHROPIC_TOPIC_MODEL="claude-sonnet-4-6"
-ANTHROPIC_JOURNAL_MODEL="claude-sonnet-4-6"
 ANTHROPIC_MAX_TOKENS=4096
 ```
 
 The role-specific Anthropic models fall back to `ANTHROPIC_MODEL` when empty.
-Chat, topic, and journal analysis can also use different providers.
+Chat and topic analysis can also use different providers.
 For example, set `CHAT_LLM_PROVIDER="anthropic"` and
 `TOPIC_LLM_PROVIDER="openai"` while leaving `LLM_PROVIDER="mock"` as the
 default for any role without an override.
@@ -182,27 +180,23 @@ Configure FeelY to use the local model:
 LLM_PROVIDER="ollama"
 CHAT_LLM_PROVIDER="ollama"
 TOPIC_LLM_PROVIDER="ollama"
-JOURNAL_LLM_PROVIDER="ollama"
 OLLAMA_BASE_URL="http://127.0.0.1:11434"
 OLLAMA_MODEL="qwen3.5:4b"
 OLLAMA_CHAT_MODEL="qwen3.5:4b"
 OLLAMA_TOPIC_MODEL="qwen3.5:2b"
-OLLAMA_JOURNAL_MODEL="qwen3.5:2b"
 OLLAMA_TIMEOUT_SECONDS=180
 OLLAMA_CONTEXT_WINDOW=2048
 OLLAMA_CHAT_MAX_TOKENS=160
 OLLAMA_TOPIC_MAX_TOKENS=256
-OLLAMA_JOURNAL_MAX_TOKENS=768
 OLLAMA_CHAT_NUM_GPU=0
 OLLAMA_TOPIC_NUM_GPU=999
-OLLAMA_JOURNAL_NUM_GPU=999
 OLLAMA_KEEP_ALIVE=300
 OLLAMA_PREWARM=false
 ```
 
 No API key is needed. The pattern analyser decides when topic analysis is useful;
 the 2B Topic-LLM then creates the topic and description. `OLLAMA_CHAT_NUM_GPU=0`
-forces the 4B chat model onto CPU, while the topic and journal GPU settings let
+forces the 4B chat model onto CPU, while the topic GPU setting let
 Ollama offload every possible layer of the 2B model to GPU. `OLLAMA_KEEP_ALIVE=300`
 releases models after five idle minutes. `OLLAMA_PREWARM=false` avoids loading
 models during server startup, reducing startup resource use. Role-specific model settings fall back to
@@ -219,9 +213,7 @@ With `LLM_PROVIDER="mock"`, no external model is called. The backend uses local,
 deterministic development responses instead. Set `LLM_PROVIDER` to `openai`,
 `anthropic`, or `ollama` to receive generated responses. OpenAI and Anthropic
 require their matching API key; Ollama runs locally without one.
-`CHAT_LLM_PROVIDER`, `TOPIC_LLM_PROVIDER`, and `JOURNAL_LLM_PROVIDER` can
-independently override `LLM_PROVIDER`. Journal analysis falls back to the topic
-provider when its own override is empty.
+`CHAT_LLM_PROVIDER` and `TOPIC_LLM_PROVIDER` can independently override `LLM_PROVIDER`.
 
 Change `SECRET_KEY` before deploying.
 
@@ -339,21 +331,11 @@ new submissions immediately, including from already-open tabs. Existing
 feedback remains available to administrators. Feedback is deleted along with
 its author's account. Submissions are limited to five per account per hour.
 
-### Premium journal
+### Retired journal data
 
-Journal is the third workspace beside Chat and My Map. It opens today's page by
-default, saves changes shortly after the user stops typing, and lists previous
-entries by date. The backend enforces Premium access, so changing or bypassing
-the browser interface cannot expose journal data to a free account.
-
-**Find map insights** asks the Journal-LLM for optional topic, activity,
-practice, observation, value, evidence, script, perception, or body-signal
-suggestions. Nothing is added to My Map automatically: the user can edit each
-suggestion, choose or create a topic, and explicitly save or dismiss it. Saving
-under a topic connects that dated journal page to the topic. My Map displays the
-number of connected journal pages and links back to each date. The AI
-instructions live in `prompts/journal_system.txt` and can be edited from the
-separate admin page; changes apply to the next analysis without a restart.
+Journal routes, UI, model settings and prompts have been removed. The legacy
+`journal_entries` database table remains for existing records and database
+backup/transfer compatibility. This cleanup does not delete or migrate user data.
 
 For production, also put a reverse proxy or hosting firewall in front of the
 app. If the app runs behind a trusted proxy that sets `X-Forwarded-For`, set
@@ -389,11 +371,6 @@ configuration.
 - `POST /api/v1/llm/message`
 - `POST /api/v1/llm/topics/confirm`
 - `POST /api/v1/llm/map-suggestions/confirm`
-- `GET /api/v1/journal/entries`
-- `GET /api/v1/journal/entries/{entry_date}`
-- `PUT /api/v1/journal/entries/{entry_date}`
-- `POST /api/v1/journal/entries/{entry_date}/analyse`
-- `POST /api/v1/journal/entries/{entry_date}/suggestions/{suggestion_id}`
 
 ## LLM Flow
 
@@ -420,7 +397,7 @@ When an authenticated user calls `POST /api/v1/llm/message`, the backend:
 Map topics have an editable type: Person, Trait, Experience, or Other. My Map uses
 its existing floating topic bubbles and filters for these types, with short descriptions in the selected
 topic's detail card. Existing topics without a type appear under Other until edited.
-Chat and journal prompts favor simple 1-4 word names and brief descriptions grounded
+Chat and topic prompts favor simple 1-4 word names and brief descriptions grounded
 in the user's account. Chat suggestions can propose connections to existing topics;
 the user can review those connections before saving, or use Edit & connect later.
 

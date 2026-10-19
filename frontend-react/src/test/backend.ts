@@ -18,7 +18,6 @@ export const subscription: SubscriptionResponse = {
   plan: 'monthly',
   premium: true,
   my_map_access: true,
-  journal_access: true,
   chat_daily_limit: 400,
   cancel_at_period_end: false,
   current_period_end: null,
@@ -74,21 +73,9 @@ export function mockBackend(overrides: Record<string, () => Response | Promise<R
       '/feedback/config': { enabled: true },
       '/auth/email/config': { verification_enabled: false, password_reset_enabled: true },
       '/auth/captcha/config': { enabled: false, provider: null, site_key: null, action: null },
-      '/journal/entries': [],
       '/users/me/map': { topic_spaces: [], unassigned_entries: [] },
       '/llm/chats': [],
     };
-    if (/^\/journal\/entries\/\d{4}-\d{2}-\d{2}$/.test(path))
-      return json({
-        entry_date: path.slice(-10),
-        content: '',
-        word_count: 0,
-        suggestions: [],
-        analysis_stale: false,
-        analysed_at: null,
-        created_at: null,
-        updated_at: null,
-      });
     if (!Object.hasOwn(payloads, path)) throw new Error(`Unexpected endpoint: ${path}`);
     return json(payloads[path]);
   });

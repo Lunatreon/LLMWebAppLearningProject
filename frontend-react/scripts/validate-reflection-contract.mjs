@@ -29,7 +29,6 @@ try {
   );
   const { login } = await vite.ssrLoadModule('/src/features/auth/authApi.ts');
   const mapApi = await vite.ssrLoadModule('/src/features/map/mapApi.ts');
-  const journalApi = await vite.ssrLoadModule('/src/features/journal/journalApi.ts');
   session = new SessionController(`${origin}/api/v1`);
   await session.reload();
   const captcha = await loadCaptchaConfig(session.api),
@@ -146,35 +145,6 @@ try {
     mapApi.updatePractice(session.api, 'missing', 'completed', null),
     (error) => error.status === 404,
   );
-  // Journal-created practice uses exactly the same completion and retains source.
-  const day = '2026-10-12';
-  await journalApi.saveJournalEntry(
-    session.api,
-    day,
-    'I value honest communication and want to practice pausing before reacting. Writing today helped me notice my preference before discussing a hard decision with my family.',
-  );
-  const analysed = await journalApi.analyseJournalEntry(session.api, day),
-    suggestion = analysed.suggestions.find((item) => item.kind === 'map_entry');
-  assert.ok(suggestion);
-  const review = await journalApi.decideJournalSuggestion(session.api, day, suggestion.id, {
-    accepted: true,
-    text: suggestion.text,
-    category: 'practice',
-    title: null,
-    topic_category: null,
-    topic_space_id: topic.id,
-  });
-  const journalPracticeId = review.suggestion.saved_item_id;
-  await reflection.open(journalPracticeId, true);
-  reflection.edit('A journal-sourced practice reflection');
-  assert.equal(await reflection.submit(), true);
-  saved = practiceSource(map.getSnapshot().data, journalPracticeId);
-  assert.equal(saved.source_journal_date, day);
-  assert.equal(saved.reflection, 'A journal-sourced practice reflection');
-  assert.equal(
-    (await journalApi.loadJournalEntry(session.api, day)).content.includes('honest communication'),
-    true,
-  );
   await setState({ terms_version: 'reflection-terms-v2' });
   await session.reload({ force: true });
   await assert.rejects(
@@ -200,7 +170,7 @@ try {
     (error) => error.status === 404,
   );
   console.log(
-    'PASS: atomic Practice/Reflection completion, exact PATCH/null/trim/max/DTO/source metadata, readonly/repeat/reactivate/paused semantics, canonical Map integration, Journal source preservation, 401/402/423/404 and user isolation. No separate Reflection entity or endpoint.',
+    'PASS: atomic Practice/Reflection completion, exact PATCH/null/trim/max/DTO/source metadata, readonly/repeat/reactivate/paused semantics, canonical Map integration, 401/402/423/404 and user isolation. No separate Reflection entity or endpoint.',
   );
 } finally {
   reflection?.stop();

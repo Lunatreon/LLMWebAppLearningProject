@@ -207,7 +207,7 @@ Absolute auth links use `PUBLIC_APP_URL`, not request Host/forwarding headers.
 ## 7. OpenAI and provider behavior
 
 All providers/models are selected through backend environment settings. The
-template explicitly selects OpenAI for Chat, Topic and Journal; this is necessary
+template explicitly selects OpenAI for Chat and Topic; this is necessary
 because the legacy Topic default is local. The existing model remains
 `gpt-5.4-mini`; operators may select another compatible accessible model through
 `OPENAI_MODEL` or per-role overrides without code changes. Verify model/project
@@ -291,7 +291,7 @@ enable includeSubDomains/preload until every affected hostname is ready.
 
 Uvicorn access logging is disabled and Caddy access logging is not enabled. Do not
 turn on URL/query/body/header logging for auth links, bearer tokens or private
-Chat/Journal data. OpenAI failures use class/status only, and background analysis
+Chat data. OpenAI failures use class/status only, and background analysis
 already uses safe metadata. SMTP errors return the existing generic delivery
 error. SQLAlchemy hides parameters; production PostgreSQL keeps errors visible
 but suppresses SQL statements/parameters and failing-row DETAIL. Never enable

@@ -5,7 +5,7 @@ from app.llm.types import (
 )
 from app.services.self_authorship import create_topic_space
 
-from app.models.user import ChatSession, JournalEntry, User
+from app.models.user import ChatSession, User
 from tests.test_auth_and_llm import grant_premium_access
 from tests.test_email_and_feedback import database
 
@@ -175,52 +175,3 @@ def test_same_name_reuse_preserves_description_and_selected_type(client):
     assert spaces[0]["category"] == "other"
     assert spaces[0]["description"] == "Original description"
     assert spaces[0]["entries"][0]["text"] == "New insight"
-
-
-def test_journal_existing_topic_saves_selected_note_and_topic_categories(client):
-    headers, topic = setup_topic(client)
-    with database(client) as db:
-        user = db.scalar(select(User).where(User.email == "topics@example.com"))
-        db.add(
-            JournalEntry(
-                user_id=user.id,
-                entry_date="2026-10-04",
-                content="Journal",
-                analysis={
-                    "suggestions": [
-                        {
-                            "id": "journal-topic",
-                            "kind": "topic",
-                            "title": "Work insight",
-                            "category": "other",
-                            "text": "A new observation",
-                            "reason": "From journal",
-                            "status": "pending",
-                            "created_at": "2026-10-04T12:00:00Z",
-                        },
-                    ]
-                },
-            )
-        )
-        db.commit()
-    path = "/api/v1/journal/entries/2026-10-04/suggestions/journal-topic"
-    payload = {
-        "accepted": True,
-        "topic_space_id": topic["id"],
-        "topic_category": "other",
-        "category": "body_signal",
-        "text": "My shoulders relax.",
-    }
-    assert (
-        client.post(path, headers=headers, json={**payload, "category": "invalid"}).status_code
-        == 422
-    )
-    response = client.post(path, headers=headers, json=payload)
-    assert response.status_code == 200
-    saved = response.json()["map"]["topic_spaces"][0]
-    assert saved["category"] == "other"
-    assert saved["description"] == "Original description"
-    assert saved["entries"][0]["category"] == "body_signal"
-    assert saved["entries"][0]["text"] == "My shoulders relax."
-    assert saved["entries"][0]["source_journal_date"] == "2026-10-04"
-    assert client.post(path, headers=headers, json=payload).status_code == 409

@@ -29,7 +29,7 @@ The page can:
 - Set a new password without displaying the existing password or hash.
 - Immediately cancel the locally associated Stripe subscription and save the canceled state,
   after the administrator types `REMOVE_SUBSCRIPTION`.
-- Edit the Chat-LLM, Topic-LLM, and Journal-LLM system prompts.
+- Edit the Chat-LLM and Topic-LLM system prompts.
 
 User password resets do not revoke already-issued user JWTs; those remain valid until their configured
 expiration. Disabling the user invalidates their authenticated API access immediately because
@@ -50,7 +50,6 @@ The editable prompt sources are:
 
 - `prompts/chat_system.txt`
 - `prompts/topic_system.txt`
-- `prompts/journal_system.txt`
 
 The admin page saves through `PUT /api/v1/admin/prompts/{kind}`. The API restricts writes to these
 three fixed filenames and uses a temporary file plus atomic replacement. The application reads the

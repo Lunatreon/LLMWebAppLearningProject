@@ -1,6 +1,6 @@
 import { ApiClient, ApiError, sessionEndedMessage } from './apiClient';
 
-// Queue/revision only: authoritative Map data belongs to MapContext. Journal
+// Queue/revision only: authoritative Map data belongs to MapContext. Chat
 // review and Map mutations both write the same backend profile JSON.
 type Resource = { tail: Promise<void>; revision: number; listeners: Set<() => void> };
 const resources = new WeakMap<ApiClient, Resource>();

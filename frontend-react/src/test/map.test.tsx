@@ -4,14 +4,11 @@ import { describe, expect, test } from 'vitest';
 import { SessionController } from '../services/sessionController';
 import { mapBackend, mapData, topic, mapEntry } from './mapBackend';
 import { account, deferred, json, jwt, subscription, terms } from './backend';
-import { localDateKey, formattedJournalDate } from '../features/journal/dates';
-import { entry, topicSuggestion } from './journalBackend';
 import { setMobileViewport } from './setup';
 const family = () =>
   topic('family', 'Family', {
     category: 'person',
     description: 'A relationship',
-    journal_dates: ['2026-10-10'],
     entries: [mapEntry('note', 'I value honesty.', 'value')],
   });
 const rest = () => topic('rest', 'Rest', { category: 'experience' });
@@ -116,13 +113,11 @@ describe('real My Map route/graph/forms', () => {
     ).toEqual(['Overall', 'Family', 'Child']);
     expect(
       within(sidebar)
-        .getByRole('button', { name: 'Child 0 chats · 0 journals · 0 entries' })
+        .getByRole('button', { name: 'Child 0 chats · 0 entries' })
         .style.getPropertyValue('--topic-indent'),
     ).toBe('14px');
     fireEvent.click(screen.getByRole('button', { name: 'Traits' }));
-    fireEvent.click(
-      within(sidebar).getByRole('button', { name: 'Family 0 chats · 1 journal · 1 entry' }),
-    );
+    fireEvent.click(within(sidebar).getByRole('button', { name: 'Family 0 chats · 1 entry' }));
     await screen.findByRole('complementary', { name: 'Family details' });
     expect(screen.getByRole('button', { name: 'Everything' }).getAttribute('aria-pressed')).toBe(
       'true',
@@ -136,7 +131,7 @@ describe('real My Map route/graph/forms', () => {
     expect(overall.parentElement?.style.height).toBe('430px');
     expect(screen.getByRole('button', { name: 'Open Family' }).style.left).toBe('26%');
     fireEvent.click(screen.getByRole('button', { name: 'Open conversations' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Family 0 chats · 1 journal · 1 entry' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Family 0 chats · 1 entry' }));
     await screen.findByRole('complementary', { name: 'Family details' });
     expect(
       screen.getByRole('button', { name: 'Open conversations' }).getAttribute('aria-expanded'),
@@ -427,74 +422,16 @@ describe('real My Map route/graph/forms', () => {
     fireEvent.keyDown(menu, { key: 'Escape' });
     expect(menu.getAttribute('aria-expanded')).toBe('false');
   });
-  test('connected Journal date opens real entry; connected Chat retains ID without migrating Chat', async () => {
+  test('connected Chat retains its conversation ID', async () => {
     const { router } = mount({
-      initial: mapData([
-        topic('family', 'Family', { journal_dates: ['2026-10-10'], chat_ids: ['chat-one'] }),
-      ]),
+      initial: mapData([topic('family', 'Family', { chat_ids: ['chat-one'] })]),
     });
-    await select();
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: formattedJournalDate('2026-10-10', {
-          month: 'long',
-          day: 'numeric',
-          year: 'numeric',
-        }),
-      }),
-    );
-    await screen.findByLabelText('Daily journal entry');
-    expect(router.state.location.pathname).toBe('/journal');
-    expect(screen.getByText(formattedJournalDate('2026-10-10'))).toBeDefined();
-    await act(() => router.navigate('/map'));
     await select();
     fireEvent.click(screen.getByRole('link', { name: 'Conversation' }));
     expect(router.state.location.pathname).toBe('/chat');
     expect(router.state.location.state.chatId).toBe('chat-one');
   });
-  test('Journal accepted suggestion invalidates Map; navigation shows new topic without page reload', async () => {
-    const today = localDateKey();
-    let accepted = false;
-    const newTopic = topic('from-journal', 'From Journal', {
-      journal_dates: [today],
-      category: 'experience',
-    });
-    mount({
-      path: '/journal',
-      read: () => json(mapData(accepted ? [newTopic] : [])),
-      overrides: {
-        [`/journal/entries/${today}`]: () =>
-          json(
-            entry(today, 'An analysed journal page', true, [
-              { ...topicSuggestion, title: 'From Journal' },
-            ]),
-          ),
-        [`/journal/entries/${today}/suggestions/topic-1`]: () => {
-          accepted = true;
-          return json({
-            suggestion: {
-              ...topicSuggestion,
-              title: 'From Journal',
-              status: 'saved',
-              saved_item_id: newTopic.id,
-            },
-            map: mapData([newTopic]),
-          });
-        },
-      },
-    });
-    await screen.findByLabelText('Daily journal entry');
-    fireEvent.click(await screen.findByRole('button', { name: 'Save topic' }));
-    await screen.findByText('Saved to My Map');
-    fireEvent.click(screen.getByRole('tab', { name: 'Map' }));
-    await screen.findByRole('button', { name: 'Open From Journal' });
-    await select('From Journal');
-    expect(
-      screen.getByRole('button', {
-        name: formattedJournalDate(today, { month: 'long', day: 'numeric', year: 'numeric' }),
-      }),
-    ).toBeDefined();
-  });
+
   test('403 mutation preserves JWT and local form, 423 activates existing Terms gate', async () => {
     const { session } = mount({
       write: () => json({ detail: 'Please verify your email before logging in.' }, 403),
@@ -579,27 +516,7 @@ describe('real My Map route/graph/forms', () => {
     });
     expect(screen.queryByText('It helped')).toBeNull();
   });
-  test('linked Journal load error is shown on its real route rather than leaving a silent Map click', async () => {
-    const { router } = mount({
-      initial: mapData([family()]),
-      overrides: {
-        '/journal/entries/2026-10-10': () => json({ detail: 'Journal page unavailable' }, 503),
-      },
-    });
-    await select();
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: formattedJournalDate('2026-10-10', {
-          month: 'long',
-          day: 'numeric',
-          year: 'numeric',
-        }),
-      }),
-    );
-    await screen.findByRole('button', { name: 'Retry entry' });
-    expect(router.state.location.pathname).toBe('/journal');
-    await screen.findByText('Journal page unavailable');
-  });
+
   test('same-owner Terms/session refresh preserves hidden popup draft and returns it after acceptance', async () => {
     const { session } = mount();
     await loaded();

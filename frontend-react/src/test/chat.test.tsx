@@ -394,7 +394,6 @@ describe('real Chat shell/composer/history/stream', () => {
               topic('existing', 'Existing', {
                 category: 'trait',
                 chat_ids: ['older'],
-                journal_dates: ['2026-10-12'],
               }),
             ]),
           ),

@@ -9,10 +9,9 @@ from fastapi import HTTPException
 
 from app.core.config import settings
 from app.llm.providers.factory import get_chat_llm_client, get_topic_llm_client
-from app.llm.tasks.journal import analyse_journal_text
 
 
-@pytest.mark.parametrize("role", ["chat", "topic", "journal"])
+@pytest.mark.parametrize("role", ["chat", "topic"])
 def test_openai_roles_preserve_credentials_models_and_prompt_contract(monkeypatch, role):
     monkeypatch.setattr(settings, f"{role}_llm_provider", "openai")
     monkeypatch.setattr(settings, "openai_api_key", "test-only-key")
@@ -20,7 +19,6 @@ def test_openai_roles_preserve_credentials_models_and_prompt_contract(monkeypatc
     payloads = {
         "chat": {"assistant_message": "A reflective reply"},
         "topic": {"topic": "Work", "description": "Finding a balance"},
-        "journal": {"suggestions": []},
     }
     response = SimpleNamespace(
         choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payloads[role])))]
@@ -48,12 +46,9 @@ def test_openai_roles_preserve_credentials_models_and_prompt_contract(monkeypatc
         )
         assert result.assistant_message == "A reflective reply"
         on_chunk.assert_awaited_once_with("A reflective reply")
-    elif role == "topic":
+    else:
         result = asyncio.run(get_topic_llm_client().create_topic({}, []))
         assert result.topic == "Work"
-    else:
-        result = asyncio.run(analyse_journal_text("A busy day", "2026-10-10"))
-        assert result.suggestions == []
 
     assert credentials == ["test-only-key"]
     create.assert_awaited_once()

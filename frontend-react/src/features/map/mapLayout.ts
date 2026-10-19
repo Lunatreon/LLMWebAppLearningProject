@@ -60,7 +60,6 @@ export function mapNodes(map: MapData): MapNodeData[] {
       description: topic.description || 'A thread you chose to keep visible.',
       parent_title: titles.get(topic.parent_topic_id || '') || null,
       related_topic_ids: topic.related_topic_ids || [],
-      journal_dates: topic.journal_dates || [],
       entries: topic.entries || [],
       position: nodePosition(index + 1),
     })),

@@ -6,8 +6,7 @@ import { reflectionPrompt } from '../features/reflection/types';
 import { mapBackend, mapData, mapEntry, topic } from './mapBackend';
 import { account, deferred, json, jwt, subscription, terms } from './backend';
 import { setMobileViewport } from './setup';
-const practice = (id = 'p') =>
-  mapEntry(id, 'Pause before reacting', 'practice', { source_journal_date: '2026-10-12' });
+const practice = (id = 'p') => mapEntry(id, 'Pause before reacting', 'practice', {});
 function mount(
   options: Parameters<typeof mapBackend>[0] & {
     path?: string;
@@ -132,15 +131,11 @@ describe('real Reflection modal and Practice -> Map completion', () => {
       updated_at: '2026-10-12T14:00:00+00:00',
     };
     mount({
-      initial: mapData([
-        topic('t', 'Topic', { entries: [original], journal_dates: ['2026-10-12'] }),
-      ]),
+      initial: mapData([topic('t', 'Topic', { entries: [original] })]),
       write: () =>
         json({
           practice: completed,
-          map: mapData([
-            topic('t', 'Topic', { entries: [completed], journal_dates: ['2026-10-12'] }),
-          ]),
+          map: mapData([topic('t', 'Topic', { entries: [completed] })]),
         }),
     });
     fireEvent.change(await answer(), { target: { value: 'Original input' } });

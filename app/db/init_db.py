@@ -1,4 +1,5 @@
 from pathlib import Path
+from sqlalchemy import inspect
 
 from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
@@ -14,6 +15,15 @@ def init_db() -> None:
     if engine.dialect.name != "sqlite" or not settings.is_local_environment:
         require_migrated_schema()
         return
+    inspector = inspect(engine)
+    if "alembic_version" in inspector.get_table_names():
+        require_migrated_schema()
+        return
+    if "chat_sessions" in inspector.get_table_names():
+        if "title" not in {column["name"] for column in inspector.get_columns("chat_sessions")}:
+            raise RuntimeError(
+                "Legacy chat storage needs migration. Stop the backend and run python -m scripts.migrate_chat_storage (creates a SQLite backup), or alembic upgrade head for a versioned database."
+            )
     Base.metadata.create_all(bind=engine)
     ensure_sqlite_user_columns()
 
