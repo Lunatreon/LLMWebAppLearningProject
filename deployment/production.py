@@ -30,7 +30,7 @@ def load_production(path):
     for name in defaults:
         raw = values.get(name.upper())
         if raw is not None:
-            if name in {"allowed_hosts", "cors_origins"}:
+            if name in {"allowed_hosts", "cors_origins", "content_encryption_keys"}:
                 try:
                     defaults[name] = json.loads(raw)
                 except ValueError:

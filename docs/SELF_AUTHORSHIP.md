@@ -75,8 +75,8 @@ For example, separate chats about style and clothing can both belong to a
 `Personal style` topic. A narrower topic can sit under a broader topic, and
 related peer topics can be connected in both directions.
 
-Topic spaces are stored in the existing `UserProfile.data` JSON field, so this
-feature does not require a database migration.
+Topic spaces and entries use relational tables introduced by migration 0003.
+See [map storage](MAP_DATABASE_SCHEMA.md) for categories, completion and encryption.
 
 ### Map Entry
 
@@ -106,7 +106,7 @@ in the way, or what the user wants to change next time.
 
 ## Profile Shape
 
-The map lives under `profile.data["self_authorship_map"]`:
+The API exposes the following assembled map view under `profile.data["self_authorship_map"]`; it is stored as relational rows:
 
 ```json
 {

@@ -86,3 +86,14 @@ class AdminPromptUpdate(BaseModel):
 
 class AdminPromptBundle(BaseModel):
     prompts: list[AdminPromptRead]
+
+
+class AdminMapCategoryWrite(BaseModel):
+    label: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=2000)
+    active: bool = True
+    llm_enabled: bool = True
+    supports_completion: bool = False
+    position: int = Field(default=0, ge=0, le=10000)
+
+    model_config = ConfigDict(extra="forbid")

@@ -78,6 +78,7 @@ class TopicSuggestionResponse(BaseModel):
 
 
 class TopicConfirmationRequest(BaseModel):
+    expected_revision: int | None = Field(default=None, ge=0, strict=True)
     require_map_access: bool = False
     suggestion_id: str | None = Field(default=None, max_length=64)
     entry_category: MapEntryCategory = "own_perception"
@@ -103,9 +104,10 @@ class TopicConfirmationResponse(BaseModel):
 
 
 class MapSuggestionConfirmationRequest(BaseModel):
+    expected_revision: int | None = Field(default=None, ge=0, strict=True)
     chat_id: str = Field(min_length=1, max_length=120)
     accepted: bool = True
-    category: str = Field(min_length=1, max_length=40)
+    category: MapEntryCategory
     text: str = Field(min_length=1, max_length=1000)
     reason: str | None = Field(default=None, max_length=1000)
     topic_space_id: str | None = Field(default=None, max_length=64)

@@ -40,8 +40,17 @@ export default function EntryPreview({ node, entry }: { node: MapNodeData; entry
   );
   return (
     <article data-category={entry.category} className={snapshot.menu === entry.id ? 'open' : ''}>
+      {entry.working_on && <span className="map-task-status">Working on</span>}
+      {entry.completion_percent != null && (
+        <p aria-label="Completion">{entry.completion_percent}% complete</p>
+      )}
       <div className="map-entry-preview-head">
-        <span className="map-entry-type">{categoryLabels[entry.category] || entry.category}</span>
+        <span className="map-entry-type">
+          {snapshot.data?.categories?.find((c) => c.kind === 'entry' && c.key === entry.category)
+            ?.label ||
+            categoryLabels[entry.category] ||
+            entry.category}
+        </span>
         <button
           className="map-entry-menu-button"
           type="button"

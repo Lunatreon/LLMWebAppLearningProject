@@ -17,9 +17,11 @@ need to run alongside FeelY. Use `--help` for Python tools with command-line opt
 | File | Purpose / guide |
 | --- | --- |
 | `database_migration.py` | Check, copy and verify SQLite-to-PostgreSQL data; [data migration](../docs/DATABASE_MIGRATION.md) |
-| `migrate_chat_storage.py` | Upgrade legacy SQLite chat storage with backup; [chat storage](../docs/CHAT_STORAGE.md) |
+| `migrate_chat_storage.py` | Upgrade legacy SQLite chat/map storage with backup; [chat storage](../docs/CHAT_STORAGE.md) |
 | `publish_terms.py` | Publish immutable legal snapshots; [Terms publishing](../docs/AGB_SETUP.md) |
 | `../deployment/mail/cloudflare/deploy.py` | Optional Cloudflare bridge only; configure ordinary mail in your env file; [mail setup](../docs/EMAIL_SETUP.md) |
+
+| `database_schema.py` | Generate the complete Markdown/SQL schema reference from metadata; [schema review](../docs/DATABASE_REVIEW.md) |
 
 ## Validation only
 

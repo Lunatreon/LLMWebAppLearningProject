@@ -13,6 +13,7 @@ from backend.core.security import create_admin_access_token, hash_password, veri
 from backend.models.user import User
 from backend.schemas.admin import (
     AdminLoginRequest,
+    AdminMapCategoryWrite,
     AdminPasswordReset,
     AdminPromptBundle,
     AdminPromptRead,
@@ -250,3 +251,55 @@ def update_admin_prompt(
     text = write_system_prompt(kind, payload.text)
     logger.info("Administrator %s updated %s system prompt", admin_username, kind)
     return AdminPromptRead(kind=kind, text=text)
+
+
+@router.get("/map/categories")
+def list_map_categories(db: Session = Depends(get_db), admin: str = Depends(get_current_admin)):
+    from backend.services.map_categories import activate
+
+    return activate(db.connection())
+
+
+@router.put("/map/categories/{kind}/{key}")
+def save_map_category(
+    kind: str,
+    key: str,
+    payload: AdminMapCategoryWrite,
+    db: Session = Depends(get_db),
+    admin: str = Depends(get_current_admin),
+):
+    import re
+    from backend.models.map import MapCategory
+    from backend.services.map_categories import activate
+
+    if kind not in {"topic", "entry"} or not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", key):
+        raise HTTPException(status_code=422, detail="Invalid category kind or stable key.")
+    if (kind, key) in {("topic", "other"), ("entry", "merged_topic")} and not payload.active:
+        raise HTTPException(status_code=400, detail="This system category must remain active.")
+    if (kind, key) == ("topic", "other") and not payload.llm_enabled:
+        raise HTTPException(
+            status_code=400,
+            detail="The fallback topic category must remain available to the model.",
+        )
+    if (kind, key) == ("entry", "merged_topic") and payload.llm_enabled:
+        raise HTTPException(
+            status_code=400, detail="Merged-topic provenance is not an LLM suggestion category."
+        )
+    if not payload.label.strip():
+        raise HTTPException(status_code=422, detail="Category label cannot be blank.")
+    category = db.get(MapCategory, (kind, key))
+    if category is None:
+        category = MapCategory(kind=kind, key=key)
+        db.add(category)
+    for field, value in payload.model_dump().items():
+        setattr(category, field, value)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409, detail="The category changed concurrently; reload and retry."
+        ) from None
+    return next(
+        row for row in activate(db.connection()) if row["kind"] == kind and row["key"] == key
+    )

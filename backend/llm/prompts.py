@@ -48,3 +48,15 @@ def write_system_prompt(kind: str, text: str) -> str:
     temporary_path.write_text(cleaned + "\n", encoding="utf-8")
     temporary_path.replace(path)
     return cleaned
+
+
+def llm_system_prompt(kind: str) -> str:
+    import json
+    from backend.services.map_categories import instructions
+
+    return read_system_prompt(kind) + (
+        "\n\nBackend category catalog (authoritative for category keys and descriptions; "
+        "supersedes category enumerations elsewhere in the prompt):\n"
+        + json.dumps(instructions(), ensure_ascii=False)
+        + "\nUse only these enabled keys. Completion percentages are set by the user, never inferred."
+    )

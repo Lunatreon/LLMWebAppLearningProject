@@ -164,3 +164,11 @@ def test_command_failure_never_echoes_raw_output(stack, monkeypatch, capsys):
     assert secret not in str(error.value)
     assert secret not in capsys.readouterr().out
     assert secret not in (stack.directory / "command-error.log").read_text()
+
+
+def test_encryption_key_values_are_individually_redacted(stack):
+    import json
+
+    key = next(iter(json.loads(stack.values["CONTENT_ENCRYPTION_KEYS"]).values()))
+    assert key in stack.secrets()
+    assert key not in ci.redact("An accidental key value: " + key, stack.secrets())

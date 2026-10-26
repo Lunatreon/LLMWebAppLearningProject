@@ -293,8 +293,9 @@ def comparable(column, value):
 def verify_rows(source: dict, target: dict) -> dict:
     counts = {}
     for table in TABLES:
-        expected = {row["id"]: row for row in source[table.name]}
-        actual = {row["id"]: row for row in target[table.name]}
+        pk = [column.name for column in table.primary_key]
+        expected = {tuple(row[key] for key in pk): row for row in source[table.name]}
+        actual = {tuple(row[key] for key in pk): row for row in target[table.name]}
         if len(target[table.name]) != len(actual):
             fail(table.name, "duplicate destination rows")
         if expected.keys() != actual.keys():
@@ -311,13 +312,37 @@ def verify_rows(source: dict, target: dict) -> dict:
 
 def copy_to_postgres(source: dict, engine) -> dict:
     validate_rows(source)
+    if any(
+        isinstance(row["data"], dict) and "self_authorship_map" in row["data"]
+        for row in source["user_profiles"]
+    ):
+        fail(
+            "source", "run the relational map migration on a backed-up source copy before transfer"
+        )
+    if any("messages" in (row["info"] or {}) for row in source["chat_sessions"]):
+        fail("source", "run the chat storage migration on a backed-up source copy before transfer")
     with engine.begin() as connection:
         require_target_schema(connection)
         names = ", ".join(connection.dialect.identifier_preparer.quote(t.name) for t in TABLES)
         # Empty check, inserts and verification share locks so another writer cannot race the copy.
         connection.exec_driver_sql(f"LOCK TABLE {names} IN ACCESS EXCLUSIVE MODE")
-        if any(connection.execute(select(table.c.id).limit(1)).first() for table in TABLES):
+        if any(
+            connection.execute(select(*table.primary_key.columns).limit(1)).first()
+            for table in TABLES
+            if table.name != "map_categories"
+        ):
             fail("target", "destination must be empty; no overwrite/merge is supported")
+        # Fresh schemas contain only the seeded catalog. Reject modified catalogs
+        # rather than silently overwriting operator configuration.
+        categories = Base.metadata.tables["map_categories"]
+        from migrations.map_schema_v3 import category_rows
+
+        target_categories = [dict(row) for row in connection.execute(select(categories)).mappings()]
+        if sorted(target_categories, key=lambda r: (r["kind"], r["key"])) != sorted(
+            category_rows(), key=lambda r: (r["kind"], r["key"])
+        ):
+            fail("map_categories", "destination catalog is not an untouched seed catalog")
+        connection.execute(categories.delete())
         for table in TABLES:
             prepared = []
             for row in source[table.name]:
@@ -333,6 +358,12 @@ def copy_to_postgres(source: dict, engine) -> dict:
                 )
             for start in range(0, len(prepared), 1000):
                 connection.execute(table.insert(), prepared[start : start + 1000])
+            if (
+                len(table.primary_key.columns) != 1
+                or "id" not in table.c
+                or not isinstance(table.c.id.type, Integer)
+            ):
+                continue
             sequence = connection.scalar(
                 text("SELECT pg_get_serial_sequence(:table_name, 'id')"),
                 {"table_name": connection.dialect.identifier_preparer.quote(table.name)},

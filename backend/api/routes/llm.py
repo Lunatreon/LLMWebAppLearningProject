@@ -338,6 +338,16 @@ async def analyse_chat_for_topic(
             topic_hint=analysis.topic_hint,
             available_topics=available_topics,
         )
+        from backend.llm.responses import map_suggestion_from_payload
+
+        topic_result.map_suggestion = map_suggestion_from_payload(topic_result.map_suggestion)
+        from backend.services.map_categories import allowed
+
+        for generated in [topic_result, *topic_result.additional_topics]:
+            if not isinstance(generated.category, str) or generated.category not in allowed(
+                "topic", llm=True
+            ):
+                generated.category = "other"
         # A newer exchange or review may have arrived during generation.
         db.refresh(chat_session)
         info = chat_context(db, chat_session)
@@ -901,6 +911,9 @@ def confirm_topic(
 ) -> TopicConfirmationResponse:
     premium_access = has_premium_feature_access(db, current_user)
     profile = get_or_create_profile(db, current_user)
+    from backend.services.map_storage import check_revision
+
+    check_revision(profile, payload.expected_revision)
     chat_session = get_chat_session(db, current_user, payload.chat_id)
     if chat_session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")
@@ -1071,6 +1084,9 @@ def confirm_map_suggestion(
             detail="Premium is required to save insights to My Map.",
         )
     profile = get_or_create_profile(db, current_user)
+    from backend.services.map_storage import check_revision
+
+    check_revision(profile, payload.expected_revision)
     chat_session = get_chat_session(db, current_user, payload.chat_id)
     if chat_session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")

@@ -3,17 +3,15 @@
 For startup use [Docker deployment](../deployment/README.md). Both local and
 production Compose stacks run PostgreSQL; there is no separate database-only stack.
 
-SQLite remains the default. This phase adds an opt-in synchronous PostgreSQL
-path, Alembic schema ownership, isolated database tests and an operator migration
-tool. It does not switch the deployed application or copy/delete the existing
-`feely.db`. The React frontend uses the same HTTP API for either database.
+Docker runs PostgreSQL. SQLite remains available for isolated tests and legacy
+source recovery. Existing `feely.db` data is not moved merely by changing startup
+configuration. The frontend uses the same API for either supported database.
 
 ## Current model and PostgreSQL target
 
-The ten domain tables remain `users`, `user_profiles`, `chat_sessions`,
-`daily_llm_usage`, `journal_entries`, `billing_subscriptions`,
-`processed_stripe_events`, `feedback`, `terms_acceptances`, `mail_messages`.
-Alembic adds its own `alembic_version` bookkeeping table.
+There are 17 application tables, including normalized conversations, maps and the
+category catalog. See [the generated schema](DATABASE_SCHEMA.md) and
+[map storage](MAP_DATABASE_SCHEMA.md). Alembic adds `alembic_version`.
 
 Integer primary keys, existing unique/FK constraints, status strings, nullability,
 ORM cascades and Python defaults are retained. PostgreSQL enforces declared FK
@@ -71,7 +69,7 @@ docker compose --env-file .env.docker exec -T backend python -m alembic check
 Review generated revisions before applying them. PostgreSQL and nonlocal SQLite
 startup require the current Alembic head and fail with an actionable error if it
 is absent/behind. The Docker entrypoint runs versioned upgrades; the API itself only checks schema state. Local
-SQLite retains its existing create_all and idempotent legacy users-column patch.
+SQLite retains create_all for empty development schemas and its legacy users-column patch. Legacy map JSON requires the backed-up migration helper first.
 Tests normally retain disposable SQLite initialization; PostgreSQL test schemas
 are built using Alembic, not create_all.
 
@@ -98,7 +96,7 @@ tests, not a data-preserving production rollback.
    version/URL/hash, subscription/capability switches and existing provider settings.
    Changing SECRET_KEY would invalidate existing JWT/reset/verification behavior.
 3. Audit the source before inserting. The script opens the source using SQLite
-   URI **mode=ro**, starts one explicit read snapshot, validates all ten tables and
+   URI **mode=ro**, starts one explicit read snapshot, validates the current complete table inventory and
    exact columns, all primary/unique/FK values, types, timestamps and Map structure.
    Extra/missing tables or columns block migration; upgrade an audited backup,
    never mutate the original through the copier.
@@ -130,7 +128,7 @@ copy refuses nonempty targets; repeating the procedure requires another fresh
 target. verify never writes. PostgreSQL sequence setval is not transactional;
 failed copies may advance empty-target sequences, and a retry resets them again.
 
-The verifier compares complete nested JSON, so missing capabilities, Map entities,
+The verifier compares typed rows, encrypted binary fields and complete nested JSON, so missing capabilities, Map entities,
 relationships, practice reflections, Journal suggestions or Chat messages fail.
 It also validates parent/related-topic references, duplicate topic/entry IDs and
 hierarchy cycles. Provenance references to deleted chats, merged topics or old

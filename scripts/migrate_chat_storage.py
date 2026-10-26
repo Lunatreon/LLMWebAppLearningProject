@@ -22,6 +22,9 @@ def main():
         raise RuntimeError(
             "This helper is for native SQLite. Use alembic upgrade head for PostgreSQL."
         )
+    from backend.core.content_crypto import validate_content_keys
+
+    validate_content_keys()
     source = Path(url.database).resolve()
     if not source.is_file():
         raise RuntimeError("The configured SQLite database does not exist.")
@@ -45,6 +48,12 @@ def main():
                     command.upgrade(config, "head")
                 else:
                     upgrade_chat_storage(Operations(MigrationContext.configure(connection)))
+                    from backend.models.map import TABLES
+                    from backend.db.base import Base
+                    from migrations.map_storage_v3 import migrate_profiles
+
+                    Base.metadata.create_all(connection, tables=list(TABLES.values()))
+                    migrate_profiles(connection, TABLES)
                 connection.commit()
             except BaseException:
                 connection.rollback()

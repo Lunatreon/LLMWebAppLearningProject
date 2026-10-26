@@ -1,6 +1,7 @@
 """Offline production configuration/build rehearsal in an owned disposable Docker project."""
 
 import argparse
+import base64
 import json
 import os
 from pathlib import Path
@@ -25,6 +26,7 @@ def create_fixture(directory, project):
     directory.mkdir(mode=0o700, parents=True, exist_ok=False)
     password = secrets.token_urlsafe(32)
     replacements = {
+        "base64-content-encryption-key": base64.b64encode(secrets.token_bytes(32)).decode(),
         "url-safe-app-db-password": password,
         "same-url-safe-app-db-password-as-DATABASE_URL": password,
         "separate-random-bootstrap-db-password": secrets.token_urlsafe(32),
@@ -74,6 +76,7 @@ class Rehearsal:
         )
         secret_names = {
             "SECRET_KEY",
+            "CONTENT_ENCRYPTION_KEYS",
             "POSTGRES_PASSWORD",
             "POSTGRES_APP_PASSWORD",
             "SMTP_PASSWORD",
@@ -87,6 +90,7 @@ class Rehearsal:
         self.private = [
             value for name, value in self.values.items() if name in secret_names and value
         ]
+        self.private.extend(self.config.content_encryption_keys.values())
 
     def run(self, arguments, *, timeout=120):
         result = subprocess.run(

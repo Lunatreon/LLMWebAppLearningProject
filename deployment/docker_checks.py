@@ -16,19 +16,10 @@ from sqlalchemy import MetaData, Table, inspect, select
 from backend.core.config import settings
 from backend.db.session import engine
 
-TABLES = {
-    "users",
-    "user_profiles",
-    "chat_sessions",
-    "chat_turns",
-    "daily_llm_usage",
-    "journal_entries",
-    "billing_subscriptions",
-    "processed_stripe_events",
-    "feedback",
-    "terms_acceptances",
-    "mail_messages",
-}
+from backend.db.base import Base
+from backend import models  # Register every table for schema inventory checks.
+
+TABLES = set(Base.metadata.tables)
 
 
 def database_snapshot():

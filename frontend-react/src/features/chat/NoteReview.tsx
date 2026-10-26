@@ -16,10 +16,15 @@ export default function NoteReview({
   const { controller, snapshot } = useChat(),
     map = useMap();
   const spaces = map.snapshot.data?.topic_spaces || [];
+  const entryChoices = map.snapshot.data?.categories
+    ? Object.fromEntries(
+        map.snapshot.data.categories
+          .filter((c) => c.kind === 'entry' && c.active && c.key !== 'merged_topic')
+          .map((c) => [c.key, c.label]),
+      )
+    : entryCategories;
   const [text, setText] = useState(suggestion.text),
-    [category, setCategory] = useState<EntryCategory>(
-      Object.hasOwn(entryCategories, suggestion.category) ? suggestion.category : 'own_perception',
-    );
+    [category, setCategory] = useState<EntryCategory>(suggestion.category || 'own_perception');
   const [target, setTarget] = useState(
     spaces.some((space) => space.id === suggestion.topic_space_id)
       ? suggestion.topic_space_id!
@@ -76,7 +81,7 @@ export default function NoteReview({
                 value={category}
                 onChange={(event) => setCategory(event.target.value as EntryCategory)}
               >
-                {Object.entries(entryCategories).map(([value, label]) => (
+                {Object.entries(entryChoices).map(([value, label]) => (
                   <option key={value} value={value}>
                     {label}
                   </option>

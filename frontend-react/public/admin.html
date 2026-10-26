@@ -206,6 +206,59 @@
         </section>
 
         <section class="admin-section">
+          <h2>Map categories</h2>
+          <p class="admin-help">
+            Stable category keys keep existing entries connected. Edit labels and descriptions, or
+            disable a category to keep historical entries while stopping new use. Enabled LLM
+            categories are supplied to analysis automatically.
+          </p>
+          <form id="map-category-form" class="admin-panel">
+            <label
+              >Existing category
+              <select id="map-category-select">
+                <option value="">New category</option>
+              </select></label
+            >
+            <label
+              >Kind
+              <select name="kind">
+                <option value="entry">Entry</option>
+                <option value="topic">Topic</option>
+              </select></label
+            >
+            <label
+              >Stable key
+              <input
+                name="key"
+                required
+                pattern="[a-z][a-z0-9_]{0,63}"
+                maxlength="64"
+                placeholder="task"
+            /></label>
+            <label>Label <input name="label" required maxlength="120" /></label>
+            <label
+              >Description for the model
+              <textarea name="description" maxlength="2000" rows="3"></textarea>
+            </label>
+            <label
+              ><input name="active" type="checkbox" checked /> Available for new
+              entries/topics</label
+            >
+            <label
+              ><input name="llm_enabled" type="checkbox" checked /> Allow LLM suggestions</label
+            >
+            <label
+              ><input name="supports_completion" type="checkbox" /> Starts with completion
+              tracking</label
+            >
+            <label
+              >Display order <input name="position" type="number" min="0" max="10000" value="0"
+            /></label>
+            <button type="submit" class="primary-button">Save category</button>
+          </form>
+        </section>
+
+        <section class="admin-section">
           <div class="admin-section-heading">
             <div>
               <p class="eyebrow">Model behaviour</p>

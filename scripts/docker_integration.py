@@ -231,7 +231,7 @@ class DockerIntegration:
         self.save("health", "PASS")
         self.save("alembic", "RUNNING")
         fresh = self.probe("snapshot")
-        if any(fresh["counts"].values()):
+        if any(count for name, count in fresh["counts"].items() if name != "map_categories"):
             raise CheckFailed("Startup unexpectedly seeded domain rows")
         self.compose("exec", "-T", "backend", "python", "-m", "alembic", "upgrade", "head")
         # CLI and programmatic checks both use the running container's configuration.
@@ -325,10 +325,14 @@ def prepare(directory, project):
     values = read_values(config)
     with (directory / "secrets.jsonl").open("x", encoding="utf-8") as stream:
         os.chmod(stream.name, 0o600)
-        for key in ("POSTGRES_PASSWORD", "SECRET_KEY"):
-            stream.write(json.dumps(values[key]) + "\n")
-            if os.environ.get("GITHUB_ACTIONS") == "true":
-                print(f"::add-mask::{values[key]}")
+        for key in ("POSTGRES_PASSWORD", "SECRET_KEY", "CONTENT_ENCRYPTION_KEYS"):
+            private_values = [values[key]]
+            if key == "CONTENT_ENCRYPTION_KEYS":
+                private_values.extend(json.loads(values[key]).values())
+            for private in private_values:
+                stream.write(json.dumps(private) + "\n")
+                if os.environ.get("GITHUB_ACTIONS") == "true":
+                    print(f"::add-mask::{private}")
     (directory / "project.txt").write_text(project, encoding="utf-8")
     print("Generated an isolated mock/Mailpit environment; no external credentials used.")
 

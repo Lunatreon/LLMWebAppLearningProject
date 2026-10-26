@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.api.dependencies import get_current_premium_user, get_current_user, get_db
 from backend.core.config import settings
+from backend.services.map_categories import CategoryValidationError
 from backend.core.security import hash_password, verify_password
 from backend.models.user import User, UserProfile
 from backend.schemas.profile import (
@@ -201,11 +202,17 @@ def update_current_user_profile(
         profile = UserProfile(user_id=current_user.id, data={})
         db.add(profile)
 
-    profile.data = (
-        payload.data
+    current_data = profile.data
+    replacement = (
+        dict(payload.data)
         if has_premium_feature_access(db, current_user)
-        else preserve_premium_profile_fields(profile.data, payload.data)
+        else preserve_premium_profile_fields(current_data, payload.data)
     )
+    if "self_authorship_map" in current_data:
+        replacement["self_authorship_map"] = current_data["self_authorship_map"]
+    else:
+        replacement.pop("self_authorship_map", None)
+    profile.data = replacement
     db.commit()
     db.refresh(profile)
     return ProfileRead(
@@ -216,19 +223,26 @@ def update_current_user_profile(
     )
 
 
-def get_or_create_profile(db: Session, current_user: User) -> UserProfile:
+def get_or_create_profile(db: Session, current_user: User, expected_revision=None) -> UserProfile:
     profile = current_user.profile
     if profile is None:
         profile = UserProfile(user_id=current_user.id, data={})
         db.add(profile)
         db.flush()
+    from backend.services.map_storage import check_revision
+
+    check_revision(profile, expected_revision)
     return profile
 
 
 @router.get("/me/map", response_model=SelfAuthorshipMapRead)
 def read_self_authorship_map(
     current_user: User = Depends(get_current_premium_user),
+    db: Session = Depends(get_db),
 ) -> SelfAuthorshipMapRead:
+    from backend.services.map_categories import activate
+
+    activate(db.connection())
     profile_data = current_user.profile.data if current_user.profile else {}
     return SelfAuthorshipMapRead(**read_map(profile_data))
 
@@ -239,7 +253,7 @@ def create_map_topic(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_premium_user),
 ) -> TopicSpaceResponse:
-    profile = get_or_create_profile(db, current_user)
+    profile = get_or_create_profile(db, current_user, payload.expected_revision)
     try:
         profile_data, topic = create_topic_space(
             profile.data,
@@ -251,7 +265,12 @@ def create_map_topic(
             related_topic_ids=payload.related_topic_ids,
         )
     except (LookupError, ValueError) as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=(
+                422 if isinstance(exc, CategoryValidationError) else status.HTTP_400_BAD_REQUEST
+            ),
+            detail=str(exc),
+        ) from exc
 
     profile.data = profile_data
     db.commit()
@@ -266,7 +285,7 @@ def change_map_topic(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_premium_user),
 ) -> TopicSpaceResponse:
-    profile = get_or_create_profile(db, current_user)
+    profile = get_or_create_profile(db, current_user, payload.expected_revision)
     try:
         profile_data, topic = update_topic_space(
             profile.data,
@@ -282,7 +301,12 @@ def change_map_topic(
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=(
+                422 if isinstance(exc, CategoryValidationError) else status.HTTP_400_BAD_REQUEST
+            ),
+            detail=str(exc),
+        ) from exc
 
     profile.data = profile_data
     db.commit()
@@ -297,7 +321,7 @@ def merge_map_topic(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_premium_user),
 ) -> TopicSpaceResponse:
-    profile = get_or_create_profile(db, current_user)
+    profile = get_or_create_profile(db, current_user, payload.expected_revision)
     try:
         profile_data, topic = merge_topic_spaces(
             profile.data,
@@ -307,7 +331,12 @@ def merge_map_topic(
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=(
+                422 if isinstance(exc, CategoryValidationError) else status.HTTP_400_BAD_REQUEST
+            ),
+            detail=str(exc),
+        ) from exc
 
     profile.data = profile_data
     db.commit()
@@ -318,16 +347,22 @@ def merge_map_topic(
 @router.delete("/me/map/topics/{topic_space_id}", response_model=TopicSpaceDeleteResponse)
 def remove_map_topic(
     topic_space_id: str,
+    expected_revision: int | None = Query(default=None, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_premium_user),
 ) -> TopicSpaceDeleteResponse:
-    profile = get_or_create_profile(db, current_user)
+    profile = get_or_create_profile(db, current_user, expected_revision)
     try:
         profile_data, topic = delete_topic_space(profile.data, topic_space_id=topic_space_id)
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=(
+                422 if isinstance(exc, CategoryValidationError) else status.HTTP_400_BAD_REQUEST
+            ),
+            detail=str(exc),
+        ) from exc
 
     profile.data = profile_data
     db.commit()
@@ -341,18 +376,25 @@ def create_map_entry(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_premium_user),
 ) -> MapEntryCreateResponse:
-    profile = get_or_create_profile(db, current_user)
+    profile = get_or_create_profile(db, current_user, payload.expected_revision)
     try:
         profile_data, entry = add_map_entry(
             profile.data,
+            working_on=payload.working_on,
             category=payload.category,
+            completion_percent=payload.completion_percent,
             text=payload.text,
             topic_space_id=payload.topic_space_id,
             source_chat_id=payload.source_chat_id,
             reason=payload.reason,
         )
-    except LookupError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except (LookupError, ValueError) as exc:
+        raise HTTPException(
+            status_code=(
+                422 if isinstance(exc, CategoryValidationError) else status.HTTP_404_NOT_FOUND
+            ),
+            detail=str(exc),
+        ) from exc
 
     profile.data = profile_data
     db.commit()
@@ -367,21 +409,29 @@ def change_map_entry(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_premium_user),
 ) -> MapEntryUpdateResponse:
-    profile = get_or_create_profile(db, current_user)
+    profile = get_or_create_profile(db, current_user, payload.expected_revision)
     try:
         profile_data, entry = update_map_entry(
             profile.data,
+            working_on=payload.working_on,
             entry_id=entry_id,
             category=payload.category,
             text=payload.text,
             reason=payload.reason,
             topic_space_id=payload.topic_space_id,
             move_entry="topic_space_id" in payload.model_fields_set,
+            completion_percent=payload.completion_percent,
+            update_completion="completion_percent" in payload.model_fields_set,
         )
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=(
+                422 if isinstance(exc, CategoryValidationError) else status.HTTP_400_BAD_REQUEST
+            ),
+            detail=str(exc),
+        ) from exc
 
     profile.data = profile_data
     db.commit()
@@ -392,10 +442,11 @@ def change_map_entry(
 @router.delete("/me/map/entries/{entry_id}", response_model=MapEntryDeleteResponse)
 def remove_map_entry(
     entry_id: str,
+    expected_revision: int | None = Query(default=None, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_premium_user),
 ) -> MapEntryDeleteResponse:
-    profile = get_or_create_profile(db, current_user)
+    profile = get_or_create_profile(db, current_user, expected_revision)
     try:
         profile_data, entry = delete_map_entry(profile.data, entry_id=entry_id)
     except LookupError as exc:
@@ -414,12 +465,13 @@ def change_practice_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_premium_user),
 ) -> PracticeUpdateResponse:
-    profile = get_or_create_profile(db, current_user)
+    profile = get_or_create_profile(db, current_user, payload.expected_revision)
     try:
         profile_data, practice = update_practice(
             profile.data,
             entry_id=entry_id,
             practice_status=payload.status,
+            completion_percent=payload.completion_percent,
             reflection=payload.reflection,
         )
     except LookupError as exc:
@@ -429,3 +481,10 @@ def change_practice_status(
     db.commit()
     db.refresh(profile)
     return PracticeUpdateResponse(practice=practice, map=read_map(profile.data))
+
+
+@router.get("/me/map/categories")
+def read_map_categories(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    from backend.services.map_categories import activate
+
+    return activate(db.connection())

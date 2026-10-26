@@ -1,6 +1,8 @@
 """Structured response schemas and validation shared by all providers."""
 
 import logging
+from copy import deepcopy
+from backend.services.map_categories import allowed
 from typing import Any
 
 from backend.llm.json_response import raise_bad_gateway
@@ -118,7 +120,8 @@ def map_suggestion_from_payload(value: Any) -> dict[str, str] | None:
         return None
     if (
         not isinstance(value, dict)
-        or value.get("category") not in MAP_SUGGESTION_CATEGORIES
+        or not isinstance(value.get("category"), str)
+        or value.get("category") not in allowed("entry", llm=True)
         or not isinstance(value.get("text"), str)
         or not isinstance(value.get("reason"), str)
     ):
@@ -176,7 +179,12 @@ def topic_result_from_payload(payload: dict[str, Any]) -> TopicLLMResult:
                 TopicLLMResult(
                     topic=additional_topic[:120],
                     description=additional_description[:2000],
-                    category=normalize_topic_category(raw_topic.get("category")),
+                    category=(
+                        normalize_topic_category(raw_topic.get("category"))
+                        if isinstance(raw_topic.get("category"), str)
+                        and raw_topic.get("category") in allowed("topic", llm=True)
+                        else "other"
+                    ),
                     related_topic_ids=topic_related_ids(raw_topic),
                     existing_topic_id=(
                         additional_existing_topic_id
@@ -193,10 +201,28 @@ def topic_result_from_payload(payload: dict[str, Any]) -> TopicLLMResult:
     return TopicLLMResult(
         topic=topic[:120],
         description=description[:2000],
-        category=normalize_topic_category(payload.get("category")),
+        category=(
+            normalize_topic_category(payload.get("category"))
+            if isinstance(payload.get("category"), str)
+            and payload.get("category") in allowed("topic", llm=True)
+            else "other"
+        ),
         related_topic_ids=topic_related_ids(payload),
         existing_topic_id=existing_topic_id if isinstance(existing_topic_id, str) else None,
         parent_topic_id=parent_topic_id if isinstance(parent_topic_id, str) else None,
         additional_topics=additional_topics,
         map_suggestion=map_suggestion_from_payload(payload.get("map_suggestion")),
     )
+
+
+def topic_response_schema():
+    schema = deepcopy(TOPIC_RESPONSE_SCHEMA)
+    topic_keys = sorted(allowed("topic", llm=True))
+    schema["properties"]["category"]["enum"] = topic_keys
+    schema["properties"]["additional_topics"]["items"]["properties"]["category"][
+        "enum"
+    ] = topic_keys
+    schema["properties"]["map_suggestion"]["anyOf"][1]["properties"]["category"]["enum"] = sorted(
+        allowed("entry", llm=True)
+    )
+    return schema

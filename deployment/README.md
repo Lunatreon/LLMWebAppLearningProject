@@ -42,6 +42,11 @@ docker compose --env-file .env.docker logs --follow --tail 100
 docker compose --env-file .env.docker down
 ```
 
+The generated `.env.docker` also contains an independent map-encryption key.
+Protect and back it up separately from database dumps. Existing installations
+need the [map upgrade step](../docs/MAP_DATABASE_SCHEMA.md#upgrade-an-existing-docker-installation)
+before starting revision 0003.
+
 `down` stops/removes containers and preserves database and prompt volumes.
 Use the startup command again after changing code or configuration. Do not use
 `down -v` unless you intend to erase the volumes. Existing SQLite data is not

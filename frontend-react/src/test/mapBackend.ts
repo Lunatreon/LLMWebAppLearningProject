@@ -101,7 +101,10 @@ export function mapBackend(
       return json({ topic: value, map: data });
     }
     if (path === '/users/me/map/entries') {
-      const next = mapEntry(`entry-${++counter}`, payload.text.trim(), payload.category);
+      const next = mapEntry(`entry-${++counter}`, payload.text.trim(), payload.category, {
+        completion_percent: payload.completion_percent,
+        working_on: payload.working_on ?? false,
+      });
       const group = payload.topic_space_id
         ? data.topic_spaces.find((item) => item.id === payload.topic_space_id)!.entries!
         : data.unassigned_entries;
@@ -124,6 +127,9 @@ export function mapBackend(
       return json({ deleted: true, entry: value, map: data });
     }
     Object.assign(value, { category: payload.category, text: payload.text.trim() });
+    if (Object.hasOwn(payload, 'working_on')) value.working_on = payload.working_on;
+    if (Object.hasOwn(payload, 'completion_percent'))
+      value.completion_percent = payload.completion_percent;
     if (Object.hasOwn(payload, 'topic_space_id')) {
       group.splice(group.indexOf(value), 1);
       (payload.topic_space_id

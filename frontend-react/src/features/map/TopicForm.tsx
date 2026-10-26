@@ -8,6 +8,17 @@ import { DialogFrame, useDialogControls } from '../../components/shared/DialogFr
 export default function TopicForm({ popup }: { popup: Extract<MapPopup, { kind: 'topic' }> }) {
   const { controller, snapshot } = useMap();
   const topics = snapshot.data?.topic_spaces || [];
+  const categoryChoices = snapshot.data?.categories
+    ? Object.fromEntries(
+        snapshot.data.categories
+          .filter(
+            (c) =>
+              c.kind === 'topic' &&
+              (c.active || c.key === topics.find((t) => t.id === popup.id)?.category),
+          )
+          .map((c) => [c.key, c.label]),
+      )
+    : topicCategories;
   const topic = topics.find((value) => value.id === popup.id);
   const [title, setTitle] = useState(topic?.title || ''),
     [description, setDescription] = useState(topic?.description || '');
@@ -85,7 +96,7 @@ export default function TopicForm({ popup }: { popup: Extract<MapPopup, { kind: 
         <div className="map-action-field">
           Topic type
           <div className="topic-type-choices" role="radiogroup" aria-label="Topic type">
-            {Object.entries(topicCategories).map(([value, label]) => (
+            {Object.entries(categoryChoices).map(([value, label]) => (
               <label key={value}>
                 <input
                   aria-describedby="map-topic-error"

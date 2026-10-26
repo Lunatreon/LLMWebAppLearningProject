@@ -2,24 +2,15 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
+from backend.services.map_categories import allowed, existing, require_category, supports_completion
 
 MAP_KEY = "self_authorship_map"
-TOPIC_CATEGORIES = {"person", "trait", "experience", "other"}
 
 
 def normalize_topic_category(value: Any) -> str:
-    return value if isinstance(value, str) and value in TOPIC_CATEGORIES else "other"
+    return value if isinstance(value, str) and value in existing("topic") else "other"
 
 
-ENTRY_CATEGORIES = {
-    "inherited_script",
-    "merged_topic",
-    "own_perception",
-    "value",
-    "body_signal",
-    "practice",
-    "evidence",
-}
 PRACTICE_STATUSES = {"active", "paused", "completed"}
 LLM_PROTECTED_PROFILE_FIELDS = {
     MAP_KEY,
@@ -55,6 +46,8 @@ def read_map(profile_data: dict[str, Any] | None) -> dict[str, Any]:
         return empty_map()
 
     result = empty_map()
+    if "revision" in raw_map:
+        result["revision"] = raw_map["revision"]
     result["topic_spaces"] = deepcopy(list(raw_map.get("topic_spaces", [])))
     result["unassigned_entries"] = deepcopy(list(raw_map.get("unassigned_entries", [])))
     result["updated_at"] = raw_map.get("updated_at") or result["updated_at"]
@@ -81,6 +74,20 @@ def read_map(profile_data: dict[str, Any] | None) -> dict[str, Any]:
         )
         space["chat_ids"] = list(dict.fromkeys(space.get("chat_ids", [])))
         space["entries"] = list(space.get("entries", []))
+    for entry in result["unassigned_entries"] + [
+        entry
+        for space in result["topic_spaces"]
+        if isinstance(space, dict)
+        for entry in space.get("entries", [])
+    ]:
+        if isinstance(entry, dict) and supports_completion(entry.get("category")):
+            if (
+                entry.get("category") == "practice"
+                and "status" not in entry
+                and entry.get("practice_status")
+            ):
+                entry["status"] = entry["practice_status"]
+            entry.setdefault("completion_percent", 100 if entry.get("status") == "completed" else 0)
     return result
 
 
@@ -248,7 +255,7 @@ def create_or_link_topic_space(
         if description.strip() and not space.get("description"):
             space["description"] = description.strip()
         if category is not None:
-            space["category"] = normalize_topic_category(category)
+            space["category"] = require_category("topic", category, previous=space.get("category"))
         if parent_topic_id is not None:
             validate_parent_topic(
                 map_data,
@@ -264,7 +271,7 @@ def create_or_link_topic_space(
         "title": title.strip(),
         "description": description.strip(),
         "chat_ids": [chat_id],
-        "category": normalize_topic_category(category),
+        "category": require_category("topic", category or "other"),
         "entries": [],
         "parent_topic_id": parent_topic_id,
         "related_topic_ids": [],
@@ -310,7 +317,7 @@ def create_topic_space(
         if description.strip():
             space["description"] = description.strip()
         if category is not None:
-            space["category"] = normalize_topic_category(category)
+            space["category"] = require_category("topic", category, previous=space.get("category"))
         if parent_topic_id is not None:
             validate_parent_topic(
                 map_data,
@@ -332,7 +339,7 @@ def create_topic_space(
         "title": title.strip(),
         "description": description.strip(),
         "chat_ids": [chat_id] if chat_id else [],
-        "category": normalize_topic_category(category),
+        "category": require_category("topic", category or "other"),
         "entries": [],
         "parent_topic_id": parent_topic_id,
         "related_topic_ids": [],
@@ -395,7 +402,7 @@ def update_topic_space(
         if description is not None:
             space["description"] = description.strip()
         if category is not None:
-            space["category"] = normalize_topic_category(category)
+            space["category"] = require_category("topic", category, previous=space.get("category"))
         if update_parent:
             validate_parent_topic(
                 map_data,
@@ -551,26 +558,30 @@ def add_map_entry(
     profile_data: dict[str, Any] | None,
     *,
     category: str,
+    working_on: bool = False,
     text: str,
     topic_space_id: str | None = None,
     source_chat_id: str | None = None,
     reason: str | None = None,
+    completion_percent: int | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    if category not in ENTRY_CATEGORIES:
-        raise ValueError(f"Unsupported map category: {category}")
+    require_category("entry", category)
 
     now = current_timestamp()
     entry = {
         "id": uuid4().hex,
         "category": category,
+        "working_on": working_on,
         "text": text.strip(),
         "source_chat_id": source_chat_id,
         "reason": reason.strip() if reason else None,
         "created_at": now,
         "updated_at": now,
     }
+    if completion_percent is not None or supports_completion(category):
+        entry["completion_percent"] = completion_percent if completion_percent is not None else 0
     if category == "practice":
-        entry["status"] = "active"
+        entry["status"] = "completed" if completion_percent == 100 else "active"
         entry["reflection"] = None
 
     map_data = read_map(profile_data)
@@ -607,18 +618,33 @@ def update_map_entry(
     profile_data: dict[str, Any] | None,
     *,
     entry_id: str,
+    working_on: bool | None = None,
     category: str | None = None,
     text: str | None = None,
     reason: str | None = None,
     topic_space_id: str | None = None,
     move_entry: bool = False,
+    completion_percent: int | None = None,
+    update_completion: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    if category is not None and category not in ENTRY_CATEGORIES:
+    if category is not None and category not in existing("entry"):
         raise ValueError(f"Unsupported map category: {category}")
 
     map_data = read_map(profile_data)
     current_entries, entry = find_entry_group(map_data, entry_id)
 
+    if working_on is not None:
+        entry["working_on"] = working_on
+
+    if category is not None:
+        require_category("entry", category, previous=entry.get("category"))
+    if update_completion:
+        entry["completion_percent"] = completion_percent
+        if entry.get("category") == "practice":
+            if completion_percent == 100:
+                entry["status"] = "completed"
+            elif entry.get("status") == "completed":
+                entry["status"] = "active"
     if category is not None and category != entry.get("category"):
         entry["category"] = category
         if category == "practice":
@@ -666,6 +692,7 @@ def update_practice(
     entry_id: str,
     practice_status: str,
     reflection: str | None = None,
+    completion_percent: int | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     if practice_status not in PRACTICE_STATUSES:
         raise ValueError(f"Unsupported practice status: {practice_status}")
@@ -674,6 +701,12 @@ def update_practice(
     _, entry = find_entry_group(map_data, entry_id)
     if entry.get("category") != "practice":
         raise LookupError("Practice not found")
+    if completion_percent is not None:
+        entry["completion_percent"] = completion_percent
+    if practice_status == "completed":
+        entry["completion_percent"] = 100
+    elif entry.get("completion_percent") == 100:
+        entry["completion_percent"] = 0
     entry["status"] = practice_status
     entry["reflection"] = reflection.strip() if reflection else None
     entry["updated_at"] = current_timestamp()

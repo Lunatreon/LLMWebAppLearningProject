@@ -46,15 +46,26 @@ export function validateMap(value: MapData): MapData {
     !value.topic_spaces.every(validTopic) ||
     !Array.isArray(value.unassigned_entries) ||
     !value.unassigned_entries.every(validEntry) ||
-    (value.updated_at != null && typeof value.updated_at !== 'string')
+    (value.updated_at != null && typeof value.updated_at !== 'string') ||
+    (value.revision !== undefined && (!Number.isInteger(value.revision) || value.revision < 0))
   )
     throw invalid();
   if (new Set(value.topic_spaces.map((topic) => topic.id)).size !== value.topic_spaces.length)
     throw invalid();
   return value;
 }
+const serverRevisions = new WeakMap<ApiClient, { token: string | null; revision: number }>();
+function rememberRevision(api: ApiClient, map: MapData) {
+  if (map.revision === undefined) return;
+  const token = api.getSessionToken();
+  const current = serverRevisions.get(api);
+  if (!current || current.token !== token || map.revision >= current.revision)
+    serverRevisions.set(api, { token, revision: map.revision });
+}
 export async function loadMap(api: ApiClient, signal?: AbortSignal) {
-  return validateMap(await api.request<MapData>(base, { authenticated: true, signal }));
+  const map = validateMap(await api.request<MapData>(base, { authenticated: true, signal }));
+  rememberRevision(api, map);
+  return map;
 }
 export interface MapMutation {
   map: MapData;
@@ -73,10 +84,18 @@ async function mutate(
   deleting = false,
 ): Promise<MapMutation> {
   const result = await queueMapWrite(api, async () => {
-    const value = await api.request<Omit<MapMutation, 'commitVersion'>>(path, {
+    const known = serverRevisions.get(api);
+    const expected = known?.token === api.getSessionToken() ? known?.revision : undefined;
+    const requestPath =
+      deleting && expected !== undefined ? `${path}?expected_revision=${expected}` : path;
+    const requestPayload =
+      expected !== undefined && payload !== undefined
+        ? { ...(payload as object), expected_revision: expected }
+        : payload;
+    const value = await api.request<Omit<MapMutation, 'commitVersion'>>(requestPath, {
       authenticated: true,
       method,
-      ...(payload !== undefined ? { body: JSON.stringify(payload) } : {}),
+      ...(requestPayload !== undefined ? { body: JSON.stringify(requestPayload) } : {}),
     });
     validateMap(value?.map);
     if (
@@ -119,6 +138,7 @@ async function mutate(
       )
         throw invalid();
     }
+    rememberRevision(api, value.map);
     return value;
   });
   return { ...result.value, commitVersion: result.commitVersion };

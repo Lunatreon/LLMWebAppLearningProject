@@ -15,6 +15,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 # Unit tests must never spend API credits or depend on a local model service.
+os.environ["CONTENT_ENCRYPTION_KEYS"] = '{"primary":"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="}'
 os.environ["LLM_PROVIDER"] = "mock"
 os.environ["CHAT_LLM_PROVIDER"] = "mock"
 os.environ["TOPIC_LLM_PROVIDER"] = "mock"

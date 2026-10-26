@@ -263,7 +263,13 @@ def test_unversioned_sqlite_upgrade_is_idempotent_and_preserves_history(tmp_path
         upgrade_chat_storage(Operations(MigrationContext.configure(connection)))
         upgrade_chat_storage(Operations(MigrationContext.configure(connection)))
         assert "alembic_version" not in inspect(connection).get_table_names()
-        assert compare_metadata(MigrationContext.configure(connection), Base.metadata) == []
+        from backend.models.map import TABLES as MAP_TABLES
+
+        chat_schema = sa.MetaData()
+        for table in Base.metadata.sorted_tables:
+            if table.name not in MAP_TABLES:
+                table.to_metadata(chat_schema)
+        assert compare_metadata(MigrationContext.configure(connection), chat_schema) == []
     engine.dispose()
 
 

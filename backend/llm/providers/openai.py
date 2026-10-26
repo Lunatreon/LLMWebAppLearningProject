@@ -10,7 +10,7 @@ from backend.llm.context import chat_request_payload, topic_request_payload
 from backend.llm.json_response import parse_json_response
 from backend.llm.responses import chat_result_from_payload, topic_result_from_payload
 from backend.llm.types import ChatLLMResult, TextChunkCallback, TopicLLMResult
-from backend.llm.prompts import read_system_prompt
+from backend.llm.prompts import llm_system_prompt as read_system_prompt
 
 logger = logging.getLogger(__name__)
 

@@ -557,3 +557,74 @@ describe('real My Map route/graph/forms', () => {
     expect(router.state.historyAction).toBe('REPLACE');
   });
 });
+
+test('backend catalog adds topic choices without frontend category code changes', async () => {
+  mount({
+    initial: {
+      ...mapData(),
+      categories: [
+        {
+          kind: 'topic',
+          key: 'interest',
+          label: 'Interest',
+          description: 'A personal interest',
+          active: true,
+          llm_enabled: true,
+          supports_completion: false,
+        },
+        {
+          kind: 'topic',
+          key: 'other',
+          label: 'Other',
+          description: '',
+          active: true,
+          llm_enabled: true,
+          supports_completion: false,
+        },
+      ],
+    },
+  });
+  await loaded();
+  fireEvent.click(screen.getByRole('button', { name: '+ Add topic' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Add topic' });
+  expect(within(dialog).getByRole('radio', { name: 'Interest' })).toBeDefined();
+});
+
+test('entry completion and working-on flag are visible, editable and can be cleared', async () => {
+  const { writes } = mount({
+    initial: mapData([
+      topic('family', 'Family', {
+        entries: [mapEntry('task-one', 'Read a book', 'task', { completion_percent: 35 })],
+      }),
+    ]),
+  });
+  const details = await select();
+  expect(within(details).getByLabelText('Completion').textContent).toContain('35%');
+  fireEvent.click(within(details).getByRole('button', { name: 'Entry actions' }));
+  fireEvent.click(within(details).getByRole('button', { name: 'Edit' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Edit entry' });
+  fireEvent.change(within(dialog).getByLabelText('Completion percentage'), {
+    target: { value: '70' },
+  });
+  fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Working on' }));
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }));
+  await waitFor(() =>
+    expect(
+      writes().some((call) => {
+        const body = JSON.parse(String(call[1]?.body || '{}'));
+        return body.completion_percent === 70 && body.working_on === true;
+      }),
+    ).toBe(true),
+  );
+  await waitFor(() => expect(screen.getByLabelText('Completion').textContent).toContain('70%'));
+  expect(screen.getByText('Working on')).toBeTruthy();
+  fireEvent.click(within(details).getByRole('button', { name: 'Entry actions' }));
+  fireEvent.click(within(details).getByRole('button', { name: 'Edit' }));
+  const reopened = await screen.findByRole('dialog', { name: 'Edit entry' });
+  expect(
+    (within(reopened).getByRole('checkbox', { name: 'Working on' }) as HTMLInputElement).checked,
+  ).toBe(true);
+  fireEvent.click(within(reopened).getByRole('checkbox', { name: 'Working on' }));
+  fireEvent.click(within(reopened).getByRole('button', { name: 'Save changes' }));
+  await waitFor(() => expect(screen.queryByText('Working on')).toBeNull());
+});

@@ -112,7 +112,20 @@ class UserProfile(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True, nullable=False)
-    data: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    _stored_data: Mapped[dict[str, Any]] = mapped_column("data", JSON, default=dict, nullable=False)
+
+    @property
+    def data(self):
+        from backend.services.map_storage import profile_data
+
+        return profile_data(self)
+
+    @data.setter
+    def data(self, value):
+        from backend.services.map_storage import assign_profile_data
+
+        assign_profile_data(self, value)
+
     created_at: Mapped[datetime] = mapped_column(LegacyDateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         LegacyDateTime(timezone=True),

@@ -2,6 +2,7 @@
 
 import json
 from typing import Any
+from backend.services.map_categories import instructions
 
 from backend.services.self_authorship import LLM_PROTECTED_PROFILE_FIELDS
 
@@ -101,6 +102,7 @@ def chat_request_payload(
 ) -> str:
     return json.dumps(
         {
+            "allowed_map_categories": instructions(),
             "chat_id": chat_id,
             "current_profile": focused_profile_context(profile or {}),
             "recent_chat_context": focused_chat_context(chat_info or {}),
@@ -119,6 +121,7 @@ def topic_request_payload(
 ) -> str:
     return json.dumps(
         {
+            "allowed_map_categories": instructions(),
             "topic_chat_context": topic_chat_context(chat_info or {}),
             "matched_patterns": matched_patterns,
             "topic_hint": topic_hint,

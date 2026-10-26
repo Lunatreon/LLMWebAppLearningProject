@@ -13,7 +13,7 @@ export default function MapDetails({ node }: { node: MapNodeData }) {
   const location = useLocation();
   const chat = useContext(ChatContext);
   const entries = node.entries || [],
-    chats = node.chat_ids?.length || 0
+    chats = node.chat_ids?.length || 0;
   const disabled =
     !snapshot.enabled || snapshot.errorStatus === 403 || Boolean(snapshot.pending.length);
   const topics = snapshot.data?.topic_spaces || [];
@@ -40,7 +40,12 @@ export default function MapDetails({ node }: { node: MapNodeData }) {
         x
       </button>
       <p className="eyebrow">
-        {node.kind === 'unassigned' ? 'Across your map' : topicCategories[topicCategoryOf(node)]}
+        {node.kind === 'unassigned'
+          ? 'Across your map'
+          : snapshot.data?.categories?.find((c) => c.kind === 'topic' && c.key === node.category)
+              ?.label ||
+            topicCategories[topicCategoryOf(node)] ||
+            node.category}
       </p>
       <div className="map-detail-title-row">
         <h3>{node.title}</h3>
@@ -85,7 +90,11 @@ export default function MapDetails({ node }: { node: MapNodeData }) {
         {counts.length ? (
           counts.map(([category, count]) => (
             <span key={category} data-category={category}>
-              {categoryLabels[category as keyof typeof categoryLabels] || category} {count}
+              {snapshot.data?.categories?.find((c) => c.kind === 'entry' && c.key === category)
+                ?.label ||
+                categoryLabels[category] ||
+                category}{' '}
+              {count}
             </span>
           ))
         ) : (
@@ -159,7 +168,13 @@ export default function MapDetails({ node }: { node: MapNodeData }) {
         <button
           className="map-thread-button"
           type="button"
-          disabled={disabled}
+          disabled={
+            disabled ||
+            (snapshot.data?.categories !== undefined &&
+              !snapshot.data.categories.some(
+                (c) => c.kind === 'entry' && c.key === 'practice' && c.active,
+              ))
+          }
           onClick={() => controller.openEntry(node.id, true)}
         >
           + Practice

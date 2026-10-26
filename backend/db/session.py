@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine, URL, make_url
 from sqlalchemy.orm import sessionmaker
 
@@ -23,7 +23,14 @@ def create_database_engine(value: str | URL, **kwargs) -> Engine:
         options = connect_args.get("options", url.query.get("options", ""))
         connect_args["options"] = f"{options} -c timezone=UTC".strip()
     kwargs.setdefault("hide_parameters", True)
-    return create_engine(url, connect_args=connect_args, **kwargs)
+    result = create_engine(url, connect_args=connect_args, **kwargs)
+    if url.get_backend_name() == "sqlite":
+
+        @event.listens_for(result, "connect")
+        def enable_foreign_keys(dbapi_connection, connection_record):
+            dbapi_connection.execute("PRAGMA foreign_keys=ON")
+
+    return result
 
 
 engine = create_database_engine(settings.database_url)

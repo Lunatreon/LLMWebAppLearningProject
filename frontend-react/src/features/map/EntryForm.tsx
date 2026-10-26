@@ -18,18 +18,27 @@ export default function EntryForm({ popup }: { popup: Exclude<MapPopup, { kind: 
     practice = task || entry?.category === 'practice';
   const [text, setText] = useState(entry?.text || ''),
     [target, setTarget] = useState(node?.kind === 'topic' ? node.id : '');
-  const [category, setCategory] = useState<EntryCategory>(entry?.category || 'own_perception');
+  const labels = snapshot.data?.categories
+    ? Object.fromEntries(
+        snapshot.data.categories
+          .filter((c) => c.kind === 'entry' && (c.active || c.key === entry?.category))
+          .map((c) => [c.key, c.label]),
+      )
+    : categoryLabels;
+  const categories = Object.keys(labels).filter(
+    (key) => key !== 'practice' && (key !== 'merged_topic' || entry?.category === key),
+  );
+  const [category, setCategory] = useState<EntryCategory>(
+    entry?.category ||
+      (Object.hasOwn(labels, 'own_perception')
+        ? 'own_perception'
+        : categories[0] || 'own_perception'),
+  );
+  const [completion, setCompletion] = useState(entry?.completion_percent?.toString() || '');
+  const [workingOn, setWorkingOn] = useState(entry?.working_on ?? false);
   const { controls, bind } = useDialogControls();
   const input = useRef<HTMLTextAreaElement>(null);
   const busy = Boolean(snapshot.pending.length);
-  const categories: EntryCategory[] = [
-    'own_perception',
-    'value',
-    'body_signal',
-    'evidence',
-    'inherited_script',
-  ];
-  if (entry?.category === 'merged_topic') categories.unshift('merged_topic');
   let dialogLabel: string;
   let heading: string;
   let submitLabel: string;
@@ -79,6 +88,12 @@ export default function EntryForm({ popup }: { popup: Exclude<MapPopup, { kind: 
               {
                 category: practice ? 'practice' : category,
                 text: text.trim(),
+                ...(workingOn !== Boolean(entry?.working_on) ? { working_on: workingOn } : {}),
+                ...(completion !== ''
+                  ? { completion_percent: Number(completion) }
+                  : entry?.completion_percent != null
+                    ? { completion_percent: null }
+                    : {}),
                 topic_space_id: target || null,
               },
               popup.nodeId,
@@ -99,7 +114,7 @@ export default function EntryForm({ popup }: { popup: Exclude<MapPopup, { kind: 
           >
             {categories.map((value) => (
               <option key={value} value={value}>
-                {categoryLabels[value]}
+                {labels[value]}
               </option>
             ))}
           </select>
@@ -119,6 +134,28 @@ export default function EntryForm({ popup }: { popup: Exclude<MapPopup, { kind: 
             </option>
           ))}
         </select>
+        <label>
+          <input
+            ref={bind}
+            type="checkbox"
+            checked={workingOn}
+            onChange={(event) => setWorkingOn(event.target.checked)}
+          />
+          Working on
+        </label>
+        <label>
+          Completion (%)
+          <input
+            ref={bind}
+            type="number"
+            min={0}
+            max={100}
+            step={1}
+            aria-label="Completion percentage"
+            value={completion}
+            onChange={(event) => setCompletion(event.target.value)}
+          />
+        </label>
         <textarea
           aria-describedby="map-entry-error"
           ref={(node) => {

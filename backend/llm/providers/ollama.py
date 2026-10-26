@@ -18,6 +18,7 @@ from backend.llm.json_response import parse_json_response, raise_bad_gateway
 from backend.llm.responses import (
     CHAT_RESPONSE_SCHEMA,
     TOPIC_RESPONSE_SCHEMA,
+    topic_response_schema,
     chat_result_from_payload,
     topic_result_from_payload,
 )
@@ -26,7 +27,7 @@ from backend.llm.streaming import (
     top_level_json_string_value_start,
 )
 from backend.llm.types import ChatLLMResult, TextChunkCallback, TopicLLMResult
-from backend.llm.prompts import read_system_prompt
+from backend.llm.prompts import llm_system_prompt as read_system_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -475,7 +476,7 @@ class OllamaTopicLLMClient(OllamaBaseClient):
             "user_payload": topic_request_payload(
                 chat_info, matched_patterns, topic_hint, available_topics
             ),
-            "response_schema": TOPIC_RESPONSE_SCHEMA,
+            "response_schema": topic_response_schema(),
             "temperature": 0.2,
         }
         try:

@@ -30,6 +30,16 @@ Generate a separate value for each of `SECRET_KEY`, `POSTGRES_PASSWORD` and
 docker run --rm --entrypoint python feely-backend -c 'import secrets; print(secrets.token_urlsafe(48))'
 ```
 
+Generate an independent map-content key:
+
+```sh
+docker run --rm --entrypoint python feely-backend -c 'import base64,secrets; print(base64.b64encode(secrets.token_bytes(32)).decode())'
+```
+
+Store it under the active ID in `CONTENT_ENCRYPTION_KEYS` and preserve the key ring
+across updates/restores. Database dumps do not contain the decryption keys; protect
+a separate recovery copy of the private environment. Do not reuse the signing key.
+
 Edit `.env.production`. Preserve the signing key across updates and restores.
 Set `DATABASE_URL` to use the application DB role/password, not the bootstrap
 administrator. Use URL-safe passwords or URL-encode the password in that URL.

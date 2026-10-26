@@ -9,7 +9,7 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
-from sqlalchemy import inspect, select, text
+from sqlalchemy import Integer, inspect, select, text
 from sqlalchemy.orm import Session
 
 from backend.core.config import settings
@@ -165,6 +165,14 @@ def migration_source(tmp_path):
                     if isinstance(column.type, LegacyDateTime) and not column.nullable:
                         row[column.name] = AT
                 connection.execute(table.insert(), row)
+        from alembic.operations import Operations
+        from migrations.chat_storage_v2 import upgrade_chat_storage
+
+        upgrade_chat_storage(Operations(MigrationContext.configure(connection)))
+        from migrations.map_storage_v3 import migrate_profiles
+        from backend.models.map import TABLES as MAP_TABLES
+
+        migrate_profiles(connection, MAP_TABLES)
     engine.dispose()
     return path
 
@@ -186,7 +194,7 @@ def test_initial_revision_matches_metadata_on_sqlite(tmp_path):
             config.attributes["connection"] = connection
             command.upgrade(config, "head")
             assert compare_metadata(MigrationContext.configure(connection), Base.metadata) == []
-            assert len(inspect(connection).get_table_names()) == 12  # Eleven domain tables plus Alembic's version.
+            assert len(inspect(connection).get_table_names()) == len(Base.metadata.tables) + 1
     finally:
         engine.dispose()
 
@@ -249,6 +257,7 @@ def test_source_validation_rejects_sqlite_permissiveness(migration_source, state
     engine = create_database_engine(f"sqlite:///{migration_source}")
     try:
         with engine.begin() as connection:
+            connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
             connection.exec_driver_sql(statement)
     finally:
         engine.dispose()
@@ -296,11 +305,11 @@ def test_verifier_detects_lost_or_changed_data(migration_source, change):
     elif change == "journal":
         target["journal_entries"].clear()
     elif change == "map_entry":
-        profile["self_authorship_map"]["topic_spaces"][1]["entries"].clear()
+        target["map_entries"].clear()
     elif change == "map_relationship":
-        profile["self_authorship_map"]["topic_spaces"][1]["parent_topic_id"] = None
+        target["map_topics"][1]["parent_topic_id"] = None
     elif change == "chat_history":
-        target["chat_sessions"][0]["info"]["messages"].pop()
+        target["chat_turns"][0]["user_input"] = "Changed history"
     with pytest.raises(MigrationValidationError):
         verify_rows(source, target)
 
@@ -315,16 +324,24 @@ def test_postgres_copy_round_trip_counts_values_and_sequences(
     source = read_source(migration_source, assume_naive_utc=True)
     counts = copy_to_postgres(source, database_engine)
     assert all(row["source"] == row["destination"] for row in counts.values())
-    assert sum(row["source"] for row in counts.values()) == 11
+    assert sum(row["source"] for row in counts.values()) == sum(
+        len(rows) for rows in source.values()
+    )
     with database_engine.connect() as connection:
         require_target_schema(connection)
         verify_rows(source, read_target(connection))
         for table in Base.metadata.sorted_tables:
+            if (
+                "id" not in table.c
+                or len(table.primary_key.columns) != 1
+                or not isinstance(table.c.id.type, Integer)
+            ):
+                continue
             value = connection.scalar(
                 text("SELECT nextval(pg_get_serial_sequence(:table_name, 'id'))"),
                 {"table_name": table.name},
             )
-            assert value > max(row["id"] for row in source[table.name])
+            assert value > max((row["id"] for row in source[table.name]), default=0)
     with pytest.raises(MigrationValidationError, match="empty"):
         copy_to_postgres(source, database_engine)
     assert sha256(migration_source.read_bytes()).digest() == before
@@ -349,7 +366,16 @@ def test_postgres_failed_verification_rolls_back_all_inserts(
     with pytest.raises(MigrationValidationError, match="destination value"):
         copy_to_postgres(source, database_engine)
     with database_engine.connect() as connection:
-        assert all(not connection.execute(select(t)).first() for t in Base.metadata.sorted_tables)
+        assert all(
+            not connection.execute(select(t)).first()
+            for t in Base.metadata.sorted_tables
+            if t.name != "map_categories"
+        )
+        from migrations.map_schema_v3 import category_rows
+
+        assert len(list(connection.execute(select(Base.metadata.tables["map_categories"])))) == len(
+            category_rows()
+        )
 
 
 def test_source_rejects_broken_embedded_map_relationship(migration_source):
@@ -357,7 +383,10 @@ def test_source_rejects_broken_embedded_map_relationship(migration_source):
 
     source = read_source(migration_source, assume_naive_utc=True)
     data = source["user_profiles"][0]["data"]
-    data["self_authorship_map"]["topic_spaces"][1]["parent_topic_id"] = "missing-topic"
+    data["self_authorship_map"] = {
+        "topic_spaces": [{"id": "child", "parent_topic_id": "missing-topic", "entries": []}],
+        "unassigned_entries": [],
+    }
     engine = create_database_engine(f"sqlite:///{migration_source}")
     try:
         with engine.begin() as connection:

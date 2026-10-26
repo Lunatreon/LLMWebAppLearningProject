@@ -65,7 +65,8 @@ For a native SQLite database created by the old create_all startup path:
 .\.venv\Scripts\python.exe -m scripts.migrate_chat_storage
 ```
 
-On macOS/Linux use `.venv/bin/python`. The native helper reads DATABASE_URL from
+On macOS/Linux use `.venv/bin/python`. The legacy SQLite helper now upgrades chat and map storage together. Configure
+the content-encryption key ring before running it. It reads DATABASE_URL from
 the root .env, creates a private SQLite backup next to the source file and reserves
 an exclusive writer lock for conversion. It preserves an unversioned database's
 status instead of guessing/stamping an initial Alembic revision. If the database

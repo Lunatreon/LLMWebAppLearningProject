@@ -14,15 +14,24 @@ export default function MapPage() {
   const allowed =
     session.status === 'authenticated' && hasMapAccess(session.subscription) && !snapshot.denied;
   const topics = snapshot.data?.topic_spaces || [];
+  const categoryFilters: Record<string, string> = snapshot.data?.categories
+    ? Object.fromEntries(
+        snapshot.data.categories
+          .filter(
+            (c) => c.kind === 'topic' && (c.active || topics.some((t) => t.category === c.key)),
+          )
+          .map((c) => [c.key, c.label]),
+      )
+    : plurals;
   const active = snapshot.data
     ? mapNodes(snapshot.data).find((node) => node.id === snapshot.selected)
     : null;
   const summary = topics.length
-    ? Object.entries(plurals)
+    ? Object.entries(categoryFilters)
         .map(([category, plural]) => {
           const count = topics.filter((topic) => topicCategoryOf(topic) === category).length;
           return count
-            ? `${count} ${count === 1 ? topicCategories[category as keyof typeof topicCategories].toLowerCase() : plural.toLowerCase()}`
+            ? `${count} ${count === 1 ? (snapshot.data?.categories?.find((c) => c.kind === 'topic' && c.key === category)?.label || topicCategories[category] || category).toLowerCase() : plural.toLowerCase()}`
             : null;
         })
         .filter(Boolean)
@@ -97,16 +106,18 @@ export default function MapPage() {
               <div className="map-toolbar">
                 <p className="map-topic-summary">{summary}</p>
                 <div className="map-topic-filters" role="group" aria-label="Filter map topics">
-                  {[['all', 'Everything'], ...Object.entries(plurals)].map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      aria-pressed={snapshot.filter === value}
-                      onClick={() => controller.filter(value as MapFilter)}
-                    >
-                      {label}
-                    </button>
-                  ))}
+                  {[['all', 'Everything'], ...Object.entries(categoryFilters)].map(
+                    ([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        aria-pressed={snapshot.filter === value}
+                        onClick={() => controller.filter(value as MapFilter)}
+                      >
+                        {label}
+                      </button>
+                    ),
+                  )}
                 </div>
               </div>
               <MapCanvas />

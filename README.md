@@ -61,3 +61,7 @@ React boundaries and [the LLM guide](backend/llm/README.md) for model integratio
 For configuration beyond local defaults, use [feature settings](docs/FEATURES.md),
 [email setup](docs/EMAIL_SETUP.md), [database migration](docs/DATABASE_MIGRATION.md)
 and [production deployment](docs/DEPLOYMENT_PRODUCTION.md).
+
+Inspect the [complete database schema](docs/DATABASE_SCHEMA.md),
+[map storage](docs/MAP_DATABASE_SCHEMA.md) and [design review](docs/DATABASE_REVIEW.md)
+for the relational model and remaining improvement areas.

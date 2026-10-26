@@ -46,9 +46,22 @@ def test_default_compose_starts_complete_app_without_profiles(tmp_path):
     environment["FEELY_DOCKER_ENV_FILE"] = str(target)
     root = Path(__file__).resolve().parents[1]
     result = subprocess.run(
-        ["docker", "compose", "--env-file", str(target), "-f", str(root / "compose.yml"),
-         "config", "--format", "json"],
-        cwd=root, env=environment, capture_output=True, text=True, timeout=30,
+        [
+            "docker",
+            "compose",
+            "--env-file",
+            str(target),
+            "-f",
+            str(root / "compose.yml"),
+            "config",
+            "--format",
+            "json",
+        ],
+        cwd=root,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
     # Never expose the rendered configuration or raw errors: they contain secrets.
     assert result.returncode == 0, "Local Compose configuration failed"
@@ -58,8 +71,11 @@ def test_default_compose_starts_complete_app_without_profiles(tmp_path):
     for name in ("frontend", "backend"):
         build = services[name]["build"]
         assert (Path(build["context"]) / build["dockerfile"]).is_file()
-    assert all(port["host_ip"] == "127.0.0.1"
-               for service in services.values() for port in service.get("ports", []))
+    assert all(
+        port["host_ip"] == "127.0.0.1"
+        for service in services.values()
+        for port in service.get("ports", [])
+    )
     assert not services["postgres"].get("ports")
 
 
@@ -68,7 +84,11 @@ def test_snapshot_contains_all_tables_valid_credentials_and_never_overwrites(tmp
     create_snapshot(path)
     before = path.read_bytes()
     rows = read_source(path, assume_naive_utc=True)
-    assert len(rows) == 11 and all(len(table) == 1 for table in rows.values())
+    from backend.db.base import Base
+
+    assert set(rows) == set(Base.metadata.tables)
+    assert len(rows["map_topics"]) == len(rows["map_entries"]) == 1
+    assert "self_authorship_map" not in rows["user_profiles"][0]["data"]
     assert rows["users"][0]["id"] == 42
     assert verify_password(SNAPSHOT_PASSWORD, rows["users"][0]["hashed_password"])
     assert rows["users"][0]["is_email_verified"] is True

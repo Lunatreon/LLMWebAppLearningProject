@@ -24,3 +24,8 @@ replicas. Keep dependencies updated and configure any external edge protections
 for your own deployment. A Cloudflare tunnel or WAF is not required by this stack.
 Back up the database, prompt edits and recovery configuration separately; see the
 production guide. Keep private environment files and backups out of source control.
+
+Map text fields now use authenticated encryption with a separately configured key
+ring. This does not encrypt chat, feedback or mailbox content; consult
+[map storage](MAP_DATABASE_SCHEMA.md) and [the database review](DATABASE_REVIEW.md)
+for the precise scope and recovery requirements.

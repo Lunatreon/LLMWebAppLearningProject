@@ -21,6 +21,8 @@ Start with [Docker startup](../deployment/README.md) and [the project map](../RE
 
 - [Feature settings and API flows](FEATURES.md).
 - [Map and self-authorship](SELF_AUTHORSHIP.md), [topic categories](TOPIC_CATEGORIES.md).
+- [Relational map storage, categories, completion and encryption](MAP_DATABASE_SCHEMA.md).
+- [Complete database schema](DATABASE_SCHEMA.md) and [design review](DATABASE_REVIEW.md).
 - [Chat controls and free phase](chat-controls-and-free-phase.md).
 - [Terms publishing](AGB_SETUP.md), [Android and Terms](ANDROID_AND_TERMS.md).
 - [Visual design](BRIGHT_DESIGN.md).

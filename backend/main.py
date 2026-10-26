@@ -2,6 +2,8 @@ import asyncio
 from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+from backend.services.map_storage import MapConflictError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -56,6 +58,10 @@ def create_app(init_database: bool = True) -> FastAPI:
         docs_url="/docs" if settings.api_docs_enabled else None,
         redoc_url=None,
     )
+
+    @app.exception_handler(MapConflictError)
+    async def map_conflict(request, error):
+        return JSONResponse(status_code=409, content={"detail": str(error)})
 
     app.add_middleware(BasicAuthMiddleware)
     app.add_middleware(

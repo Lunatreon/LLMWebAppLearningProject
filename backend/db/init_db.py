@@ -1,5 +1,5 @@
 from pathlib import Path
-from sqlalchemy import inspect
+from sqlalchemy import inspect, select
 
 from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
@@ -24,6 +24,17 @@ def init_db() -> None:
             raise RuntimeError(
                 "Legacy chat storage needs migration. Stop the backend and run python -m scripts.migrate_chat_storage (creates a SQLite backup), or alembic upgrade head for a versioned database."
             )
+    if "user_profiles" in inspector.get_table_names():
+        from backend.models.user import UserProfile
+
+        with engine.connect() as connection:
+            if any(
+                isinstance(data, dict) and "self_authorship_map" in data
+                for data in connection.execute(select(UserProfile.__table__.c.data)).scalars()
+            ):
+                raise RuntimeError(
+                    "Legacy map storage needs migration. Stop the backend and run python -m scripts.migrate_chat_storage with the content key configured (creates a SQLite backup)."
+                )
     Base.metadata.create_all(bind=engine)
     ensure_sqlite_user_columns()
 

@@ -20,6 +20,20 @@ export default function TopicReview({
   const { controller, snapshot } = useChat(),
     map = useMap();
   const spaces = snapshot.mapAccess ? map.snapshot.data?.topic_spaces || [] : [];
+  const topicChoices = map.snapshot.data?.categories
+    ? Object.fromEntries(
+        map.snapshot.data.categories
+          .filter((c) => c.kind === 'topic' && c.active)
+          .map((c) => [c.key, c.label]),
+      )
+    : topicCategories;
+  const entryChoices = map.snapshot.data?.categories
+    ? Object.fromEntries(
+        map.snapshot.data.categories
+          .filter((c) => c.kind === 'entry' && c.active && c.key !== 'merged_topic')
+          .map((c) => [c.key, c.label]),
+      )
+    : entryCategories;
   const [title, setTitle] = useState(suggestion.topic),
     [description, setDescription] = useState(suggestion.description);
   const [target, setTarget] = useState(
@@ -122,7 +136,7 @@ export default function TopicReview({
             <div className="topic-field">
               <span>Topic type</span>
               <div className="topic-type-choices" role="radiogroup" aria-label="Topic type">
-                {Object.entries(topicCategories).map(([value, label]) => (
+                {Object.entries(topicChoices).map(([value, label]) => (
                   <label key={value}>
                     <input
                       aria-describedby="topic-review-error"
@@ -251,7 +265,7 @@ export default function TopicReview({
               value={entryCategory}
               onChange={(event) => setEntryCategory(event.target.value as EntryCategory)}
             >
-              {Object.entries(entryCategories).map(([value, label]) => (
+              {Object.entries(entryChoices).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
                 </option>

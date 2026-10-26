@@ -66,3 +66,10 @@ in Python code. Loading and saving live in `backend/llm/prompts.py`.
 If a file is missing or empty, model requests fail with a prompt
 configuration error; the admin editor shows an empty field so an administrator can restore and
 save the prompt.
+
+## Map category catalog
+
+Use **Map categories** on `/admin.html` to add topic/entry kinds, change labels and
+descriptions, enable completion tracking or control LLM availability. Keys remain
+stable; disable categories instead of deleting ones used by saved records. Changes
+apply to the next map load/model request. See [map storage](MAP_DATABASE_SCHEMA.md).

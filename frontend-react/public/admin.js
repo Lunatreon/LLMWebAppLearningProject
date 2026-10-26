@@ -33,6 +33,68 @@ const newPassword = document.querySelector('#admin-new-password');
 const subscriptionState = document.querySelector('#admin-subscription-state');
 const removeSubscription = document.querySelector('#remove-subscription');
 
+let mapCategoryRows = [];
+async function loadMapCategories() {
+  const token = adminToken;
+  const rows = await api('/admin/map/categories', { headers: authHeaders() });
+  if (adminToken !== token) return;
+  mapCategoryRows = rows;
+  const select = document.querySelector('#map-category-select');
+  select.replaceChildren(new Option('New category', ''));
+  rows.forEach((row) =>
+    select.append(
+      new Option(
+        `${row.kind}: ${row.label}${row.active ? '' : ' (disabled)'}`,
+        `${row.kind}/${row.key}`,
+      ),
+    ),
+  );
+}
+const mapCategoryForm = document.querySelector('#map-category-form');
+document.querySelector('#map-category-select').addEventListener('change', (event) => {
+  mapCategoryForm.reset();
+  const row = mapCategoryRows.find((row) => `${row.kind}/${row.key}` === event.target.value);
+  mapCategoryForm.elements.key.readOnly = Boolean(row);
+  mapCategoryForm.elements.kind.disabled = Boolean(row);
+  if (!row) return;
+  for (const field of ['kind', 'key', 'label', 'description', 'position'])
+    mapCategoryForm.elements[field].value = row[field];
+  for (const field of ['active', 'llm_enabled', 'supports_completion'])
+    mapCategoryForm.elements[field].checked = row[field];
+});
+mapCategoryForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const button = mapCategoryForm.querySelector('button[type="submit"]');
+  button.disabled = true;
+  try {
+    const elements = mapCategoryForm.elements;
+    const body = {
+      label: elements.label.value,
+      description: elements.description.value,
+      position: Number(elements.position.value),
+    };
+    for (const field of ['active', 'llm_enabled', 'supports_completion'])
+      body[field] = elements[field].checked;
+    await api(
+      `/admin/map/categories/${encodeURIComponent(elements.kind.value)}/${encodeURIComponent(elements.key.value)}`,
+      {
+        method: 'PUT',
+        headers: authHeaders(),
+        body: JSON.stringify(body),
+      },
+    );
+    await loadMapCategories();
+    mapCategoryForm.reset();
+    elements.key.readOnly = false;
+    elements.kind.disabled = false;
+    setStatus('Category saved. New map loads and model calls use the updated catalog.');
+  } catch (error) {
+    setStatus(error.message, true);
+  } finally {
+    button.disabled = false;
+  }
+});
+
 function authHeaders() {
   return { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' };
 }
@@ -262,7 +324,7 @@ loginForm.addEventListener('submit', async (event) => {
     adminToken = response.access_token;
     localStorage.setItem('feely_admin_token', adminToken);
     showAdmin();
-    await Promise.all([loadUsers(), loadPrompts(), loadFeedback()]);
+    await Promise.all([loadUsers(), loadPrompts(), loadFeedback(), loadMapCategories()]);
     setStatus('Administration ready.');
   } catch (error) {
     loginError.textContent = error.message;
@@ -286,7 +348,7 @@ async function start() {
   try {
     const status = await api('/admin/status', { headers: authHeaders() });
     showAdmin();
-    await Promise.all([loadUsers(), loadPrompts(), loadFeedback()]);
+    await Promise.all([loadUsers(), loadPrompts(), loadFeedback(), loadMapCategories()]);
     setStatus(`Administration ready · ${status.username}`);
   } catch (error) {
     adminToken = null;

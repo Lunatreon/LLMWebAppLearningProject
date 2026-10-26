@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     admin_password_hash: str | None = None
     admin_access_token_expire_minutes: int = 120
     secret_key: str = "change-this-secret-before-deploying"
+    content_encryption_keys: dict[str, str] = Field(default_factory=dict)
+    content_encryption_key_id: str = Field(
+        default="primary", min_length=1, max_length=80, pattern=r"^[a-zA-Z0-9_-]+$"
+    )
     access_token_expire_minutes: int = 60 * 24
     database_url: str = "sqlite:///./feely.db"
     cors_origins: list[str] = Field(
@@ -154,6 +158,9 @@ class Settings(BaseSettings):
             raise RuntimeError(
                 "SECRET_KEY must be a unique random value of at least 32 characters."
             )
+        from backend.core.content_crypto import validate_content_keys
+
+        validate_content_keys(self)
         if self.is_local_environment:
             return
 

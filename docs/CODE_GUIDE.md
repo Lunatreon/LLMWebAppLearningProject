@@ -35,7 +35,7 @@ React feature -> API client -> FastAPI route -> service -> SQLAlchemy -> databas
 | --- | --- |
 | Registration, login, activation, recovery | `backend/api/routes/auth.py`, `backend/services/email_verification.py`, `backend/services/password_reset.py`; React `features/auth/` |
 | Chat and streaming | `backend/api/routes/llm.py`, `backend/llm/`; React `features/chat/` |
-| Map, topics and reflection | `backend/services/self_authorship.py`, `backend/api/routes/users.py`; React `features/map/`, `features/reflection/` |
+| Map, topics and reflection | `backend/services/self_authorship.py`, `backend/services/map_storage.py`, `backend/models/map.py`, `backend/api/routes/users.py`; React `features/map/`, `features/reflection/` |
 | Billing and premium access | `backend/services/billing.py`, `backend/api/routes/billing.py`; React `features/account/` |
 | Terms | `backend/services/terms.py`, `backend/api/routes/terms.py`, `frontend-react/public/legal/` |
 | Feedback | `backend/api/routes/feedback.py`, `backend/services/feedback_notifications.py`; React `features/feedback/` |
@@ -108,3 +108,6 @@ prerequisites; see [the script index](../scripts/README.md).
 
 The local `app` profile serves a compiled React build through Caddy. For live
 reload, run host Vite against the base Docker stack as described in startup.
+
+The complete [database schema](DATABASE_SCHEMA.md) is generated from metadata;
+[the design review](DATABASE_REVIEW.md) records remaining normalization and encryption work.
