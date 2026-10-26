@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import shutil
 
 import httpx
 import pytest
@@ -15,7 +16,8 @@ from backend.core.production import public_https_url
 from backend.llm.providers.openai import OpenAIChatLLMClient
 from backend.main import create_app
 from scripts.production_ci import create_fixture
-from scripts.production_config import load_production, write_backend_environment
+from deployment.production import load_production, write_backend_environment
+from deployment.production import check_compose, compose_command
 
 
 @pytest.fixture
@@ -38,6 +40,14 @@ def test_valid_production_config_never_loads_host_credentials(production, monkey
     assert "POSTGRES_APP_PASSWORD=" not in backend
     assert "POSTGRES_PASSWORD=" not in backend
     assert config.secret_key in backend
+
+
+@pytest.mark.skipif(not shutil.which("docker"), reason="Docker CLI is not installed")
+def test_production_compose_after_docker_file_consolidation(production):
+    config, values, folder = production
+    command, environment = compose_command(folder / ".env.production", values)
+    model = check_compose(config, values, command, environment)
+    assert set(model["services"]) == {"backend", "postgres", "caddy"}
 
 
 @pytest.mark.parametrize(
@@ -265,3 +275,15 @@ def test_openai_error_body_never_reaches_logs_or_traceback_message(monkeypatch, 
     asyncio.run(check())
     assert private not in caplog.text
     assert "BadRequestError" in caplog.text
+
+
+def test_production_webmail_supports_imap_without_cloudflare(production):
+    config, _, _ = production
+    config = config.model_copy(update={
+        "webmail_enabled": True, "webmail_provider": "imap",
+        "webmail_imap_host": "mail.your-server.de", "webmail_imap_username": "info@example.com",
+        "webmail_imap_password": "private-mailbox-password",
+    })
+    config.validate_runtime_security()
+    with pytest.raises(RuntimeError, match="IMAP"):
+        config.model_copy(update={"webmail_imap_password": ""}).validate_runtime_security()

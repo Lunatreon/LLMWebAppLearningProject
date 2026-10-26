@@ -10,7 +10,7 @@ import subprocess
 import sys
 
 from scripts.docker_integration import leaked_secrets, poll, redact
-from scripts.production_config import (
+from deployment.production import (
     ROOT,
     check_compose,
     compose_command,
@@ -43,7 +43,7 @@ def create_fixture(directory, project):
         "terms-document.pdf": "terms.pdf",
         "64-lowercase-hex-digest-of-the-published-document": "a" * 64,
     }
-    text = (ROOT / ".env.production.example").read_text(encoding="utf-8")
+    text = (ROOT / "deployment/.env.production.example").read_text(encoding="utf-8")
     for name, value in replacements.items():
         text = text.replace(f"<{name}>", value)
     target = directory / ".env.production.backend"

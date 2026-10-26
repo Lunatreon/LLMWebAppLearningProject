@@ -15,7 +15,6 @@ COPY migrations/ ./migrations/
 COPY alembic.ini ./
 COPY deployment/__init__.py deployment/entrypoint.py deployment/healthcheck.py ./deployment/
 COPY scripts/database_migration.py ./scripts/
-COPY docs/pattern_recognition.txt ./docs/
 COPY --chown=10001:10001 prompts/ ./prompts/
 
 USER 10001:10001

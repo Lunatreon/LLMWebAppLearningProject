@@ -12,14 +12,19 @@ ADMIN_ACCESS_TOKEN_EXPIRE_MINUTES=120
 PROMPT_DIRECTORY="prompts"
 ```
 
-Create or change the administrator credentials interactively:
+Create or change administrator credentials with the backend image. From
+repository-root PowerShell after building the Docker app:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\set_admin_password.py --username admin
+docker run --rm -it --entrypoint python --mount "type=bind,source=$($PWD.Path),target=/workspace" --workdir /workspace feely-local-backend scripts/set_admin_password.py --env-file .env.docker --username admin
+docker compose --env-file .env.docker up -d backend
 ```
 
-The command requests the password twice without echoing it and saves only a PBKDF2 hash. Restart
-FastAPI afterward, then open `/admin.html`. Do not add a plaintext admin password to `.env`.
+The command requests the password twice without echoing it and stores only a
+PBKDF2 hash. Then open `/admin.html`. For a public server, use the matching image,
+`.env.production` and preparation/recreation steps in
+[server deployment](DEPLOYMENT_PRODUCTION.md). Linux bind mounts should use your
+host UID/GID as shown there. Do not store a plaintext administrator password.
 
 The page can:
 

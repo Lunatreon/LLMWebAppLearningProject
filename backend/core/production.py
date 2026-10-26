@@ -179,9 +179,17 @@ def validate_production_config(config) -> None:
         ):
             if not public_https_url(value or ""):
                 raise RuntimeError("Stripe return URLs must be configured public HTTPS URLs.")
-    if config.webmail_enabled and (
+    if config.webmail_enabled and config.incoming_mail_provider == "imap" and not all(
+        configured(value) for value in (
+            config.webmail_imap_host, config.webmail_imap_username,
+            config.webmail_imap_password, config.webmail_imap_folder,
+        )
+    ):
+        raise RuntimeError("WEBMAIL_ENABLED requires IMAP host, username, password and folder.")
+    if config.webmail_enabled and config.incoming_mail_provider == "cloudflare" and (
         not public_https_url(config.webmail_worker_url)
         or not configured(config.webmail_bridge_secret)
+        or len(config.webmail_bridge_secret) < 32
     ):
         raise RuntimeError(
             "WEBMAIL_ENABLED requires an HTTPS WEBMAIL_WORKER_URL and WEBMAIL_BRIDGE_SECRET."

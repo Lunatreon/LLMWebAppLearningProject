@@ -1,6 +1,5 @@
 # Allow only the backend runtime inputs. Local secrets/data/frontends never enter the build context.
 *
-!Dockerfile
 !requirements.txt
 !alembic.ini
 !backend/
@@ -9,6 +8,7 @@
 !migrations/**
 !deployment/
 deployment/**
+!deployment/backend.Dockerfile
 !deployment/__init__.py
 !deployment/entrypoint.py
 !deployment/healthcheck.py
@@ -18,9 +18,6 @@ scripts/**
 !prompts/
 prompts/**
 !prompts/*.txt
-!docs/
-docs/**
-!docs/pattern_recognition.txt
 **/__pycache__/
 **/*.pyc
 **/*.pyo

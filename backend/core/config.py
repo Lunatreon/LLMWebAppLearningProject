@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -83,6 +84,13 @@ class Settings(BaseSettings):
     feedback_email_to: str | None = None
     webmail_enabled: bool = False
     webmail_address: str = "info@feel-y.com"
+    webmail_provider: Literal["imap", "cloudflare"] | None = None
+    webmail_imap_host: str = ""
+    webmail_imap_port: int = Field(default=993, ge=1, le=65535)
+    webmail_imap_username: str = ""
+    webmail_imap_password: str = ""
+    webmail_imap_folder: str = "INBOX"
+    webmail_imap_use_ssl: bool = True
     webmail_worker_url: str = ""
     webmail_bridge_secret: str = ""
     password_reset_enabled: bool = False
@@ -186,6 +194,11 @@ class Settings(BaseSettings):
         from backend.core.production import validate_production_config
 
         validate_production_config(self)
+
+    @property
+    def incoming_mail_provider(self) -> str:
+        # Existing Cloudflare installations need no environment-file migration.
+        return self.webmail_provider or ("cloudflare" if self.webmail_worker_url else "imap")
 
     @property
     def email_delivery_configured(self) -> bool:

@@ -1,6 +1,10 @@
 """Deployment checks must fail safely without changing application contracts."""
 
 from io import BytesIO
+import json
+import os
+from pathlib import Path
+import shutil
 import subprocess
 import time
 
@@ -10,7 +14,7 @@ import pytest
 from backend.core.config import Settings, settings
 from backend.db.session import database_url
 from deployment import entrypoint, healthcheck
-from scripts.setup_docker_env import create_environment
+from deployment.setup import create_environment
 from scripts.create_deployment_snapshot import create_snapshot, SNAPSHOT_PASSWORD
 from scripts.database_migration import read_source
 from backend.core.security import verify_password
@@ -31,6 +35,32 @@ def test_docker_environment_generation_is_separate_and_never_overwrites(tmp_path
     assert (
         host_config.read_text() == 'DATABASE_URL="sqlite:///original.db"\nSECRET_KEY="existing"\n'
     )
+
+
+@pytest.mark.skipif(not shutil.which("docker"), reason="Docker CLI is not installed")
+def test_default_compose_starts_complete_app_without_profiles(tmp_path):
+    target = tmp_path / ".env.docker"
+    create_environment(target)
+    values = dotenv_values(target)
+    environment = {key: value for key, value in os.environ.items() if key not in values}
+    environment["FEELY_DOCKER_ENV_FILE"] = str(target)
+    root = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        ["docker", "compose", "--env-file", str(target), "-f", str(root / "compose.yml"),
+         "config", "--format", "json"],
+        cwd=root, env=environment, capture_output=True, text=True, timeout=30,
+    )
+    # Never expose the rendered configuration or raw errors: they contain secrets.
+    assert result.returncode == 0, "Local Compose configuration failed"
+    services = json.loads(result.stdout)["services"]
+    assert set(services) == {"frontend", "backend", "postgres", "mailpit"}
+    assert not services["frontend"].get("profiles")
+    for name in ("frontend", "backend"):
+        build = services[name]["build"]
+        assert (Path(build["context"]) / build["dockerfile"]).is_file()
+    assert all(port["host_ip"] == "127.0.0.1"
+               for service in services.values() for port in service.get("ports", []))
+    assert not services["postgres"].get("ports")
 
 
 def test_snapshot_contains_all_tables_valid_credentials_and_never_overwrites(tmp_path):

@@ -1,9 +1,8 @@
 name: feely-local
 
 services:
-  # Optional full application. Omit --profile app when using Vite on the host.
+  # The default stack includes the complete website and API.
   frontend:
-    profiles: [app]
     build:
       context: .
       dockerfile: deployment/frontend.Dockerfile
@@ -24,11 +23,13 @@ services:
     restart: unless-stopped
 
   backend:
-    build: .
+    build:
+      context: .
+      dockerfile: deployment/backend.Dockerfile
     env_file:
       - ${FEELY_DOCKER_ENV_FILE:-.env.docker}
     environment:
-      DATABASE_URL: ${DATABASE_URL:?Run python scripts/setup_docker_env.py and use --env-file .env.docker}
+      DATABASE_URL: ${DATABASE_URL:?Run Docker setup in deployment/README.md and use --env-file .env.docker}
       SECRET_KEY: ${SECRET_KEY:?Configure the local Docker signing secret}
     ports:
       - "127.0.0.1:${FEELY_API_PORT:-8000}:8000"

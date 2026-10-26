@@ -1,6 +1,6 @@
 # Code guide
 
-Start with [Run FeelY](../STARTUP.md) for installation and commands. This guide
+Start with [Docker startup](../deployment/README.md) for installation and commands. This guide
 explains where a change belongs. [Backend structure](BACKEND_STRUCTURE.md) and
 [frontend architecture](../frontend-react/ARCHITECTURE.md) give more detail.
 
@@ -47,9 +47,10 @@ React feature -> API client -> FastAPI route -> service -> SQLAlchemy -> databas
 
 ## Configuration ownership
 
-`backend/core/config.py` loads settings. Root `.env` belongs to native startup;
-`.env.docker` belongs to local Compose. The templates are `.env.example` and
-`deployment/.env.example`. Production has a separate template and preparation tool.
+`backend/core/config.py` loads settings. `.env.docker` belongs to local Compose;
+`.env.production` and its filtered backend file belong to production. Templates
+and setup helpers live in `deployment/`. Existing root `.env` is legacy local
+configuration and is not copied into the Docker images.
 See [feature settings](FEATURES.md) for provider, email and access options.
 
 The React build accepts public settings only. `VITE_API_BASE_URL` defaults to
@@ -57,7 +58,7 @@ The React build accepts public settings only. `VITE_API_BASE_URL` defaults to
 
 Editable prompts live in `prompts/`. In Docker, administrator edits are stored in
 the persistent prompt volume; changing image defaults does not overwrite that
-volume. `docs/pattern_recognition.txt` is loaded by
+volume. `backend/llm/pattern_recognition.txt` is loaded by
 `backend/llm/tasks/pattern_recognition.py` and copied into the backend image.
 
 ## Database startup
@@ -97,7 +98,7 @@ npm ci --prefix frontend-react
 npm test --prefix frontend-react
 npm run build --prefix frontend-react
 node --test tests/terms_draft_ui.test.cjs
-node --test cloudflare/webmail/worker.test.mjs
+node --test deployment/mail/cloudflare/worker.test.mjs
 ```
 
 Python tests use fixtures in `tests/conftest.py`; React tests live in

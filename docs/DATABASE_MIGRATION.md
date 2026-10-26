@@ -1,15 +1,12 @@
 # PostgreSQL portability and migration foundation
 
-For the subsequent backend/PostgreSQL/Mailpit Compose stack and recovery rehearsal,
-see [local deployment](DEPLOYMENT_LOCAL.md). The DB-only setup below remains available.
+For startup use [Docker deployment](../deployment/README.md). Both local and
+production Compose stacks run PostgreSQL; there is no separate database-only stack.
 
 SQLite remains the default. This phase adds an opt-in synchronous PostgreSQL
 path, Alembic schema ownership, isolated database tests and an operator migration
 tool. It does not switch the deployed application or copy/delete the existing
-`feely.db`. Both frontends and HTTP route/schema definitions remain unchanged.
-
-Read the [pre-implementation portability audit](archive/DATABASE_PORTABILITY_AUDIT.md)
-for every column, index, constraint, database caller and transaction workflow.
+`feely.db`. The React frontend uses the same HTTP API for either database.
 
 ## Current model and PostgreSQL target
 
@@ -40,54 +37,22 @@ needed. This is a result adapter, not a schema type change. JSON timestamps are
 copied verbatim. An operator must explicitly acknowledge naive-source UTC via
 `--assume-naive-utc`; historic manual non-UTC writes cannot be inferred safely.
 
-## Driver and configuration
+## Database configuration
 
-Install the existing requirements plus psycopg 3's binary distribution and Alembic:
+The Docker images include psycopg 3 and Alembic. The setup helpers configure
+`DATABASE_URL`; production uses its non-superuser application role. URL-encode
+password characters when building a URL manually. Alembic reads application
+settings without placing credentials in `alembic.ini`.
 
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+To run only the database temporarily for a migration, select the existing service:
+
+```sh
+docker compose --env-file .env.docker up -d postgres
 ```
 
-Supported DATABASE_URL examples (place real credentials in local environment or
-your secret manager, never commit them):
-
-```text
-sqlite:///./feely.db
-postgresql+psycopg://USER:URL_ENCODED_PASSWORD@127.0.0.1:55432/feely_dev
-postgresql://USER:URL_ENCODED_PASSWORD@HOST:5432/feely
-```
-
-Bare postgresql:// and postgres:// select psycopg 3; explicit drivers stay explicit.
-URL-encode password characters. Alembic reads Settings/DATABASE_URL directly,
-without interpolating credentials into alembic.ini. URL connection options are
-retained and UTC is enforced. Sessions stay synchronous, autoflush/autocommit
-remain disabled, and existing request/service transaction ownership is unchanged.
-SQLAlchemy parameter dumps are suppressed to avoid disclosing copied row data.
-
-## Database-only local PostgreSQL
-
-The Compose file runs only PostgreSQL 17, binds localhost, has a health check and
-uses a named development volume. A local password must be explicitly configured.
-
-```powershell
-$env:FEELY_POSTGRES_PASSWORD = 'choose-a-local-development-password'
-docker compose -f compose.db.yml up -d
-docker compose -f compose.db.yml ps
-$env:DATABASE_URL = 'postgresql+psycopg://feely_dev:URL_ENCODED_PASSWORD@127.0.0.1:55432/feely_dev'
-.\.venv\Scripts\python.exe -m alembic upgrade head
-.\.venv\Scripts\python.exe -m alembic check
-.\.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
-```
-
-Use the existing SECRET_KEY/security configuration. `docker compose -f
-compose.db.yml stop` preserves the volume. Do not use `down -v` for a database you
-need to retain. The application itself is not containerized.
-
-Docker was unavailable on the validation workstation. Actual PostgreSQL testing
-used the [official Windows binary distribution](https://www.postgresql.org/download/windows/)
-in a temporary directory, with a fresh loopback-only test cluster on port 55433.
-It used PostgreSQL 17.11, not an emulator. Compose is an equivalent documented
-development path; the Compose container itself has not been run on this machine.
+This uses the same database and volume as the complete app. It does not import
+existing SQLite data. The normal container entrypoint applies Alembic before
+starting the API.
 
 ## Schema migrations and startup
 
@@ -98,16 +63,14 @@ import mutable model definitions. Python defaults are intentionally not turned
 into server defaults; users.role and users.email_verification_attempts retain
 their existing server defaults.
 
-```powershell
-.\.venv\Scripts\python.exe -m alembic current
-.\.venv\Scripts\python.exe -m alembic upgrade head
-.\.venv\Scripts\python.exe -m alembic check
-.\.venv\Scripts\python.exe -m alembic revision --autogenerate -m 'Describe the next schema change'
+```sh
+docker compose --env-file .env.docker exec -T backend python -m alembic current
+docker compose --env-file .env.docker exec -T backend python -m alembic check
 ```
 
 Review generated revisions before applying them. PostgreSQL and nonlocal SQLite
 startup require the current Alembic head and fail with an actionable error if it
-is absent/behind. Startup never upgrades/stamps/creates production tables. Local
+is absent/behind. The Docker entrypoint runs versioned upgrades; the API itself only checks schema state. Local
 SQLite retains its existing create_all and idempotent legacy users-column patch.
 Tests normally retain disposable SQLite initialization; PostgreSQL test schemas
 are built using Alembic, not create_all.
@@ -148,12 +111,16 @@ tests, not a data-preserving production rollback.
    rolls back every inserted row. A second independent read verifies committed
    data; run the standalone verifier again before opening the application.
 
-```powershell
-$env:DATABASE_URL = 'postgresql+psycopg://USER:URL_ENCODED_PASSWORD@HOST:5432/FRESH_TARGET'
-.\.venv\Scripts\python.exe -m alembic upgrade head
-.\.venv\Scripts\python.exe -m scripts.database_migration check-source --source 'C:\backups\feely-snapshot.db' --assume-naive-utc
-.\.venv\Scripts\python.exe -m scripts.database_migration copy --source 'C:\backups\feely-snapshot.db' --assume-naive-utc
-.\.venv\Scripts\python.exe -m scripts.database_migration verify --source 'C:\backups\feely-snapshot.db' --assume-naive-utc
+Mount a stopped, current-schema SQLite snapshot read-only into a one-off backend
+container. The following example uses the local Docker destination; for production
+select its environment and Compose file instead. The destination must be empty.
+
+```sh
+docker compose --env-file .env.docker up -d postgres
+docker compose --env-file .env.docker run --rm --no-deps --entrypoint python backend -m alembic upgrade head
+docker compose --env-file .env.docker run --rm --no-deps --entrypoint python -v /absolute/path/feely-snapshot.db:/backup/source.db:ro backend -m scripts.database_migration check-source --source /backup/source.db --assume-naive-utc
+docker compose --env-file .env.docker run --rm --no-deps --entrypoint python -v /absolute/path/feely-snapshot.db:/backup/source.db:ro backend -m scripts.database_migration copy --source /backup/source.db --assume-naive-utc
+docker compose --env-file .env.docker run --rm --no-deps --entrypoint python -v /absolute/path/feely-snapshot.db:/backup/source.db:ro backend -m scripts.database_migration verify --source /backup/source.db --assume-naive-utc
 ```
 
 Use `--target-url-env NAME` to read another environment variable; credentials are
@@ -247,27 +214,3 @@ registration contract's two fixtures. Use --login-fixture for the existing
 isolated-auth-server.py and validate-login-contract.mjs on port 18006.
 Without the wrapper the same fixture remains disposable SQLite. No real Stripe,
 SMTP or paid LLM providers are used by these contract checks.
-
-## Validation results — 2026-10-13
-
-| Check | Result |
-| --- | --- |
-| Complete default SQLite suite | 208 passed, 5 skipped: four new PG-only migration tests and the existing opt-in live test. All 182 original non-live tests pass. |
-| Complete PostgreSQL suite | 212 passed, 1 existing opt-in live test skipped; also repeated successfully using a non-superuser database owner. |
-| Real HTTP live-server test | 1 passed separately on SQLite and 1 on PostgreSQL. |
-| Actual FastAPI startup | Passed on disposable SQLite and migrated PostgreSQL; lifespan startup/shutdown also passed under the non-superuser PG owner. |
-| Empty database Alembic upgrade | Passed on two fresh PostgreSQL databases (bootstrap role and non-superuser owner); metadata comparison / alembic check clean. Initial revision also tested on fresh SQLite. |
-| PostgreSQL offline initial DDL | Ten domain CREATE TABLE statements plus Alembic version table. |
-| Critical HTTP transcript equality | Passed for SQLite vs PostgreSQL, including exact legacy timestamp strings and saved stream results. |
-| Existing React/backend contracts | All nine scripts passed against PG: registration (both verification modes), login, activation, recovery, password change, Journal, Map, Reflection and Chat. Includes Account, Feedback, Terms and persistence/gating. |
-| Legacy JS suite | 49 passed. |
-| Migration safety tests | Invalid source data and changed/lost rows/content detected; two fresh-target copies verified all ten tables, 11 synthetic rows, IDs, nulls, timestamps, binary mail and sequences; verification failure rolls back inserts; JSON null preserved; nonempty copy refused. |
-| Operator CLI rehearsal | check-source, copy and standalone verify all passed for an 11-row synthetic snapshot into the fresh non-superuser-owned PG database; source file hash remained unchanged. |
-| Black / compile / imports | Black check: 101 files; compile checks passed; all 76 app Python modules including the root package import. |
-| Contracts/schema/reference preservation | Full OpenAPI equal to saved baseline; all 70 API registrations / 61 paths retained; ten-table column/index/constraint/default signatures match. feely.db, both frontend trees and prompts have identical baseline hashes. |
-
-No production data was migrated. Compose was provided but not executed because
-Docker is absent here. Actual DB validation used PostgreSQL 17.11 and psycopg 3.3.6,
-with SQLAlchemy 2.0.50 and Alembic 1.20.0. The only remaining test warning is the
-pre-existing Starlette/httpx deprecation. New parity-test clocks explicitly account
-for SQLAlchemy's cached default callables to avoid test-order-dependent snapshots.

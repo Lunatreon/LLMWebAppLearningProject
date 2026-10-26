@@ -1,11 +1,11 @@
 name = "feely-mail-bridge"
-account_id = "3dfac94f0c292b642c05441ee17b6ed3"
+# Optional: account_id = "your-cloudflare-account-id"
 main = "worker.mjs"
 compatibility_date = "2026-10-03"
 workers_dev = true
 
 [vars]
-MAILBOX_ADDRESS = "info@feel-y.com"
+MAILBOX_ADDRESS = "info@example.com"
 
 [[r2_buckets]]
 binding = "MAIL_SPOOL"

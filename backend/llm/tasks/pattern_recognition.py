@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-PATTERN_FILE = Path(__file__).resolve().parents[3] / "docs" / "pattern_recognition.txt"
+PATTERN_FILE = Path(__file__).resolve().parents[1] / "pattern_recognition.txt"
 MIN_USER_MESSAGES = 3
 MIN_USER_WORDS = 20
 OPEN_TOPIC_MIN_MESSAGES = 4

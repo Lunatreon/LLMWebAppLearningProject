@@ -276,7 +276,7 @@ When an authenticated user calls `POST /api/v1/llm/message`, the backend:
 3. Saves the Chat-LLM response, updated profile, and updated chat info.
 4. Returns the chat response to the app or website immediately.
 5. Starts a backend background task that checks the full stored chat with the hard-coded analyser.
-6. If enough patterns from `docs/pattern_recognition.txt` match, sends compact notes, recent
+6. If enough patterns from `backend/llm/pattern_recognition.txt` match, sends compact notes, recent
    user messages, and the user's existing topic list to the Topic-LLM.
 7. Saves the Topic-LLM topic and description as a pending suggestion. The model
    can recommend connecting the chat to an existing topic or placing a new topic

@@ -1,4 +1,5 @@
 """Deploy the mail bridge using an already authenticated Cloudflare Wrangler CLI."""
+import argparse
 import os
 from pathlib import Path
 import shutil
@@ -9,18 +10,21 @@ import tomllib
 
 from dotenv import dotenv_values
 
-ROOT = Path(__file__).resolve().parents[1]
-WORKER = ROOT / "cloudflare" / "webmail"
+ROOT = Path(__file__).resolve().parents[3]
+WORKER = Path(__file__).resolve().parent
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--env-file", type=Path, default=ROOT / ".env")
+    args = parser.parse_args()
     npx = shutil.which("npx.cmd") or shutil.which("npx")
     if not npx:
         raise SystemExit("Install Node.js with npm before deploying the Cloudflare Worker.")
-    values = dotenv_values(ROOT / ".env")
+    values = dotenv_values(args.env_file, interpolate=False)
     secret = values.get("WEBMAIL_BRIDGE_SECRET", "")
     if len(secret) < 32:
-        raise SystemExit("Run scripts/init_webmail.py first.")
+        raise SystemExit("Set WEBMAIL_BRIDGE_SECRET to a random secret of at least 32 characters in your env file.")
     config = tomllib.loads((WORKER / "wrangler.toml").read_text())
     if config["vars"]["MAILBOX_ADDRESS"] != values.get("WEBMAIL_ADDRESS"):
         raise SystemExit("Match MAILBOX_ADDRESS in wrangler.toml to WEBMAIL_ADDRESS before deployment.")
@@ -43,7 +47,7 @@ def main():
     run("deploy")
     # stdin keeps the bridge credential out of command arguments and console output.
     run("secret", "put", "BRIDGE_SECRET", input=secret + "\n", text=True)
-    print("Set worker_url in webmail.init.toml to the deployed HTTPS URL, rerun init_webmail.py, and restart FeelY.")
+    print("Set WEBMAIL_PROVIDER=cloudflare and WEBMAIL_WORKER_URL to the deployed HTTPS URL in your env file, and restart FeelY.")
     print("In Cloudflare Email Routing, route your mailbox address to the deployed Worker.")
 
 

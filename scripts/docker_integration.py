@@ -11,7 +11,7 @@ import time
 from urllib.parse import quote
 from urllib.request import urlopen
 
-from scripts.setup_docker_env import ROOT, create_environment
+from deployment.setup import ROOT, create_environment
 
 JWT = re.compile(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b")
 RESET = re.compile(r"(?i)([?&](?:reset_password_token|reset_token|token|reset)=)[^\s&\"<>]+")
@@ -220,8 +220,11 @@ class DockerIntegration:
             raise CheckFailed("Fresh PostgreSQL was not empty before backend startup")
         self.save("fresh-postgres", "PASS")
         self.save("health", "RUNNING")
-        self.compose("up", "-d", "backend", timeout=180)
-        self.wait_healthy(("postgres", "mailpit", "backend"))
+        self.compose("up", "-d", "backend", "frontend", timeout=180)
+        self.wait_healthy(("postgres", "mailpit", "backend", "frontend"))
+        with urlopen(self.values["PUBLIC_APP_URL"], timeout=5) as response:
+            if response.status != 200 or b'id="root"' not in response.read():
+                raise CheckFailed("Compiled frontend did not serve the application")
         with urlopen("http://127.0.0.1:8000/api/v1/health", timeout=5) as response:
             if json.load(response) != {"status": "ok"}:
                 raise CheckFailed("HTTP health response mismatch")
@@ -250,7 +253,7 @@ class DockerIntegration:
         self.collect_logs("initial")
         self.compose("down", "--remove-orphans", timeout=90)
         self.compose("up", "-d", timeout=180)
-        self.wait_healthy(("postgres", "mailpit", "backend"))
+        self.wait_healthy(("postgres", "mailpit", "backend", "frontend"))
         # Compare before login updates last_login_at; every stored column must survive.
         if self.probe("snapshot") != before:
             raise CheckFailed("Database rows changed across down/up with volumes preserved")
@@ -275,7 +278,7 @@ class DockerIntegration:
         self.save("volume-reset", "RUNNING")
         self.compose("down", "-v", "--remove-orphans", timeout=90)
         self.compose("up", "-d", timeout=180)
-        self.wait_healthy(("postgres", "mailpit", "backend"))
+        self.wait_healthy(("postgres", "mailpit", "backend", "frontend"))
         reset = self.probe("snapshot")
         if reset != fresh:
             raise CheckFailed("Explicit volume reset did not produce a fresh migrated database")
@@ -377,7 +380,7 @@ def main():
             (stack.directory / "owned-project").touch(exist_ok=False)
             stack.save(phase, "PASS")
         elif args.action == "build":
-            result = stack.compose("build", "--pull", "backend", timeout=600)
+            result = stack.compose("build", "--pull", "backend", "frontend", timeout=600)
             (stack.directory / "build.log").write_text(
                 redact(result.stdout + result.stderr, stack.secrets()), encoding="utf-8"
             )

@@ -122,6 +122,7 @@ def test_puller_commits_before_ack_and_retries_ack(client, monkeypatch):
     from contextlib import contextmanager
     import httpx
 
+    monkeypatch.setattr(settings, "webmail_provider", "cloudflare")
     monkeypatch.setattr(settings, "webmail_worker_url", "https://bridge.example.com")
     monkeypatch.setattr(settings, "webmail_bridge_secret", "x" * 48)
 
@@ -160,17 +161,82 @@ def test_puller_commits_before_ack_and_retries_ack(client, monkeypatch):
         assert len(list(db.scalars(select(MailMessage)))) == 1
 
 
-def test_initializer_preserves_credentials_and_secret(tmp_path):
-    from scripts.init_webmail import initialize
 
-    config = tmp_path / "init.toml"
-    config.write_text(
-        '[webmail]\naddress="info@feel-y.com"\nauth_sender="noreply@feel-y.com"\nworker_url=""\n'
-    )
-    env = tmp_path / ".env"
-    env.write_text('SMTP_PASSWORD="test-secret"\nADMIN_PASSWORD_HASH="hash"\n')
-    initialize(config, env)
-    once = env.read_text()
-    initialize(config, env)
-    assert once == env.read_text()
-    assert 'SMTP_PASSWORD="test-secret"' in once
+@pytest.mark.parametrize("use_ssl", [True, False])
+@pytest.mark.parametrize("failure", [None, "fetch", "commit", "size", "select", "search"])
+def test_imap_import_readonly_retry_and_uidvalidity(client, monkeypatch, use_ssl, failure):
+    from contextlib import contextmanager
+
+    for name, value in {
+        "webmail_provider": "imap", "webmail_imap_host": "mail.example.com",
+        "webmail_imap_username": "info@example.com", "webmail_imap_password": "private-password",
+        "webmail_imap_folder": "INBOX", "webmail_imap_use_ssl": use_ssl,
+    }.items():
+        monkeypatch.setattr(settings, name, value)
+    state = {"failure": failure, "validity": b"1", "fetches": 0, "tls": use_ssl}
+    raw = b"From: visitor@example.com\r\nSubject: Hi\r\n\r\nHello"
+
+    class Mailbox:
+        def __init__(self, *args, **kwargs):
+            assert kwargs["timeout"] == 30
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def starttls(self, *, ssl_context):
+            assert ssl_context.verify_mode == webmail.ssl.CERT_REQUIRED
+            state["tls"] = True
+        def login(self, username, password):
+            assert state["tls"]
+            assert password == "private-password"
+        def select(self, folder, *, readonly):
+            assert readonly is True
+            return ("NO" if state["failure"] == "select" else "OK"), []
+        def response(self, name):
+            assert name == "UIDVALIDITY"
+            return name, [state["validity"]]
+        def uid(self, command, *args):
+            if command == "search":
+                return ("NO" if state["failure"] == "search" else "OK"), [b"7"]
+            assert command == "fetch"
+            if args[1] == "(RFC822.SIZE)":
+                size = webmail.MAX_MAIL_BYTES + 1 if state["failure"] == "size" else len(raw)
+                return "OK", [f"1 (RFC822.SIZE {size})".encode()]
+            assert args[1] == "(BODY.PEEK[])"
+            state["fetches"] += 1
+            if state["failure"] == "fetch": return "NO", []
+            return "OK", [(b"1 BODY[]", raw)]
+
+    @contextmanager
+    def session():
+        with database(client) as db:
+            if state["failure"] == "commit":
+                def fail(): raise RuntimeError("database unavailable")
+                monkeypatch.setattr(db, "commit", fail)
+            yield db
+
+    monkeypatch.setattr(webmail.imaplib, "IMAP4_SSL", Mailbox)
+    monkeypatch.setattr(webmail.imaplib, "IMAP4", Mailbox)
+    monkeypatch.setattr(webmail, "SessionLocal", session)
+    webmail.pull_mail()
+    assert bool(webmail.sync_state["error"]) == bool(failure)
+    if failure:
+        with database(client) as db:
+            assert list(db.scalars(select(MailMessage))) == []
+    state["failure"] = None
+    webmail.pull_mail()
+    assert webmail.sync_state["error"] is None
+    fetches = state["fetches"]
+    webmail.pull_mail()
+    assert state["fetches"] == fetches
+    with database(client) as db:
+        assert len(list(db.scalars(select(MailMessage)))) == 1
+    state["validity"] = b"2"
+    webmail.pull_mail()
+    with database(client) as db:
+        assert len(list(db.scalars(select(MailMessage)))) == 2
+
+
+def test_legacy_bridge_selection():
+    from backend.core.config import Settings
+    config = Settings(_env_file=None, webmail_worker_url="https://bridge.example.com")
+    assert config.incoming_mail_provider == "cloudflare"
+    assert config.model_copy(update={"webmail_provider": "imap"}).incoming_mail_provider == "imap"

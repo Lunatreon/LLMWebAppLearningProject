@@ -1,6 +1,0 @@
-# Reusable, non-secret configuration. Run scripts/init_webmail.py after editing.
-[webmail]
-address = "info@feel-y.com"
-# Fill in the HTTPS workers.dev URL printed by wrangler deploy.
-worker_url = "https://feely-mail-bridge.feely-services-3dfac94f.workers.dev"
-auth_sender = "noreply@feel-y.com"

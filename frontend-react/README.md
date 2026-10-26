@@ -4,20 +4,26 @@ This is the only consumer website. Login, registration, activation, recovery,
 Account, billing, deletion, Feedback, Terms, Chat, My Map and Reflection
 use the backend directly. There is no reference website server.
 
-## Development
+## Run the app
 
-Install Node 24. Run npm ci here once, start the backend on port 8000, then:
+Use [Docker startup](../deployment/README.md). Compose builds and serves this
+website together with the API and database; no host Node installation is needed.
 
-```bash
+## Frontend development
+
+For live reload only, install Node 24 on the development machine. Generate the
+Docker environment using the startup guide, then start the API services and Vite:
+
+```sh
+docker compose --env-file .env.docker stop frontend
+docker compose --env-file .env.docker up -d --build --wait backend postgres mailpit
+npm ci
 npm run dev
 ```
 
-Open http://127.0.0.1:5173. PostgreSQL/native setup is in
-[DEPLOYMENT_NATIVE.md](../docs/DEPLOYMENT_NATIVE.md).
-
-For the complete app in Docker, use [the root startup guide](../STARTUP.md).
-For live reload against the Docker API, run the base Compose stack without its
-`app` profile, then run Vite here. Both frontend options use port 5173 by default.
+Run the Compose commands from the repository root and npm commands from this
+folder. Open http://127.0.0.1:5173. This optional editor workflow uses the same
+Docker backend and database as the complete stack.
 
 ## Build and validation
 
@@ -28,8 +34,7 @@ npm run build
 npm run format:check
 ```
 
-The build produces dist/. Native backend.main serves it on port 8000 alongside the
-API; production Caddy serves the same build. Vite preview is only for local build
+The build produces dist/. The frontend Docker image serves it through Caddy. Vite preview is only for local build
 review. VITE_API_BASE_URL is the only public build setting, defaulting to /api/v1
 in production. Production ignores development query/storage API overrides.
 Never put backend secrets in VITE settings.
@@ -47,5 +52,4 @@ Account deletion requires explicit confirmation and the password when present.
 Stripe checkout, portal and resume actions use authenticated backend endpoints.
 Real provider operations require server-side configuration.
 
-See ARCHITECTURE.md for feature boundaries. Historical migration audits describe
-the earlier reference-site phase; that site has now been removed.
+See ARCHITECTURE.md for feature boundaries.

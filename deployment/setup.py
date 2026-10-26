@@ -1,4 +1,4 @@
-"""Generate a separate local Docker environment without changing SQLite config."""
+"""Generate the local Docker environment without overwriting existing settings."""
 
 import argparse
 import os

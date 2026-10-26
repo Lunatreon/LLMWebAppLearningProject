@@ -1,34 +1,71 @@
 {
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "label": "FeelY: Start native",
-            "type": "process",
-            "command": "${workspaceFolder}/.venv/Scripts/python.exe",
-            "args": ["${workspaceFolder}/scripts/start_feely.py", "--color"],
-            "options": { "cwd": "${workspaceFolder}" },
-            "presentation": {
-                "reveal": "always",
-                "focus": true,
-                "panel": "dedicated",
-                "clear": true
-            },
-            "runOptions": { "instanceLimit": 1 },
-            "problemMatcher": []
-        },
-        {
-            "label": "FeelY: Start Docker",
-            "type": "shell",
-            "command": ".\\feely.bat start",
-            "options": { "cwd": "${workspaceFolder}" },
-            "problemMatcher": []
-        },
-        {
-            "label": "FeelY: Stop Docker",
-            "type": "shell",
-            "command": ".\\feely.bat stop",
-            "options": { "cwd": "${workspaceFolder}" },
-            "problemMatcher": []
-        }
-    ]
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "FeelY: Start Docker",
+      "type": "process",
+      "command": "docker",
+      "args": [
+        "compose",
+        "--env-file",
+        ".env.docker",
+        "up",
+        "-d",
+        "--build",
+        "--wait"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "FeelY: Stop Docker",
+      "type": "process",
+      "command": "docker",
+      "args": [
+        "compose",
+        "--env-file",
+        ".env.docker",
+        "down"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "FeelY: Status Docker",
+      "type": "process",
+      "command": "docker",
+      "args": [
+        "compose",
+        "--env-file",
+        ".env.docker",
+        "ps"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "FeelY: Logs Docker",
+      "type": "process",
+      "command": "docker",
+      "args": [
+        "compose",
+        "--env-file",
+        ".env.docker",
+        "logs",
+        "--follow",
+        "--tail",
+        "100"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    }
+  ]
 }

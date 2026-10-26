@@ -36,7 +36,7 @@ jobs:
         run: |
           python -m pip install -r requirements-dev.txt
           npm ci --prefix frontend-react
-      - name: Non-Docker backend and legal draft regression checks
+      - name: Backend and legal draft regression checks
         env:
           # Reproduce the existing local test configuration without reading a developer .env.
           ENVIRONMENT: local
@@ -51,7 +51,7 @@ jobs:
           --project "feely-ci-${{ github.run_id }}-${{ github.run_attempt }}"
       - name: Validate Compose configuration without printing secrets
         run: python -m scripts.docker_integration config --work-dir "$FEELY_DOCKER_TEST_DIR"
-      - name: Build the actual backend image
+      - name: Build the backend and website images
         run: python -m scripts.docker_integration build --work-dir "$FEELY_DOCKER_TEST_DIR"
       - name: Validate Docker runtime, real HTTP/SMTP and volume lifecycle
         run: python -m scripts.docker_integration run --work-dir "$FEELY_DOCKER_TEST_DIR"
