@@ -2,11 +2,11 @@
 
 from alembic import context
 
-from app.core.config import settings
-from app.db.base import Base
-from app.db.session import create_database_engine, database_url
-from app.db.types import LegacyDateTime
-from app.models import billing, feedback, mail_message, terms, user  # noqa: F401
+from backend.core.config import settings
+from backend.db.base import Base
+from backend.db.session import create_database_engine, database_url
+from backend.db.types import LegacyDateTime
+from backend.models import billing, feedback, mail_message, terms, user  # noqa: F401
 
 target_metadata = Base.metadata
 

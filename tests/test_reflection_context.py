@@ -1,10 +1,10 @@
 import json
 from copy import deepcopy
 
-from app.llm.context import (
+from backend.llm.context import (
     chat_request_payload,
 )
-from app.services.self_authorship import merge_llm_profile, profile_data_for_access
+from backend.services.self_authorship import merge_llm_profile, profile_data_for_access
 
 
 def test_chat_can_revisit_confirmed_observations_without_exposing_unrelated_topics():

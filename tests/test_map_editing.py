@@ -2,8 +2,8 @@ from copy import deepcopy
 
 import pytest
 
-from app.api.dependencies import get_db
-from app.models.user import User, UserProfile
+from backend.api.dependencies import get_db
+from backend.models.user import User, UserProfile
 from test_auth_and_llm import grant_premium_access
 
 

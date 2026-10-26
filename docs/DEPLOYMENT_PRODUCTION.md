@@ -3,7 +3,7 @@
 This prepares a single Linux Docker host. Nothing in this phase deploys to
 Hetzner, provisions a domain, requests a certificate or contacts paid providers.
 Use a tested revision that includes the Docker setup and this production layer.
-Read [the complete configuration inventory](PRODUCTION_CONFIG_AUDIT.md) first.
+Read [the complete configuration inventory](archive/PRODUCTION_CONFIG_AUDIT.md) first.
 
 ## 1. Topology and requirements
 
@@ -233,7 +233,7 @@ existing generic Chat error path remains in use. No key is sent to React/Caddy.
 
 ## 8. SMTP, Turnstile and public links
 
-Production SMTP uses the existing `app/integrations/email.py` boundary. Set
+Production SMTP uses the existing `backend/integrations/email.py` boundary. Set
 `SMTP_HOST`, port, verified `SMTP_FROM_EMAIL`, and provider authentication. Use
 exactly one of STARTTLS (`SMTP_USE_TLS=true`, commonly 587) or implicit TLS
 (`SMTP_USE_SSL=true`, commonly 465). Certificate validation and a 15-second SMTP

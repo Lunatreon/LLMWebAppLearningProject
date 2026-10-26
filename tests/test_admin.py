@@ -1,8 +1,8 @@
-from app.core.config import settings
-from app.core.security import hash_password
+from backend.core.config import settings
+from backend.core.security import hash_password
 import pytest
 
-from app.llm.prompts import (
+from backend.llm.prompts import (
     PromptConfigurationError,
     read_system_prompt,
 )
@@ -143,7 +143,7 @@ def test_regular_accounts_cannot_grant_roles_or_manage_users(monkeypatch, client
 
 def test_legacy_sqlite_role_migration_is_safe_to_repeat(monkeypatch):
     from sqlalchemy import create_engine, text
-    from app.db import init_db
+    from backend.db import init_db
 
     engine = create_engine("sqlite://")
     with engine.begin() as connection:

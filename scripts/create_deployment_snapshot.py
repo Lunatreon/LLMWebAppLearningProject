@@ -5,15 +5,15 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from app.core.security import hash_password
-from app.db.base import Base
-from app.db.session import create_database_engine
-from app.models.billing import BillingSubscription, ProcessedStripeEvent
-from app.models.feedback import Feedback
-from app.models.mail_message import MailMessage
-from app.models.terms import TermsAcceptance
-from app.models.user import ChatSession, DailyLLMUsage, JournalEntry, User, UserProfile, utc_now
-from app.services.self_authorship import add_map_entry, create_topic_space, update_practice
+from backend.core.security import hash_password
+from backend.db.base import Base
+from backend.db.session import create_database_engine
+from backend.models.billing import BillingSubscription, ProcessedStripeEvent
+from backend.models.feedback import Feedback
+from backend.models.mail_message import MailMessage
+from backend.models.terms import TermsAcceptance
+from backend.models.user import ChatSession, DailyLLMUsage, JournalEntry, User, UserProfile, utc_now
+from backend.services.self_authorship import add_map_entry, create_topic_space, update_practice
 
 SNAPSHOT_EMAIL = "deployment-snapshot@example.com"
 SNAPSHOT_PASSWORD = "Snapshot-only-password-42"

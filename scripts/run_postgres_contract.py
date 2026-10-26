@@ -22,8 +22,8 @@ def main() -> None:
     os.environ["ENVIRONMENT"] = "local"
     for name in ("LLM_PROVIDER", "CHAT_LLM_PROVIDER", "TOPIC_LLM_PROVIDER"):
         os.environ[name] = "mock"
-    from app.db.base import Base
-    from app.db.session import create_database_engine, database_url
+    from backend.db.base import Base
+    from backend.db.session import create_database_engine, database_url
 
     root = Path(__file__).resolve().parents[1]
     login_fixture = "--login-fixture" in sys.argv

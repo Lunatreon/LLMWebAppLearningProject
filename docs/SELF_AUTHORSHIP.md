@@ -147,7 +147,7 @@ Legacy journal metadata remains in stored records for database compatibility.
 
 ## Ownership Boundary
 
-`app/services/self_authorship.py` owns map mutations. The helper
+`backend/services/self_authorship.py` owns map mutations. The helper
 `merge_llm_profile()` protects these fields from direct model changes:
 
 - `self_authorship_map`

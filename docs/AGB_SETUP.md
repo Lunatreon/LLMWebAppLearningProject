@@ -95,8 +95,8 @@ under a **new version**; users will be prompted again. Do not change a published
 document in place. The backend trusts the configured document hash and does not
 download the static document to verify it.
 
-Relevant code: `app/services/terms.py`, `app/api/routes/terms.py`,
-`app/api/dependencies.py` and `frontend-react/src/features/terms/`.
+Relevant code: `backend/services/terms.py`, `backend/api/routes/terms.py`,
+`backend/api/dependencies.py` and `frontend-react/src/features/terms/`.
 Vite updates development assets automatically. Rebuild React after changing public files for native or production deployment.
 
 AGB acceptance is separate from privacy and marketing consent. For German consumer

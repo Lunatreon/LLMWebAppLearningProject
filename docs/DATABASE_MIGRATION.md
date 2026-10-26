@@ -8,7 +8,7 @@ path, Alembic schema ownership, isolated database tests and an operator migratio
 tool. It does not switch the deployed application or copy/delete the existing
 `feely.db`. Both frontends and HTTP route/schema definitions remain unchanged.
 
-Read the [pre-implementation portability audit](DATABASE_PORTABILITY_AUDIT.md)
+Read the [pre-implementation portability audit](archive/DATABASE_PORTABILITY_AUDIT.md)
 for every column, index, constraint, database caller and transaction workflow.
 
 ## Current model and PostgreSQL target
@@ -33,7 +33,7 @@ Journal entry_date is still a YYYY-MM-DD calendar string; usage_date is a UTC da
 
 SQL timestamps remain DateTime(timezone=True) with Python UTC defaults/onupdate;
 PostgreSQL stores timestamptz, and engine connections select UTC. SQLite persisted
-timestamps have no offset. `app/db/types.py:LegacyDateTime` returns PostgreSQL
+timestamps have no offset. `backend/db/types.py:LegacyDateTime` returns PostgreSQL
 timestamps as naive UTC, matching SQLite reads and preserving existing HTTP
 strings. Existing Terms/billing/expiry code still explicitly applies UTC when
 needed. This is a result adapter, not a schema type change. JSON timestamps are
@@ -76,7 +76,7 @@ docker compose -f compose.db.yml ps
 $env:DATABASE_URL = 'postgresql+psycopg://feely_dev:URL_ENCODED_PASSWORD@127.0.0.1:55432/feely_dev'
 .\.venv\Scripts\python.exe -m alembic upgrade head
 .\.venv\Scripts\python.exe -m alembic check
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+.\.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
 
 Use the existing SECRET_KEY/security configuration. `docker compose -f
@@ -216,7 +216,7 @@ grant its test owner schema creation rights, then:
 ```powershell
 $env:FEELY_TEST_POSTGRES_URL = 'postgresql+psycopg://TEST_USER:URL_ENCODED_PASSWORD@127.0.0.1:55432/feely_test'
 .\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m black --check app tests migrations scripts/database_migration.py scripts/run_postgres_contract.py
+.\.venv\Scripts\python.exe -m black --check backend tests migrations scripts/database_migration.py scripts/run_postgres_contract.py
 .\.venv\Scripts\python.exe -m compileall -q app tests migrations scripts/database_migration.py scripts/run_postgres_contract.py
 node --test --test-concurrency=1 tests/*.test.cjs
 ```

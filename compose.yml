@@ -1,6 +1,28 @@
 name: feely-local
 
 services:
+  # Optional full application. Omit --profile app when using Vite on the host.
+  frontend:
+    profiles: [app]
+    build:
+      context: .
+      dockerfile: deployment/frontend.Dockerfile
+    environment:
+      INGRESS_DOMAIN: "http://:80"
+      ACME_EMAIL: "local@example.invalid"
+    ports:
+      - "127.0.0.1:${FEELY_WEB_PORT:-5173}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1/"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
   backend:
     build: .
     env_file:

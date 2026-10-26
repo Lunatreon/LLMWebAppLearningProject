@@ -7,8 +7,8 @@ import openai
 import pytest
 from fastapi import HTTPException
 
-from app.core.config import settings
-from app.llm.providers.factory import get_chat_llm_client, get_topic_llm_client
+from backend.core.config import settings
+from backend.llm.providers.factory import get_chat_llm_client, get_topic_llm_client
 
 
 @pytest.mark.parametrize("role", ["chat", "topic"])

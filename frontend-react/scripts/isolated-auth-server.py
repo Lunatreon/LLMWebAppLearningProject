@@ -12,12 +12,12 @@ for name in ['LLM_PROVIDER', 'CHAT_LLM_PROVIDER', 'TOPIC_LLM_PROVIDER']:
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from app.api.dependencies import get_db
-from app.core.config import settings
-from app.core.security import hash_password
-from app.db.base import Base
-from app.main import create_app
-from app.models.user import User
+from backend.api.dependencies import get_db
+from backend.core.config import settings
+from backend.core.security import hash_password
+from backend.db.base import Base
+from backend.main import create_app
+from backend.models.user import User
 import uvicorn
 
 settings.basic_auth_enabled = False

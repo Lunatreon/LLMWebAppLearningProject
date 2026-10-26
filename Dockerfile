@@ -10,7 +10,7 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && groupadd --system --gid 10001 feely \
     && useradd --system --uid 10001 --gid feely --no-create-home feely
 
-COPY app/ ./app/
+COPY backend/ ./backend/
 COPY migrations/ ./migrations/
 COPY alembic.ini ./
 COPY deployment/__init__.py deployment/entrypoint.py deployment/healthcheck.py ./deployment/
@@ -23,4 +23,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=20s --timeout=10s --start-period=90s --retries=3 \
     CMD ["python", "-m", "deployment.healthcheck"]
 ENTRYPOINT ["python", "-m", "deployment.entrypoint"]
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-proxy-headers", "--no-server-header", "--no-access-log"]
+CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-proxy-headers", "--no-server-header", "--no-access-log"]

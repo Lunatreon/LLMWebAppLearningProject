@@ -27,7 +27,7 @@ Do not continue exposing an old backend process with the example key in memory.
 - Private API routes require authenticated accounts and enforce ownership.
   Responses use Cache-Control: no-store. Public API docs are disabled by default;
   disabling documentation is not a substitute for authorization.
-- The website runs `app.website:app`, not Python's development file server.
+- The website runs `backend.website:app`, not Python's development file server.
   Only the explicit PUBLIC_FILES set can be served, with resolved-path checks.
   No directory listings, environment files, databases, logs, or arbitrary new
   files are exposed. Add intended new website assets to that set deliberately.
@@ -56,4 +56,4 @@ these controls do not make the entire PC or application immune to attack.
 
 Local evidence and tests do not establish whether there was historical account
 access. Preserve logs if an unfamiliar account action is discovered. Keep .env,
-database files, backups, and tunnel credentials out of website/ and source control.
+database files, backups, and tunnel credentials out of frontend-react/public/ and source control.

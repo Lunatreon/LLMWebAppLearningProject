@@ -11,8 +11,8 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import inspect
 
-from app.core.config import settings
-from app.db.session import create_database_engine, database_url
+from backend.core.config import settings
+from backend.db.session import create_database_engine, database_url
 from migrations.chat_storage_v2 import upgrade_chat_storage
 
 

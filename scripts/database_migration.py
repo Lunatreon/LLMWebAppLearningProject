@@ -20,9 +20,9 @@ from sqlalchemy import UniqueConstraint, create_engine, inspect
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.types import TypeDecorator
 
-from app.db.base import Base
-from app.db.session import create_database_engine
-from app.models import billing, feedback, mail_message, terms, user  # noqa: F401
+from backend.db.base import Base
+from backend.db.session import create_database_engine
+from backend.models import billing, feedback, mail_message, terms, user  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[1]
 TABLES = Base.metadata.sorted_tables

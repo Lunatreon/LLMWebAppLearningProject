@@ -125,7 +125,8 @@ clinical claims or language that tells a person what they must be feeling.
 
 ## Implementation source
 
-The live implementation is in [`website/styles.css`](../website/styles.css), with
-theme selection and persistence in [`website/app.js`](../website/app.js). This
+The live implementation is in [shared styles](../frontend-react/public/styles.css)
+and [React styles](../frontend-react/src/styles/index.css), with theme selection
+and persistence in [useAppearance](../frontend-react/src/hooks/useAppearance.ts). This
 document is a design reference; update it whenever the light-theme tokens or core
 workspace dimensions change.

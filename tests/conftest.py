@@ -20,12 +20,12 @@ os.environ["CHAT_LLM_PROVIDER"] = "mock"
 os.environ["TOPIC_LLM_PROVIDER"] = "mock"
 os.environ["SECRET_KEY"] = "isolated-tests-only-signing-key-not-for-deployment"
 
-from app.api.dependencies import get_db
-from app.core.config import settings
-from app.core.rate_limit import rate_limiter
-from app.db.base import Base
-from app.db.session import create_database_engine, database_url
-from app.main import create_app
+from backend.api.dependencies import get_db
+from backend.core.config import settings
+from backend.core.rate_limit import rate_limiter
+from backend.db.base import Base
+from backend.db.session import create_database_engine, database_url
+from backend.main import create_app
 
 
 @pytest.fixture(autouse=True)

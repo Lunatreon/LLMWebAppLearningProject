@@ -13,8 +13,8 @@ from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from sqlalchemy import MetaData, Table, inspect, select
 
-from app.core.config import settings
-from app.db.session import engine
+from backend.core.config import settings
+from backend.db.session import engine
 
 TABLES = {
     "users",
@@ -56,7 +56,7 @@ def check_runtime():
     status = Path("/proc/self/status").read_text()
     assert "NoNewPrivs:\t1" in status, "no-new-privileges missing"
     assert "CapEff:\t0000000000000000" in status, "Effective capabilities present"
-    assert not os.access("/app/app", os.W_OK), "Application directory is writable"
+    assert not os.access("/app/backend", os.W_OK), "Application directory is writable"
     assert not os.access("/app", os.W_OK), "Application root is writable"
     # Probe only files owned by this check, preserving all administrator prompt edits.
     for directory in ("/app/prompts", "/tmp"):

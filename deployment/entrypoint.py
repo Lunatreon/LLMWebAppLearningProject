@@ -8,8 +8,8 @@ import time
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.core.config import settings
-from app.db.session import create_database_engine, database_url
+from backend.core.config import settings
+from backend.db.session import create_database_engine, database_url
 
 
 def wait_for_database(timeout_seconds: float = 60, retry_seconds: float = 2) -> None:

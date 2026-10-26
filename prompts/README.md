@@ -6,7 +6,7 @@ These three files are the active system prompts:
 - `topic_system.txt`: background topic and observation proposals, including observation-only output.
 - `journal_system.txt`: optional map suggestions from journal entries.
 
-The application reads them on each request through `app/services/prompts.py`.
+The application reads them on each request through `backend/llm/prompts.py`.
 Edit them here or through the admin page; no restart is needed. An in-flight
 request keeps the prompt it already loaded. The configured `PROMPT_DIRECTORY`
 can override this directory.

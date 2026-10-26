@@ -72,7 +72,7 @@ Configure .env as above, then:
 .venv/bin/python scripts/setup_secret.py
 .venv/bin/python -m alembic upgrade head
 npm run build --prefix frontend-react
-.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
 
 Open http://127.0.0.1:8000. For frontend development run `npm run dev --prefix
@@ -85,14 +85,14 @@ Install PostgreSQL 17, Python, Node 24 for building, and Caddy. Checkout a teste
 revision in an operator-owned directory such as /srv/feely. Build the same React
 code. Use production runtime settings, not local development switches.
 
-The validations in app/core/production.py still apply: real SMTP, Turnstile,
+The validations in backend/core/production.py still apply: real SMTP, Turnstile,
 public HTTPS links/origins, published Terms, explicit OpenAI providers, secure
 signing credentials and a non-bootstrap PostgreSQL login. Configure native paths
 and loopback DB/proxy addresses. The current production-config helper and
 compose.production.yml describe Docker-specific networking and files.
 
 Manage Uvicorn with systemd: set WorkingDirectory=/srv/feely, load a private
-environment file and execute the venv Python with `-m uvicorn app.main:app --host
+environment file and execute the venv Python with `-m uvicorn backend.main:app --host
 127.0.0.1 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips 127.0.0.1
 --no-server-header`. Run migrations explicitly before starting the service.
 

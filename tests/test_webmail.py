@@ -3,11 +3,11 @@ from email.message import EmailMessage
 import pytest
 from sqlalchemy import select
 
-from app.core.config import settings
-from app.core.security import create_admin_access_token
-from app.core.security import create_access_token
-from app.models.mail_message import MailMessage
-from app.services import webmail
+from backend.core.config import settings
+from backend.core.security import create_admin_access_token
+from backend.core.security import create_access_token
+from backend.models.mail_message import MailMessage
+from backend.services import webmail
 from tests.test_email_and_feedback import database
 
 
@@ -66,7 +66,7 @@ def test_inbox_protected_and_attachments_download(client, mail_admin):
 
 @pytest.mark.parametrize("fails", [False, True])
 def test_send_preserves_copy_and_uses_info_sender(client, mail_admin, monkeypatch, fails):
-    from app.api.routes import webmail as routes
+    from backend.api.routes import webmail as routes
 
     message_id = incoming(client)
 

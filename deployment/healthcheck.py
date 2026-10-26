@@ -7,8 +7,8 @@ from urllib.request import Request, urlopen
 
 from sqlalchemy import text
 
-from app.core.config import settings
-from app.db.session import create_database_engine, database_url
+from backend.core.config import settings
+from backend.db.session import create_database_engine, database_url
 
 
 def check_health() -> None:

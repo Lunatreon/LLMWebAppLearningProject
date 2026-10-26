@@ -1,11 +1,11 @@
 """Compiled React routing and retained public tools, independent of a local build."""
 
 from fastapi.testclient import TestClient
-from app.website import app
+from backend.website import app
 
 
 def test_react_routes_and_assets_are_served_without_old_website(tmp_path, monkeypatch):
-    monkeypatch.setattr("app.api.routes.website.WEBSITE_ROOT", tmp_path)
+    monkeypatch.setattr("backend.api.routes.website.WEBSITE_ROOT", tmp_path)
     (tmp_path / "index.html").write_text('<div id="root"></div>')
     (tmp_path / "assets").mkdir()
     (tmp_path / "assets" / "app-hash.js").write_text("// compiled")
@@ -43,7 +43,7 @@ def test_react_routes_and_assets_are_served_without_old_website(tmp_path, monkey
 
 
 def test_published_terms_and_editable_draft_stay_available(tmp_path, monkeypatch):
-    monkeypatch.setattr("app.api.routes.website.WEBSITE_ROOT", tmp_path)
+    monkeypatch.setattr("backend.api.routes.website.WEBSITE_ROOT", tmp_path)
     legal = tmp_path / "legal"
     (legal / "agb").mkdir(parents=True)
     (legal / "agb" / "v1.html").write_text("published")
@@ -58,6 +58,6 @@ def test_published_terms_and_editable_draft_stay_available(tmp_path, monkeypatch
 
 
 def test_missing_react_build_does_not_fall_back_to_source(tmp_path, monkeypatch):
-    monkeypatch.setattr("app.api.routes.website.WEBSITE_ROOT", tmp_path / "missing")
+    monkeypatch.setattr("backend.api.routes.website.WEBSITE_ROOT", tmp_path / "missing")
     with TestClient(app) as client:
         assert client.get("/").status_code == 404

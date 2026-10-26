@@ -10,12 +10,12 @@ from alembic.autogenerate import compare_metadata
 from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_db
-from app.core.config import settings
-from app.db.base import Base
-from app.db.session import create_database_engine
-from app.models.user import ChatSession, ChatTurn, User
-from app.services.chat_storage import chat_context
+from backend.api.dependencies import get_db
+from backend.core.config import settings
+from backend.db.base import Base
+from backend.db.session import create_database_engine
+from backend.models.user import ChatSession, ChatTurn, User
+from backend.services.chat_storage import chat_context
 
 
 def auth(client):
@@ -123,7 +123,7 @@ def test_history_pagination_preserves_more_than_eighty_messages(client, monkeypa
 
 
 def test_failed_model_request_retains_input_without_counting_a_reply(client, monkeypatch):
-    from app.api.routes import llm
+    from backend.api.routes import llm
 
     class Broken:
         async def respond(self, **kwargs):

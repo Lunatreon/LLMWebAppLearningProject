@@ -2,7 +2,7 @@ from copy import deepcopy
 
 import pytest
 
-from app.llm.tasks.conversation_summary import (
+from backend.llm.tasks.conversation_summary import (
     summarize_conversation,
     update_conversation_summary,
 )

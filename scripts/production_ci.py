@@ -198,7 +198,7 @@ class Rehearsal:
         # inside a rollback, retaining the fresh application DB and all HTTP contracts.
         source = """
 from sqlalchemy import text
-from app.db.session import engine
+from backend.db.session import engine
 with engine.connect() as connection:
     role = connection.execute(text("SELECT rolsuper, rolcreatedb, rolcreaterole FROM pg_roles WHERE rolname = current_user")).one()
     assert not any(role)

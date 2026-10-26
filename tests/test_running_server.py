@@ -16,7 +16,7 @@ def assert_server_is_running() -> None:
     except httpx.RequestError as exc:
         pytest.fail(
             f"Could not connect to the running API server at {BASE_URL}. "
-            "Start it with: python -m uvicorn app.main:app --reload. "
+            "Start it with: python -m uvicorn backend.main:app --reload. "
             f"Original error: {exc}"
         )
 

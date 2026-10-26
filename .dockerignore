@@ -3,8 +3,8 @@
 !Dockerfile
 !requirements.txt
 !alembic.ini
-!app/
-!app/**
+!backend/
+!backend/**
 !migrations/
 !migrations/**
 !deployment/

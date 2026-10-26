@@ -1,5 +1,5 @@
-from app.api.routes import auth as auth_routes
-from app.core.config import settings
+from backend.api.routes import auth as auth_routes
+from backend.core.config import settings
 
 
 def register_and_login(client, email: str, username: str):

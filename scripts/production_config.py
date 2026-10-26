@@ -13,8 +13,8 @@ from dotenv import dotenv_values
 from pydantic import ValidationError
 from sqlalchemy.engine import make_url
 
-from app.core.config import Settings
-from app.core.production import configured
+from backend.core.config import Settings
+from backend.core.production import configured
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -108,7 +108,7 @@ def validate_deployment_values(config, values):
             if key not in {"VITE_API_BASE_URL"}:
                 raise RuntimeError("Only documented public VITE_* build settings are allowed.")
             if value and not value.startswith("/"):
-                from app.core.production import public_https_url
+                from backend.core.production import public_https_url
 
                 if not public_https_url(value):
                     raise RuntimeError(f"{key} must be a public HTTPS URL or same-origin path.")

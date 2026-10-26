@@ -2,7 +2,7 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "FeelY: Start all",
+            "label": "FeelY: Start native",
             "type": "process",
             "command": "${workspaceFolder}/.venv/Scripts/python.exe",
             "args": ["${workspaceFolder}/scripts/start_feely.py", "--color"],
@@ -14,6 +14,20 @@
                 "clear": true
             },
             "runOptions": { "instanceLimit": 1 },
+            "problemMatcher": []
+        },
+        {
+            "label": "FeelY: Start Docker",
+            "type": "shell",
+            "command": ".\\feely.bat start",
+            "options": { "cwd": "${workspaceFolder}" },
+            "problemMatcher": []
+        },
+        {
+            "label": "FeelY: Stop Docker",
+            "type": "shell",
+            "command": ".\\feely.bat stop",
+            "options": { "cwd": "${workspaceFolder}" },
             "problemMatcher": []
         }
     ]

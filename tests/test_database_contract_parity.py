@@ -8,16 +8,16 @@ from uuid import UUID
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_db
-from app.api.routes import auth, billing, llm, webmail as mail_routes
-from app.core.config import settings
-from app.core.rate_limit import rate_limiter
-from app.core.security import create_admin_access_token
-from app.db.base import Base
-from app.db.session import create_database_engine
-from app.db.types import LegacyDateTime
-from app.main import create_app
-from app.services import chat_storage, email_verification, password_reset, self_authorship, webmail
+from backend.api.dependencies import get_db
+from backend.api.routes import auth, billing, llm, webmail as mail_routes
+from backend.core.config import settings
+from backend.core.rate_limit import rate_limiter
+from backend.core.security import create_admin_access_token
+from backend.db.base import Base
+from backend.db.session import create_database_engine
+from backend.db.types import LegacyDateTime
+from backend.main import create_app
+from backend.services import chat_storage, email_verification, password_reset, self_authorship, webmail
 
 FIXED_TIME = datetime(2026, 10, 13, 12, tzinfo=timezone.utc)
 

@@ -4,10 +4,10 @@ import jwt
 import pytest
 from fastapi.testclient import TestClient
 
-from app.core.config import Settings, settings
-from app.core.middleware import RequestSizeLimitMiddleware
-from app.core.rate_limit import SlidingWindowRateLimiter
-from app.website import app as website_app
+from backend.core.config import Settings, settings
+from backend.core.middleware import RequestSizeLimitMiddleware
+from backend.core.rate_limit import SlidingWindowRateLimiter
+from backend.website import app as website_app
 
 
 @pytest.mark.parametrize(
@@ -22,6 +22,7 @@ from app.website import app as website_app
         "/redoc",
         "/assets/",
         "/app/core/config.py",
+        "/backend/core/config.py",
     ],
 )
 def test_private_files_and_docs_are_not_public(client, path):
@@ -116,7 +117,7 @@ def test_chunked_and_misreported_bodies_cannot_reach_endpoint():
 
 
 def test_public_website_only_serves_approved_files(tmp_path, monkeypatch):
-    monkeypatch.setattr("app.api.routes.website.WEBSITE_ROOT", tmp_path)
+    monkeypatch.setattr("backend.api.routes.website.WEBSITE_ROOT", tmp_path)
     (tmp_path / "index.html").write_text("public page")
     (tmp_path / "credentials.json").write_text("secret material")
     with TestClient(website_app) as website:
@@ -128,7 +129,7 @@ def test_public_website_only_serves_approved_files(tmp_path, monkeypatch):
 
 def test_limiter_reclaims_expired_identities(monkeypatch):
     now = [0.0]
-    monkeypatch.setattr("app.core.rate_limit.monotonic", lambda: now[0])
+    monkeypatch.setattr("backend.core.rate_limit.monotonic", lambda: now[0])
     limiter = SlidingWindowRateLimiter()
     assert limiter.check("old", 1, 30)[0]
     now[0] = 61

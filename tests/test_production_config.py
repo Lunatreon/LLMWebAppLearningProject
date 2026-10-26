@@ -10,10 +10,10 @@ from fastapi.testclient import TestClient
 from openai import AsyncOpenAI
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
-from app.core.config import settings
-from app.core.production import public_https_url
-from app.llm.providers.openai import OpenAIChatLLMClient
-from app.main import create_app
+from backend.core.config import settings
+from backend.core.production import public_https_url
+from backend.llm.providers.openai import OpenAIChatLLMClient
+from backend.main import create_app
 from scripts.production_ci import create_fixture
 from scripts.production_config import load_production, write_backend_environment
 

@@ -1,11 +1,11 @@
 from sqlalchemy import select
-from app.api.routes import llm as llm_routes
-from app.llm.types import (
+from backend.api.routes import llm as llm_routes
+from backend.llm.types import (
     ChatLLMResult,
 )
-from app.services.self_authorship import create_topic_space
+from backend.services.self_authorship import create_topic_space
 
-from app.models.user import ChatSession, User
+from backend.models.user import ChatSession, User
 from tests.test_auth_and_llm import grant_premium_access
 from tests.test_email_and_feedback import database
 

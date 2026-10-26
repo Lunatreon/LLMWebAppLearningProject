@@ -12,13 +12,13 @@ from alembic.runtime.migration import MigrationContext
 from sqlalchemy import inspect, select, text
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
-from app.db import init_db as initialization
-from app.db.base import Base
-from app.db.session import create_database_engine, database_url
-from app.db.types import LegacyDateTime
-from app.models.user import User
-from app.schemas.user import UserRead
+from backend.core.config import settings
+from backend.db import init_db as initialization
+from backend.db.base import Base
+from backend.db.session import create_database_engine, database_url
+from backend.db.types import LegacyDateTime
+from backend.models.user import User
+from backend.schemas.user import UserRead
 from scripts.database_migration import (
     MigrationValidationError,
     copy_to_postgres,

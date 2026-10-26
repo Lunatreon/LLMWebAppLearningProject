@@ -8,66 +8,66 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app.api.dependencies import get_db
-from app.api.routes import auth as auth_routes
-from app.api.routes import llm as llm_routes
-from app.llm.tasks.map_suggestions import (
+from backend.api.dependencies import get_db
+from backend.api.routes import auth as auth_routes
+from backend.api.routes import llm as llm_routes
+from backend.llm.tasks.map_suggestions import (
     remember_map_suggestion_event,
     should_surface_map_suggestion,
 )
-from app.core import captcha as captcha_module
-from app.core.config import settings
-from app.core.rate_limit import rate_limiter
-from app.main import create_app
-from app.models.billing import BillingSubscription
-from app.models.user import User
-from app.llm.tasks.conversation_summary import (
+from backend.core import captcha as captcha_module
+from backend.core.config import settings
+from backend.core.rate_limit import rate_limiter
+from backend.main import create_app
+from backend.models.billing import BillingSubscription
+from backend.models.user import User
+from backend.llm.tasks.conversation_summary import (
     update_conversation_summary,
 )
-from app.llm.providers.anthropic import (
+from backend.llm.providers.anthropic import (
     AnthropicChatLLMClient,
     AnthropicTopicLLMClient,
 )
-from app.llm.context import (
+from backend.llm.context import (
     focused_chat_context,
     focused_profile_context,
     topic_chat_context,
 )
-from app.llm.providers.factory import (
+from backend.llm.providers.factory import (
     get_chat_llm_client,
     get_topic_llm_client,
 )
-from app.llm.json_response import (
+from backend.llm.json_response import (
     parse_json_response,
 )
-from app.llm.providers.local import (
+from backend.llm.providers.local import (
     LocalChatLLMClient,
     LocalTopicLLMClient,
     is_scam_abuse_request,
 )
-from app.llm.providers.ollama import (
+from backend.llm.providers.ollama import (
     OllamaChatLLMClient,
     OllamaTopicLLMClient,
 )
-from app.llm.responses import (
+from backend.llm.responses import (
     chat_result_from_payload,
     topic_result_from_payload,
 )
-from app.llm.streaming import (
+from backend.llm.streaming import (
     assistant_message_prefix_from_json,
 )
-from app.llm.types import (
+from backend.llm.types import (
     TopicLLMResult,
 )
-from app.llm.prompts import (
+from backend.llm.prompts import (
     read_system_prompt,
 )
-from app.llm.tasks.topic_matching import (
+from backend.llm.tasks.topic_matching import (
     best_existing_topic_match,
     infer_local_freeform_topic,
 )
-from app.llm.tasks.pattern_recognition import ChatAnalyser
-from app.services.self_authorship import merge_llm_profile
+from backend.llm.tasks.pattern_recognition import ChatAnalyser
+from backend.services.self_authorship import merge_llm_profile
 
 
 def grant_premium_access(client: TestClient, email: str) -> None:
@@ -2326,10 +2326,10 @@ def test_topic_categories_and_connections_survive_suggestion_confirmation(monkey
 
 
 def test_typed_topic_parsing_is_backward_compatible_and_matching_keeps_people_distinct():
-    from app.llm.responses import (
+    from backend.llm.responses import (
         TOPIC_RESPONSE_SCHEMA,
     )
-    from app.services.self_authorship import read_map
+    from backend.services.self_authorship import read_map
 
     legacy = topic_result_from_payload({"topic": "Music", "description": "You enjoy playing."})
     assert legacy.category == "other"

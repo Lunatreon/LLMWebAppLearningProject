@@ -15,6 +15,10 @@ npm run dev
 Open http://127.0.0.1:5173. PostgreSQL/native setup is in
 [DEPLOYMENT_NATIVE.md](../docs/DEPLOYMENT_NATIVE.md).
 
+For the complete app in Docker, use [the root startup guide](../STARTUP.md).
+For live reload against the Docker API, run the base Compose stack without its
+`app` profile, then run Vite here. Both frontend options use port 5173 by default.
+
 ## Build and validation
 
 ```bash
@@ -24,7 +28,7 @@ npm run build
 npm run format:check
 ```
 
-The build produces dist/. Native app.main serves it on port 8000 alongside the
+The build produces dist/. Native backend.main serves it on port 8000 alongside the
 API; production Caddy serves the same build. Vite preview is only for local build
 review. VITE_API_BASE_URL is the only public build setting, defaulting to /api/v1
 in production. Production ignores development query/storage API overrides.

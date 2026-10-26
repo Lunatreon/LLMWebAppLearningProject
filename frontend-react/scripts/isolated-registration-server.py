@@ -30,16 +30,16 @@ for name in ['LLM_PROVIDER', 'CHAT_LLM_PROVIDER', 'TOPIC_LLM_PROVIDER']:
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from fastapi import HTTPException
-from app.api.dependencies import get_db
-from app.api.routes import auth as auth_routes
-from app.core.config import settings
-from app.services import password_reset
-from app.core.rate_limit import rate_limiter
-from app.core.security import create_access_token
-from app.db.base import Base
-from app.main import create_app
-from app.models.user import User, utc_now
-from app.models.billing import BillingSubscription
+from backend.api.dependencies import get_db
+from backend.api.routes import auth as auth_routes
+from backend.core.config import settings
+from backend.services import password_reset
+from backend.core.rate_limit import rate_limiter
+from backend.core.security import create_access_token
+from backend.db.base import Base
+from backend.main import create_app
+from backend.models.user import User, utc_now
+from backend.models.billing import BillingSubscription
 import uvicorn
 
 settings.basic_auth_enabled = False
@@ -65,7 +65,7 @@ if options.chat:
     settings.rate_limit_llm_user_per_minute = 1000
     settings.rate_limit_llm_user_per_day = 1000
     settings.rate_limit_llm_free_user_per_day = 2
-    from app.api.routes import llm as chat_routes
+    from backend.api.routes import llm as chat_routes
     original_chat_factory = chat_routes.get_chat_llm_client
     chat_delay = [0]
     class DelayedMockChat:

@@ -7,13 +7,13 @@ import time
 from dotenv import dotenv_values
 import pytest
 
-from app.core.config import Settings, settings
-from app.db.session import database_url
+from backend.core.config import Settings, settings
+from backend.db.session import database_url
 from deployment import entrypoint, healthcheck
 from scripts.setup_docker_env import create_environment
 from scripts.create_deployment_snapshot import create_snapshot, SNAPSHOT_PASSWORD
 from scripts.database_migration import read_source
-from app.core.security import verify_password
+from backend.core.security import verify_password
 
 
 def test_docker_environment_generation_is_separate_and_never_overwrites(tmp_path):

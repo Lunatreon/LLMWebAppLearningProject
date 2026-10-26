@@ -1,8 +1,8 @@
 import pytest
 from sqlalchemy import select
 
-from app.core.config import settings
-from app.models.terms import TermsAcceptance
+from backend.core.config import settings
+from backend.models.terms import TermsAcceptance
 from tests.test_email_and_feedback import database
 
 
@@ -54,7 +54,7 @@ def test_registration_requires_explicit_current_terms_and_stores_acceptance(clie
     ]:
         assert client.post("/api/v1/auth/register", json={**payload, **extra}).status_code == status
     with database(client) as db:
-        from app.models.user import User
+        from backend.models.user import User
 
         assert db.scalar(select(User).where(User.username == "newterms")) is None
     accepted = {

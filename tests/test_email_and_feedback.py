@@ -7,13 +7,13 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from sqlalchemy import select
 
-from app.api.dependencies import get_db
-from app.integrations import email as mail
-from app.core.config import settings
-from app.services.email_verification import hash_email_verification_pin
-from app.core.rate_limit import rate_limiter
-from app.core.security import create_access_token, create_admin_access_token, hash_password
-from app.models.user import User, utc_now
+from backend.api.dependencies import get_db
+from backend.integrations import email as mail
+from backend.core.config import settings
+from backend.services.email_verification import hash_email_verification_pin
+from backend.core.rate_limit import rate_limiter
+from backend.core.security import create_access_token, create_admin_access_token, hash_password
+from backend.models.user import User, utc_now
 
 
 @contextmanager
@@ -142,7 +142,7 @@ def test_expired_pin_and_disabled_accounts_cannot_activate(client, outbox):
 
 
 def test_duplicate_pins_are_safe_for_different_addresses(client, outbox, monkeypatch):
-    monkeypatch.setattr("app.services.email_verification.secrets.randbelow", lambda _: 123)
+    monkeypatch.setattr("backend.services.email_verification.secrets.randbelow", lambda _: 123)
     assert register(client).status_code == 201
     assert register(client, "second@example.com", "second").status_code == 201
     assert pin_from(outbox[-1]) == "000123"
@@ -248,8 +248,8 @@ def test_feedback_flag_storage_admin_access_and_account_deletion(client, monkeyp
 
 @pytest.mark.parametrize("delivery_fails", [False, True])
 def test_feedback_notification_preserves_saved_submission(client, monkeypatch, delivery_fails):
-    from app.services import feedback_notifications as feedback_mail
-    from app.models.feedback import Feedback
+    from backend.services import feedback_notifications as feedback_mail
+    from backend.models.feedback import Feedback
 
     monkeypatch.setattr(settings, "feedback_enabled", True)
     monkeypatch.setattr(settings, "feedback_email_to", "info@feel-y.com")

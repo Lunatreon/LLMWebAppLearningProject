@@ -3,8 +3,8 @@
 # Frontend architecture
 
 Read this first when extending the application. [README.md](README.md) covers
-running it; [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md) records the Phase 15 audit;
-[VALIDATION.md](VALIDATION.md) records verified behavior and remaining UI gaps.
+running it; [ARCHITECTURE_AUDIT.md](../docs/archive/FRONTEND_ARCHITECTURE_AUDIT.md) records the Phase 15 audit;
+[VALIDATION.md](../docs/archive/FRONTEND_VALIDATION.md) records verified behavior and remaining UI gaps.
 
 ## Structure and routing
 
@@ -14,7 +14,7 @@ src/
   components/layout/         shell, sidebar, header, feature-dialog composition
   components/shared/         DialogFrame and lazy-view loading/error boundary
   context/                   session provider
-  features/                  account, auth, chat, feedback, journal, map, reflection, terms
+  features/                  account, auth, chat, feedback, map, reflection, terms
   hooks/                     appearance, viewport, drawer and session access
   services/                  HTTP/NDJSON, session, shared write coordination, reference links
   types/                     shared account/capability and Map domain contracts

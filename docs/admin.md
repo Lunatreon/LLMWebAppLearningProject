@@ -57,7 +57,7 @@ appropriate UTF-8 file for every model request, so a saved edit is active on the
 without restarting FastAPI or Ollama.
 
 These files are the only source of truth for the model instructions. Prompt text is not duplicated
-in Python code. Loading and saving live in `app/llm/prompts.py`.
+in Python code. Loading and saving live in `backend/llm/prompts.py`.
 If a file is missing or empty, model requests fail with a prompt
 configuration error; the admin editor shows an empty field so an administrator can restore and
 save the prompt.

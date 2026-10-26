@@ -4,12 +4,12 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy.orm import sessionmaker
 
-from app.core.config import settings
-from app.models.billing import BillingSubscription
-from app.models.user import User
-from app.schemas.billing import SubscriptionStatus
-from app.services import billing as billing_service
-from app.services.billing import (
+from backend.core.config import settings
+from backend.models.billing import BillingSubscription
+from backend.models.user import User
+from backend.schemas.billing import SubscriptionStatus
+from backend.services import billing as billing_service
+from backend.services.billing import (
     InvalidBillingPlanError,
     InvalidBillingReturnUrlError,
     has_premium_access,
@@ -511,10 +511,10 @@ def test_reply_reactions_persist_toggle_and_require_chat_owner(client):
 def test_cancelled_generation_releases_reserved_daily_quota(client, monkeypatch):
     import asyncio
     from fastapi import BackgroundTasks
-    from app.api.dependencies import get_db
-    from app.api.routes import llm as routes
-    from app.models.user import DailyLLMUsage
-    from app.schemas.llm import LLMRequest
+    from backend.api.dependencies import get_db
+    from backend.api.routes import llm as routes
+    from backend.models.user import DailyLLMUsage
+    from backend.schemas.llm import LLMRequest
     from sqlalchemy import select
 
     _register_and_authenticate(client)
