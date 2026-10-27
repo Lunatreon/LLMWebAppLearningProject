@@ -5,6 +5,37 @@ function resolveApiBase() {
   );
 }
 
+// Share the website's appearance preference, including the sign-in screen.
+function applyAdminTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  document.querySelectorAll('[data-admin-theme-toggle]').forEach((button) => {
+    button.textContent = theme === 'dark' ? 'Light mode' : 'Dark mode';
+    button.setAttribute('aria-label', `Use ${theme === 'dark' ? 'light' : 'dark'} appearance`);
+  });
+}
+function readAdminTheme() {
+  try {
+    return localStorage.getItem('feely_theme') === 'light' ? 'light' : 'dark';
+  } catch {
+    return 'dark';
+  }
+}
+applyAdminTheme(readAdminTheme());
+document.querySelectorAll('[data-admin-theme-toggle]').forEach((button) =>
+  button.addEventListener('click', () => {
+    const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    applyAdminTheme(theme);
+    try {
+      localStorage.setItem('feely_theme', theme);
+    } catch {
+      /* Keep the in-page selection. */
+    }
+  }),
+);
+window.addEventListener('storage', (event) => {
+  if (event.key === 'feely_theme' || event.key === null) applyAdminTheme(readAdminTheme());
+});
+
 const API_BASE = resolveApiBase();
 let adminToken = localStorage.getItem('feely_admin_token');
 const state = { users: [], selectedUserId: null };
@@ -419,7 +450,7 @@ async function api(path, options = {}) {
 }
 function setStatus(message, error = false) {
   statusLine.textContent = message;
-  statusLine.style.color = error ? '#9b3c34' : '#765c89';
+  statusLine.classList.toggle('is-error', error);
 }
 function selectedUser() {
   return state.users.find((user) => user.id === state.selectedUserId);

@@ -1,3 +1,80 @@
+/* Shared FeelY palette: light appearance, with a dark workspace variant. */
+html.admin-page {
+  --admin-scheme: light;
+  --admin-canvas: #f5f5f8;
+  --admin-surface: #ffffff;
+  --admin-raised: #faf9fc;
+  --admin-field: #ffffff;
+  --admin-text: #292630;
+  --admin-muted: #706c78;
+  --admin-label: #57515f;
+  --admin-line: #e5e3e9;
+  --admin-field-border: #dcd8e3;
+  --admin-placeholder: #756d7e;
+  --admin-primary: #655080;
+  --admin-primary-hover: #503a6c;
+  --admin-on-primary: #ffffff;
+  --admin-accent: #71558f;
+  --admin-focus: #8f73b7;
+  --admin-hover: #f5f2f8;
+  --admin-selected: #eae4f3;
+  --admin-selected-soft: #f7f4fb;
+  --admin-selected-text: #60428a;
+  --admin-badge: #eee8f5;
+  --admin-status: #665179;
+  --admin-link: #705788;
+  --admin-link-hover: #473655;
+  --admin-danger: #8f2939;
+  --admin-danger-surface: #fff4f5;
+  --admin-danger-border: #d6a7ad;
+  --admin-danger-hover: #fbe6e9;
+  --admin-danger-border-hover: #b96977;
+  --admin-disabled: #f1eff4;
+  --admin-disabled-text: #6d6675;
+  --admin-disabled-border: #dfdbe5;
+  --admin-readonly: #f2f1f5;
+  --admin-backdrop: #251d354d;
+  --admin-card-shadow: 0 3px 16px #241c3008;
+  --admin-dialog-shadow: 0 24px 80px #22153030;
+}
+html.admin-page[data-theme='dark'] {
+  --admin-scheme: dark;
+  --admin-canvas: #100f13;
+  --admin-surface: #19171e;
+  --admin-raised: #201d26;
+  --admin-field: #141218;
+  --admin-text: #f3eef8;
+  --admin-muted: #b3aabd;
+  --admin-label: #d7cfe2;
+  --admin-line: #37313f;
+  --admin-field-border: #51465e;
+  --admin-placeholder: #a89cb5;
+  --admin-primary: #c5b5ff;
+  --admin-primary-hover: #d7cbff;
+  --admin-on-primary: #231a35;
+  --admin-accent: #c5b5ff;
+  --admin-focus: #bba2ed;
+  --admin-hover: #2b2434;
+  --admin-selected: #342842;
+  --admin-selected-soft: #272131;
+  --admin-selected-text: #dfd1ff;
+  --admin-badge: #382c47;
+  --admin-status: #cdb9ec;
+  --admin-link: #c5b5ff;
+  --admin-link-hover: #e0d6ff;
+  --admin-danger: #ffb5bf;
+  --admin-danger-surface: #35212a;
+  --admin-danger-border: #82515e;
+  --admin-danger-hover: #4a2935;
+  --admin-danger-border-hover: #ba7c8c;
+  --admin-disabled: #2a2531;
+  --admin-disabled-text: #b5a9c1;
+  --admin-disabled-border: #49404f;
+  --admin-readonly: #211d28;
+  --admin-backdrop: #08060db3;
+  --admin-card-shadow: 0 4px 20px #0000001a;
+  --admin-dialog-shadow: 0 24px 80px #00000080;
+}
 html.admin-page {
   height: auto;
   max-height: none;
@@ -9,7 +86,7 @@ html.admin-page {
   max-height: none;
   min-height: var(--app-height);
   overflow: visible;
-  background: #f7f3ee;
+  background: var(--admin-canvas);
   color: var(--ink);
 }
 .admin-login-view {
@@ -72,7 +149,7 @@ html.admin-page {
   overflow-y: auto;
   border: 1px solid rgba(255, 255, 255, 0.38);
   border-radius: 12px;
-  background: rgba(250, 247, 241, 0.97);
+  background: var(--admin-surface);
   box-shadow: var(--shadow);
   color: var(--ink);
 }
@@ -96,23 +173,23 @@ html.admin-page {
 }
 .admin-login-heading > p:last-child {
   margin: 0;
-  color: #706a72;
+  color: var(--admin-muted);
   font-size: 14px;
   line-height: 1.55;
 }
 .admin-login-card label {
   display: grid;
   gap: 8px;
-  color: #59535b;
+  color: var(--admin-label);
   font-size: 13px;
   font-weight: 700;
 }
 .admin-login-card input {
   width: 100%;
   min-height: 50px;
-  border: 1px solid #cfc5bd;
+  border: 1px solid var(--admin-field-border);
   border-radius: 8px;
-  background: rgba(255, 253, 249, 0.88);
+  background: var(--admin-field);
   color: var(--ink);
   padding: 0 14px;
   transition:
@@ -121,10 +198,10 @@ html.admin-page {
     background 0.18s ease;
 }
 .admin-login-card input::placeholder {
-  color: #a49b97;
+  color: var(--admin-placeholder);
 }
 .admin-login-card input:hover {
-  border-color: #aa9da9;
+  border-color: var(--admin-focus);
   background: var(--white);
 }
 .admin-login-card input:focus {
@@ -150,7 +227,7 @@ html.admin-page {
 .admin-login-error {
   min-height: 20px;
   margin: -4px 0 0;
-  color: #a0443a;
+  color: var(--admin-danger);
   font-size: 12px;
   line-height: 1.45;
 }
@@ -164,28 +241,28 @@ html.admin-page {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: #705788;
+  color: var(--admin-link);
   font-size: 13px;
   font-weight: 700;
   text-decoration: none;
 }
 .admin-return-link:hover {
-  color: #473655;
+  color: var(--admin-link-hover);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 /* Administration workspace */
 html.admin-page {
-  color-scheme: light;
+  color-scheme: var(--admin-scheme, light);
   font-size: 14px;
 }
 .admin-body {
-  --ink: #292630;
-  --muted: #706c78;
-  --white: #fff;
-  --line-light: #e5e3e9;
-  --orchid: #8060ac;
-  background: #f5f5f8;
+  --ink: var(--admin-text);
+  --muted: var(--admin-muted);
+  --white: var(--admin-surface);
+  --line-light: var(--admin-line);
+  --orchid: var(--admin-accent);
+  background: var(--admin-canvas);
 }
 .admin-body *,
 .admin-body *::before,
@@ -249,17 +326,17 @@ html.admin-page {
   border: 0;
   border-radius: 7px;
   background: transparent;
-  color: #625c6b;
+  color: var(--admin-muted);
   text-align: left;
   font-size: 13px;
   font-weight: 600;
 }
 .admin-nav button:hover {
-  background: #eeecf3;
+  background: var(--admin-hover);
 }
 .admin-nav button[aria-current] {
-  color: #60428a;
-  background: #eae4f3;
+  color: var(--admin-selected-text);
+  background: var(--admin-selected);
 }
 .admin-shell {
   width: auto;
@@ -273,11 +350,11 @@ html.admin-page {
   font-weight: 500;
 }
 .admin-section {
-  background: #fff;
+  background: var(--admin-surface);
   border: 1px solid var(--line-light);
   padding: 24px;
   border-radius: 12px;
-  box-shadow: 0 2px 6px #25202d04;
+  box-shadow: var(--admin-card-shadow);
 }
 .admin-section-heading {
   display: flex;
@@ -309,7 +386,7 @@ html.admin-page {
 }
 .admin-section .eyebrow,
 .admin-dialog .eyebrow {
-  color: #806493;
+  color: var(--admin-status);
   font-size: 10px;
   margin: 0 0 5px;
 }
@@ -335,28 +412,28 @@ html.admin-page {
   white-space: normal;
 }
 .admin-body .primary-button {
-  background: #655080;
-  color: white;
+  background: var(--admin-primary);
+  color: var(--admin-on-primary);
 }
 .admin-body .primary-button:hover {
-  background: #503a6c;
+  background: var(--admin-primary-hover);
 }
 .admin-body .secondary-button {
-  background: white;
-  border: 1px solid #dcd8e3;
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-field-border);
   color: var(--ink);
 }
 .admin-body .secondary-button:hover {
-  background: #f5f2f8;
+  background: var(--admin-hover);
 }
 .admin-body .danger-button {
-  border-color: #d6a7ad;
-  background: #fff4f5;
-  color: #8f2939;
+  border-color: var(--admin-danger-border);
+  background: var(--admin-danger-surface);
+  color: var(--admin-danger);
 }
 .admin-body .danger-button:hover:not(:disabled) {
-  background: #fbe6e9;
-  border-color: #b96977;
+  background: var(--admin-danger-hover);
+  border-color: var(--admin-danger-border-hover);
 }
 .admin-body button:disabled {
   opacity: 1;
@@ -366,9 +443,9 @@ html.admin-page {
 .admin-body .secondary-button:disabled,
 .admin-body .danger-button:disabled,
 .admin-body .admin-text-danger:disabled {
-  color: #77717e;
-  background: #f1eff4;
-  border-color: #dfdbe5;
+  color: var(--admin-disabled-text);
+  background: var(--admin-disabled);
+  border-color: var(--admin-disabled-border);
 }
 .admin-body input:not([type='checkbox']),
 .admin-body select,
@@ -377,14 +454,14 @@ html.admin-page {
   min-width: 0;
   height: 36px;
   padding: 7px 10px;
-  border: 1px solid #dcd8e3;
+  border: 1px solid var(--admin-field-border);
   border-radius: 6px;
-  background: #fff;
+  background: var(--admin-surface);
   color: var(--ink);
   font-size: 13px;
   font-weight: 400;
   line-height: 1.45;
-  color-scheme: light;
+  color-scheme: var(--admin-scheme, light);
 }
 .admin-body textarea {
   height: auto;
@@ -392,8 +469,8 @@ html.admin-page {
 }
 .admin-body input:read-only,
 .admin-body select:disabled {
-  background: #f2f1f5;
-  color: #7e7788;
+  background: var(--admin-readonly);
+  color: var(--admin-disabled-text);
 }
 .admin-body input[type='checkbox'] {
   appearance: auto;
@@ -403,18 +480,18 @@ html.admin-page {
   min-height: 0;
   padding: 0;
   margin: 0;
-  accent-color: #71558f;
+  accent-color: var(--admin-accent);
   box-shadow: none;
 }
 .admin-body input:focus-visible,
 .admin-body textarea:focus-visible,
 .admin-body select:focus-visible,
 .admin-body button:focus-visible {
-  outline: 2px solid #8f73b7;
+  outline: 2px solid var(--admin-focus);
   outline-offset: 2px;
 }
 .admin-body label {
-  color: #57515f;
+  color: var(--admin-label);
   font-size: 12px;
   font-weight: 600;
 }
@@ -422,7 +499,7 @@ html.admin-page {
   border: 1px solid var(--line-light);
   padding: 18px;
   border-radius: 9px;
-  background: white;
+  background: var(--admin-surface);
 }
 .admin-form {
   display: grid;
@@ -460,7 +537,7 @@ html.admin-page {
 .admin-form-actions [role='status'] {
   margin-right: auto;
   font-size: 12px;
-  color: #665179;
+  color: var(--admin-status);
 }
 .admin-user-layout {
   display: grid;
@@ -480,17 +557,18 @@ html.admin-page {
   max-height: 620px;
 }
 .admin-user-card {
+  color: var(--ink);
   width: 100%;
   border: 1px solid var(--line-light);
   text-align: left;
   padding: 10px 12px;
   border-radius: 7px;
   font-size: 13px;
-  background: #fff;
+  background: var(--admin-surface);
 }
 .admin-user-card.active {
-  border-color: #9c83b8;
-  background: #f7f4fb;
+  border-color: var(--admin-focus);
+  background: var(--admin-selected-soft);
   box-shadow: none;
 }
 .admin-user-card span {
@@ -510,8 +588,8 @@ html.admin-page {
 }
 .admin-user-badges i {
   font-style: normal;
-  color: #665179;
-  background: #eee8f5;
+  color: var(--admin-status);
+  background: var(--admin-badge);
   font-size: 10px;
   font-weight: 500;
   padding: 2px 6px;
@@ -565,14 +643,14 @@ html.admin-page {
 .admin-empty {
   padding: 35px 20px;
   text-align: center;
-  border: 1px dashed #dcd8e3;
+  border: 1px dashed var(--admin-field-border);
   border-radius: 8px;
   color: var(--muted);
   font-size: 13px;
 }
 .admin-create-user {
   padding: 12px 16px;
-  background: #faf9fc;
+  background: var(--admin-raised);
 }
 .admin-create-user summary {
   font-size: 13px;
@@ -605,13 +683,13 @@ html.admin-page {
 .admin-local-status {
   font-size: 12px;
   margin: 8px 0;
-  color: #665179;
+  color: var(--admin-status);
 }
 .admin-local-status:empty {
   display: none;
 }
 .admin-local-status.is-error {
-  color: #a33435;
+  color: var(--admin-danger);
 }
 .admin-table-scroll {
   overflow: auto;
@@ -623,15 +701,15 @@ html.admin-page {
   text-align: left;
 }
 .admin-table th {
-  color: #777080;
+  color: var(--admin-muted);
   font-size: 11px;
   font-weight: 600;
-  background: #f7f6f9;
+  background: var(--admin-raised);
   padding: 10px 12px;
   white-space: nowrap;
 }
 .admin-table td {
-  border-bottom: 1px solid #eeecf1;
+  border-bottom: 1px solid var(--admin-line);
   padding: 10px 12px;
   vertical-align: middle;
 }
@@ -643,11 +721,11 @@ html.admin-page {
 .admin-table td small {
   display: block;
   font-size: 10px;
-  color: #89818f;
+  color: var(--admin-placeholder);
   margin-top: 3px;
 }
 .admin-table tr:hover td {
-  background: #fcfbfe;
+  background: var(--admin-hover);
 }
 .admin-row-actions {
   display: flex;
@@ -656,10 +734,10 @@ html.admin-page {
   gap: 12px;
 }
 .admin-text-danger {
-  border: 1px solid #d6a7ad;
+  border: 1px solid var(--admin-danger-border);
   border-radius: 7px;
-  background: #fff4f5;
-  color: #8f2939;
+  background: var(--admin-danger-surface);
+  color: var(--admin-danger);
   padding: 7px 12px;
   font-size: 12px;
   font-weight: 600;
@@ -667,7 +745,7 @@ html.admin-page {
   min-height: 34px;
 }
 .admin-text-danger:hover {
-  background: #fbe6e9;
+  background: var(--admin-danger-hover);
 }
 .admin-table .secondary-button {
   min-height: 34px;
@@ -681,14 +759,14 @@ html.admin-page {
   width: min(560px, calc(100vw - 32px));
   max-height: calc(100dvh - 40px);
   overflow: auto;
-  border: 1px solid #dfd9e7;
+  border: 1px solid var(--admin-field-border);
   border-radius: 12px;
-  background: #fff;
+  background: var(--admin-surface);
   padding: 24px;
-  box-shadow: 0 24px 80px #22153030;
+  box-shadow: var(--admin-dialog-shadow);
 }
 .admin-dialog::backdrop {
-  background: #251d354d;
+  background: var(--admin-backdrop);
   backdrop-filter: blur(2px);
 }
 .admin-dialog .admin-form {
@@ -766,7 +844,7 @@ html.admin-page {
   gap: 12px;
 }
 #admin-feedback-list .admin-panel {
-  background: #faf9fc;
+  background: var(--admin-raised);
 }
 #admin-feedback-list p {
   font-size: 13px;
@@ -883,7 +961,7 @@ html.admin-page {
   place-items: center;
   grid-template-columns: 1fr;
   padding: 24px;
-  background: #f5f5f8;
+  background: var(--admin-canvas);
 }
 .admin-login-view::before,
 .admin-login-story {
@@ -893,9 +971,9 @@ html.admin-page {
   width: min(400px, 100%);
   max-height: none;
   margin: 0;
-  background: #fff;
-  border: 1px solid #e5e3e9;
-  box-shadow: 0 10px 40px #241c3010;
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-line);
+  box-shadow: var(--admin-card-shadow);
 }
 .admin-login-card {
   padding: 28px;
@@ -980,4 +1058,36 @@ html.admin-page {
   .admin-settings-models {
     grid-template-columns: 1fr;
   }
+}
+
+.admin-page .admin-body {
+  background: var(--admin-canvas);
+  --danger: var(--admin-danger);
+}
+.admin-body input::placeholder,
+.admin-body textarea::placeholder {
+  color: var(--admin-placeholder);
+  opacity: 1;
+}
+.admin-body .brand-symbol {
+  color: var(--admin-accent);
+}
+.admin-status {
+  color: var(--admin-status);
+}
+.admin-body .eyebrow {
+  color: var(--admin-status);
+}
+.admin-status.is-error,
+.admin-body .form-error {
+  color: var(--admin-danger);
+}
+.admin-login-theme {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  z-index: 2;
+}
+.admin-login-view {
+  padding-top: 76px;
 }

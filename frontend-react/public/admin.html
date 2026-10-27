@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" class="admin-page">
+<html lang="en" class="admin-page" data-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta
@@ -16,11 +16,22 @@
       href="assets/feely-favicon.png?v=20260928-transparent-1"
     />
     <title>FeelY Administration</title>
+    <script>
+      try {
+        document.documentElement.dataset.theme =
+          localStorage.getItem('feely_theme') === 'light' ? 'light' : 'dark';
+      } catch {
+        /* Dark appearance remains available when storage is blocked. */
+      }
+    </script>
     <link rel="stylesheet" href="styles.css?v=20260831-4" />
-    <link rel="stylesheet" href="admin.css?v=20261027-4" />
+    <link rel="stylesheet" href="admin.css?v=20261027-5" />
   </head>
   <body class="admin-body">
     <section id="admin-login-view" class="admin-login-view">
+      <button type="button" class="secondary-button admin-login-theme" data-admin-theme-toggle>
+        Light mode
+      </button>
       <div class="admin-login-panel">
         <form id="admin-login-form" class="admin-login-card">
           <a class="brand-lockup admin-login-card-brand" href="./">
@@ -69,6 +80,7 @@
           ><span class="brand-symbol">F</span><span>FeelY <small>Administration</small></span></a
         >
         <div class="admin-header-actions">
+          <button type="button" class="secondary-button" data-admin-theme-toggle>Light mode</button>
           <a class="secondary-button" href="webmail.html">Mail</a
           ><a class="secondary-button" href="./">Open FeelY</a
           ><button id="admin-logout" class="secondary-button" type="button">Sign out</button>
@@ -507,6 +519,6 @@
         </div>
       </form>
     </dialog>
-    <script src="admin.js?v=20261027-4"></script>
+    <script src="admin.js?v=20261027-5"></script>
   </body>
 </html>

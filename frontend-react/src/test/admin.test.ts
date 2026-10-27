@@ -6,6 +6,8 @@ import { expect, test, vi } from 'vitest';
 
 test('admin navigation, category editing, creation, deletion and user actions work', async () => {
   document.documentElement.innerHTML = readFileSync(resolve('public/admin.html'), 'utf8');
+  document.documentElement.classList.add('admin-page');
+  document.documentElement.dataset.theme = 'dark';
   const styles = document.createElement('style');
   styles.textContent = readFileSync(resolve('public/admin.css'), 'utf8');
   document.head.append(styles);
@@ -22,7 +24,7 @@ test('admin navigation, category editing, creation, deletion and user actions wo
     'flex-end',
   );
   const deleteStyle = getComputedStyle(document.querySelector('#delete-user')!);
-  expect(deleteStyle.color).toBe('rgb(143, 41, 57)');
+  expect(deleteStyle.color).toBe('var(--admin-danger)');
   expect(deleteStyle.paddingRight).toBe('16px');
   Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
     configurable: true,
@@ -135,6 +137,52 @@ test('admin navigation, category editing, creation, deletion and user actions wo
   await waitFor(() =>
     expect(document.querySelector('#admin-status')?.textContent).toContain('Administration ready'),
   );
+  expect(document.documentElement.dataset.theme).toBe('dark');
+  const themeButtons = document.querySelectorAll<HTMLButtonElement>('[data-admin-theme-toggle]');
+  expect(themeButtons).toHaveLength(2);
+  expect(themeButtons[0].getAttribute('aria-label')).toBe('Use light appearance');
+  const palette = () => getComputedStyle(document.documentElement);
+  const checkContrast = () => {
+    const colors = palette();
+    const luminance = (name: string) => {
+      const hex = colors.getPropertyValue(`--admin-${name}`).trim();
+      const channels = [1, 3, 5].map((offset) => {
+        const value = parseInt(hex.slice(offset, offset + 2), 16) / 255;
+        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+      });
+      return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+    };
+    for (const [text, background] of [
+      ['text', 'surface'],
+      ['muted', 'surface'],
+      ['placeholder', 'field'],
+      ['on-primary', 'primary'],
+      ['danger', 'danger-surface'],
+      ['disabled-text', 'disabled'],
+    ]) {
+      const [low, high] = [luminance(text), luminance(background)].sort((a, b) => a - b);
+      expect((high + 0.05) / (low + 0.05)).toBeGreaterThanOrEqual(4.5);
+    }
+  };
+  expect(palette().getPropertyValue('--admin-scheme').trim()).toBe('dark');
+  expect(palette().getPropertyValue('--admin-surface').trim()).toBe('#19171e');
+  checkContrast();
+  fireEvent.click(themeButtons[1]);
+  expect(document.documentElement.dataset.theme).toBe('light');
+  expect(localStorage.getItem('feely_theme')).toBe('light');
+  expect(themeButtons[0].textContent).toBe('Dark mode');
+  expect(palette().getPropertyValue('--admin-surface').trim()).toBe('#ffffff');
+  checkContrast();
+  // The head initializer restores the saved appearance before styles are painted.
+  document.documentElement.dataset.theme = 'dark';
+  window.eval(document.querySelector('head script')!.textContent!);
+  expect(document.documentElement.dataset.theme).toBe('light');
+  fireEvent.click(themeButtons[0]);
+  expect(localStorage.getItem('feely_theme')).toBe('dark');
+  localStorage.setItem('feely_theme', 'light');
+  window.dispatchEvent(new StorageEvent('storage', { key: 'feely_theme', newValue: 'light' }));
+  expect(document.documentElement.dataset.theme).toBe('light');
+  fireEvent.click(themeButtons[1]);
   expect(document.querySelector('#section-users')?.classList.contains('hidden')).toBe(false);
   fireEvent.click(within(document.body).getByRole('button', { name: 'Map categories' }));
   expect(document.querySelector('#section-users')?.classList.contains('hidden')).toBe(true);

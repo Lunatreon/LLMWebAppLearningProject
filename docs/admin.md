@@ -5,6 +5,10 @@ administrator credentials below, or with the username/email and password of a Fe
 whose role is Admin. Admin login issues a separate bearer token and uses separate browser
 storage. A normal user JWT is rejected by every protected admin endpoint, even for an Admin.
 
+The sign-in screen and admin header include a Light/Dark appearance button. Administration
+uses the same saved `feely_theme` browser preference as FeelY, defaults to dark, and syncs
+appearance across open tabs. Themes cover forms, tables, app settings and confirmation dialogs.
+
 ```env
 ADMIN_USERNAME=""
 ADMIN_PASSWORD_HASH=""
