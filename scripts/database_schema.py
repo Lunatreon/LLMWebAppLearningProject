@@ -112,7 +112,10 @@ def generate():
         ]
     )
     (ROOT / "docs/DATABASE_SCHEMA.md").write_text("\n".join(doc), encoding="utf-8")
-    (ROOT / "docs/database-schema.sql").write_text("\n".join(sql) + "\n", encoding="utf-8")
+    (ROOT / "docs/database-schema.sql").write_text(
+        "\n".join(line.rstrip() for line in "\n".join(sql).splitlines()) + "\n",
+        encoding="utf-8",
+    )
     print(f"Generated schema reference for {len(tables)} application tables.")
 
 

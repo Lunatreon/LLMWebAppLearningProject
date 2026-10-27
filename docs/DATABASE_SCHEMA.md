@@ -4,7 +4,7 @@ Generated from SQLAlchemy metadata by `python -m scripts.database_schema`.
 Run this inside the backend image with a repository bind mount when host Python is unavailable.
 The versioned schema is managed by Alembic; generated SQL is a reference, not an upgrade script.
 
-17 application tables, plus Alembic's `alembic_version` table.
+18 application tables, plus Alembic's `alembic_version` table.
 
 ```mermaid
 erDiagram
@@ -17,16 +17,21 @@ erDiagram
     users ||--o| user_profiles : user_id
     chat_sessions ||--o{ chat_turns : chat_session_id
     user_profiles ||--o| user_maps : user_id
-    map_categories ||--o{ map_topics : category_kind
-    user_maps ||--o{ map_topics : user_id
     map_topics o|--o{ map_topics : user_id
+    user_maps ||--o{ map_topics : user_id
+    map_categories ||--o{ map_topics : category_kind
+    map_categories ||--o{ map_entries : category_kind
+    user_maps ||--o{ map_entries : user_id
     chat_sessions o|--o{ map_entries : source_user_id
     map_topics o|--o{ map_entries : user_id
-    user_maps ||--o{ map_entries : user_id
-    map_categories ||--o{ map_entries : category_kind
     map_topics ||--o{ map_topic_relations : user_id
     chat_sessions o|--o{ map_topic_sources : source_user_id
     map_topics ||--o{ map_topic_sources : user_id
+    app_settings {
+        integer id PK
+        integer revision
+        json values
+    }
     mail_messages {
         integer id PK
         varchar delivery_key
@@ -221,6 +226,17 @@ erDiagram
         varchar source_chat_id FK
     }
 ```
+
+## app_settings
+
+| Column | PostgreSQL type | Nullable | Key |
+| --- | --- | --- | --- |
+| `id` | `INTEGER` | no | PK |
+| `revision` | `INTEGER` | no |  |
+| `values` | `JSON` | no |  |
+
+- Check: `revision >= 1`.
+- Check: `id = 1`.
 
 ## mail_messages
 

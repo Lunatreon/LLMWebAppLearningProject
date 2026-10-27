@@ -1,4 +1,5 @@
 from functools import lru_cache
+from contextvars import ContextVar
 from typing import Literal
 
 from pydantic import Field
@@ -11,6 +12,26 @@ TURNSTILE_TEST_SITE_KEYS = {
     "2x00000000000000000000BB",
     "3x00000000000000000000FF",
 }
+
+# Scoped to one request; environment-backed values remain the deployment defaults.
+runtime_setting_values: ContextVar[dict] = ContextVar("runtime_setting_values", default={})
+LIVE_SETTING_NAMES = frozenset(
+    {
+        "chat_llm_provider",
+        "topic_llm_provider",
+        "openai_chat_model",
+        "openai_topic_model",
+        "anthropic_chat_model",
+        "anthropic_topic_model",
+        "ollama_chat_model",
+        "ollama_topic_model",
+        "feedback_enabled",
+        "password_reset_enabled",
+        "premium_features_enabled",
+        "rate_limit_llm_free_user_per_day",
+        "rate_limit_llm_user_per_day",
+    }
+)
 TURNSTILE_TEST_SECRET_KEYS = {
     "1x0000000000000000000000000000000AA",
     "2x0000000000000000000000000000000AA",
@@ -19,6 +40,13 @@ TURNSTILE_TEST_SECRET_KEYS = {
 
 
 class Settings(BaseSettings):
+    def __getattribute__(self, name):
+        if name in LIVE_SETTING_NAMES and globals().get("settings") is self:
+            overrides = runtime_setting_values.get()
+            if name in overrides:
+                return overrides[name]
+        return super().__getattribute__(name)
+
     app_name: str = "FeelY Backend"
     api_v1_prefix: str = "/api/v1"
     environment: str = "local"

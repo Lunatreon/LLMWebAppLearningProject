@@ -1,7 +1,7 @@
 # Database design review
 
 Reviewed against the application metadata and persistence code on 2026-10-26.
-The complete [diagram/column reference](DATABASE_SCHEMA.md) covers 17 application
+The complete [diagram/column reference](DATABASE_SCHEMA.md) covers 18 application
 tables; Alembic adds its version table. Findings below distinguish changes in this
 implementation from follow-up work. This is a schema/code review, not a claim of
 capacity testing or complete data-protection compliance.

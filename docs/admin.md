@@ -28,6 +28,11 @@ host UID/GID as shown there. Do not store a plaintext administrator password.
 
 The page can:
 
+- Switch between compact Users, Map categories, System prompts and Feedback sections.
+- Search users and categories; edit categories in a focused dialog, or add one with Add category.
+- Delete unused categories. Used categories must be disabled instead; required system categories cannot be deleted.
+- Permanently delete a user after typing their username. Self-deletion is blocked; linked Stripe subscriptions must be canceled first. Account deletion removes owned database content and invalidates that user's access.
+
 - Edit a user's email, username, display name, active state, and verification state.
 - Create accounts and assign Member, Test, or Admin roles.
 - Change an existing account's role using the Account role selector.
@@ -73,3 +78,30 @@ Use **Map categories** on `/admin.html` to add topic/entry kinds, change labels 
 descriptions, enable completion tracking or control LLM availability. Keys remain
 stable; disable categories instead of deleting ones used by saved records. Changes
 apply to the next map load/model request. See [map storage](MAP_DATABASE_SCHEMA.md).
+
+
+## App settings
+
+Open **App settings** to choose the chat and topic providers and model identifiers,
+turn feedback/password reset/Premium requirements on or off, and edit daily message
+limits (0 means no daily cap). With Premium requirements disabled, every account uses
+the Premium message limit. This does not reset already-recorded daily usage.
+
+Changes are saved in the single versioned `app_settings` row introduced by migration
+`0005`. Its bounded JSON document contains only validated preferences, never provider
+keys or user content. A request reads one snapshot from the database; settings do not
+mutate process-wide globals, and changes apply across backend workers without a restart.
+Existing streaming requests retain the snapshot they started with. Reload user-facing
+pages to refresh feature controls already loaded in the browser.
+
+Only administrators can read or write these settings. Concurrent edits return a conflict
+instead of overwriting newer changes. **Use deployment defaults** clears the overrides;
+it retains the revision counter and reads defaults from the environment again. A fresh
+installation also starts with its deployment defaults.
+
+OpenAI/Anthropic require their API key in the deployment environment; password reset
+requires SMTP. Ollama requires an already reachable service and installed model. Saving
+an identifier does not download, discover or test models. Credentials, connection URLs,
+mail polling, authentication, encryption and other deployment/security settings remain
+in the environment. Provider/model changes can change where subsequent AI requests are
+processed; the editor names each selected provider explicitly.

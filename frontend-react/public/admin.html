@@ -17,25 +17,10 @@
     />
     <title>FeelY Administration</title>
     <link rel="stylesheet" href="styles.css?v=20260831-4" />
-    <link rel="stylesheet" href="admin.css?v=20260917-roles-1" />
+    <link rel="stylesheet" href="admin.css?v=20261027-4" />
   </head>
   <body class="admin-body">
     <section id="admin-login-view" class="admin-login-view">
-      <div class="admin-login-story">
-        <a class="brand-lockup brand-lockup-light" href="./">
-          <span class="brand-symbol">F</span><span>FeelY Admin</span>
-        </a>
-        <div class="admin-login-story-copy">
-          <p class="eyebrow eyebrow-light">A quiet place to care for the space</p>
-          <h1>Keep FeelY thoughtful, safe, and yours.</h1>
-          <p>
-            Manage the people, prompts, and access behind the conversations—all from one private
-            workspace.
-          </p>
-        </div>
-        <p class="admin-login-story-note">Private administration for authorized accounts</p>
-      </div>
-
       <div class="admin-login-panel">
         <form id="admin-login-form" class="admin-login-card">
           <a class="brand-lockup admin-login-card-brand" href="./">
@@ -81,210 +66,447 @@
     <div id="admin-app" class="hidden">
       <header class="admin-header">
         <a class="brand-lockup" href="./"
-          ><span class="brand-symbol">F</span><span>FeelY Admin</span></a
+          ><span class="brand-symbol">F</span><span>FeelY <small>Administration</small></span></a
         >
         <div class="admin-header-actions">
-          <a class="secondary-button" href="webmail.html">Open mail</a>
-          <a class="secondary-button" href="./">Back to chat</a>
-          <button id="admin-logout" class="secondary-button" type="button">Sign out</button>
+          <a class="secondary-button" href="webmail.html">Mail</a
+          ><a class="secondary-button" href="./">Open FeelY</a
+          ><button id="admin-logout" class="secondary-button" type="button">Sign out</button>
         </div>
       </header>
-
-      <main class="admin-shell">
-        <p id="admin-status" class="admin-status" role="status">Loading administration...</p>
-
-        <section class="admin-section">
-          <div class="admin-section-heading">
-            <div>
-              <p class="eyebrow">Test phase</p>
-              <h2>Feedback inbox</h2>
+      <div class="admin-workspace">
+        <nav class="admin-nav" aria-label="Administration sections">
+          <p class="eyebrow">Workspace</p>
+          <button type="button" data-section="users" aria-current="page">Users</button>
+          <button type="button" data-section="categories">Map categories</button>
+          <button type="button" data-section="prompts">System prompts</button>
+          <button type="button" data-section="feedback">Feedback</button>
+          <button type="button" data-section="settings">App settings</button>
+        </nav>
+        <main class="admin-shell">
+          <p id="admin-status" class="admin-status" role="status">Loading administration...</p>
+          <section class="admin-section" id="section-users" aria-labelledby="users-heading">
+            <div class="admin-section-heading">
+              <div>
+                <p class="eyebrow">Accounts & access</p>
+                <h1 id="users-heading">Users</h1>
+                <p class="admin-help">Manage account details, permissions and subscriptions.</p>
+              </div>
+              <button id="refresh-users" class="secondary-button" type="button">Refresh</button>
             </div>
-            <button id="refresh-feedback" class="secondary-button" type="button">
-              Refresh feedback
-            </button>
-          </div>
-          <p id="admin-feedback-status" role="status"></p>
-          <div id="admin-feedback-list"></div>
-          <button id="more-feedback" class="secondary-button hidden" type="button">
-            Load older feedback
-          </button>
-        </section>
-
-        <section class="admin-section">
-          <div class="admin-section-heading">
-            <div>
-              <p class="eyebrow">Accounts</p>
-              <h1>Users</h1>
-            </div>
-            <button id="refresh-users" class="secondary-button" type="button">Refresh</button>
-          </div>
-          <details class="admin-panel admin-create-user">
-            <summary>Create an account</summary>
-            <form id="admin-create-user-form" class="admin-form">
-              <label>Email<input name="email" type="email" required /></label>
-              <label>Username<input name="username" minlength="3" maxlength="80" required /></label>
-              <label
-                >Initial password<input
-                  name="password"
-                  type="password"
-                  minlength="8"
-                  maxlength="128"
-                  autocomplete="new-password"
-                  required
-              /></label>
-              <label
-                >Account role<select name="role">
-                  <option value="member">Member</option>
-                  <option value="test">Test</option>
-                  <option value="admin">Admin</option>
-                </select></label
-              >
-              <p class="admin-help">
-                Admin accounts can manage users and prompts. Test accounts only receive debug
-                access; they cannot open administration. Roles do not add a subscription.
-              </p>
-              <button class="primary-button" type="submit">Create account</button>
-            </form>
-          </details>
-          <div class="admin-user-layout">
-            <div id="admin-user-list" class="admin-user-list"></div>
-            <div id="admin-user-editor" class="admin-panel hidden">
-              <h2 id="selected-user-title">Edit user</h2>
-              <form id="admin-user-form" class="admin-form">
-                <label>Email<input id="admin-user-email" type="email" required /></label>
-                <label>Username<input id="admin-user-username" required minlength="3" /></label>
+            <details class="admin-panel admin-create-user">
+              <summary>Create an account</summary>
+              <form id="admin-create-user-form" class="admin-form">
+                <label>Email<input name="email" type="email" required /></label>
                 <label
-                  >Account role<select id="admin-user-role">
+                  >Username<input name="username" minlength="3" maxlength="80" required
+                /></label>
+                <label
+                  >Initial password<input
+                    name="password"
+                    type="password"
+                    minlength="8"
+                    maxlength="128"
+                    autocomplete="new-password"
+                    required
+                /></label>
+                <label
+                  >Account role<select name="role">
                     <option value="member">Member</option>
                     <option value="test">Test</option>
                     <option value="admin">Admin</option>
                   </select></label
                 >
                 <p class="admin-help">
-                  Test accounts can use map debug tools. Admin accounts can also manage users and
-                  prompts. Premium access is managed separately.
+                  Admin accounts can manage users and prompts. Test accounts only receive debug
+                  access; they cannot open administration. Roles do not add a subscription.
                 </p>
-                <label>Display name<input id="admin-user-display-name" /></label>
-                <label class="admin-check"
-                  ><input id="admin-user-active" type="checkbox" /> Active account</label
-                >
-                <label class="admin-check"
-                  ><input id="admin-user-verified" type="checkbox" /> Email verified</label
-                >
-                <button class="primary-button" type="submit">Save user</button>
+                <button class="primary-button" type="submit">Create account</button>
               </form>
+            </details>
+            <div class="admin-user-layout">
+              <aside>
+                <label class="admin-search"
+                  >Find a user<input
+                    id="admin-user-search"
+                    type="search"
+                    placeholder="Name or email"
+                /></label>
+                <div id="admin-user-list" class="admin-user-list"></div>
+              </aside>
+              <div>
+                <div id="admin-user-empty" class="admin-empty">
+                  Select a user to view and edit their account.
+                </div>
+                <div id="admin-user-editor" class="admin-panel hidden">
+                  <h2 id="selected-user-title">Account details</h2>
+                  <form id="admin-user-form" class="admin-form">
+                    <label>Email<input id="admin-user-email" type="email" required /></label>
+                    <label>Username<input id="admin-user-username" required minlength="3" /></label>
+                    <label
+                      >Account role<select id="admin-user-role">
+                        <option value="member">Member</option>
+                        <option value="test">Test</option>
+                        <option value="admin">Admin</option>
+                      </select></label
+                    >
+                    <p class="admin-help">
+                      Admin accounts can manage this workspace. Premium access is separate.
+                    </p>
+                    <label>Display name<input id="admin-user-display-name" /></label>
+                    <label class="admin-check"
+                      ><input id="admin-user-active" type="checkbox" /> Active account</label
+                    >
+                    <label class="admin-check"
+                      ><input id="admin-user-verified" type="checkbox" /> Email verified</label
+                    >
+                    <div class="admin-form-actions">
+                      <span id="user-save-status" role="status"></span
+                      ><button class="primary-button" type="submit">Save changes</button>
+                    </div>
+                  </form>
 
-              <div class="admin-subsection">
-                <h3>Password reset</h3>
-                <form id="admin-password-form" class="admin-inline-form">
-                  <input
-                    id="admin-new-password"
-                    type="password"
-                    minlength="8"
-                    maxlength="128"
-                    autocomplete="new-password"
-                    placeholder="New password"
-                    required
-                  />
-                  <button class="secondary-button" type="submit">Set password</button>
-                </form>
+                  <details class="admin-subsection">
+                    <summary>Password reset</summary>
+                    <form id="admin-password-form" class="admin-inline-form">
+                      <input
+                        id="admin-new-password"
+                        type="password"
+                        minlength="8"
+                        maxlength="128"
+                        autocomplete="new-password"
+                        placeholder="New password"
+                        required
+                      />
+                      <button class="secondary-button" type="submit">Set password</button>
+                    </form>
+                  </details>
+
+                  <div class="admin-subsection admin-tool-row">
+                    <div>
+                      <h3>Subscription</h3>
+                      <p id="admin-subscription-state"></p>
+                      <p class="admin-help">
+                        Cancels the Stripe subscription and removes Premium access.
+                      </p>
+                    </div>
+                    <button id="remove-subscription" class="danger-button" type="button">
+                      Cancel subscription
+                    </button>
+                  </div>
+                  <div class="admin-subsection admin-delete-account">
+                    <div>
+                      <h3>Delete account</h3>
+                      <p class="admin-help">
+                        Permanently removes this account and its stored data.
+                      </p>
+                    </div>
+                    <button id="delete-user" class="danger-button" type="button">
+                      Delete user
+                    </button>
+                  </div>
+                </div>
               </div>
-
-              <div class="admin-subsection danger-zone">
-                <h3>Subscription</h3>
-                <p id="admin-subscription-state"></p>
-                <button id="remove-subscription" class="danger-button" type="button">
-                  Cancel Stripe and remove Premium
-                </button>
+            </div>
+          </section>
+          <section
+            class="admin-section hidden"
+            id="section-categories"
+            aria-labelledby="categories-heading"
+          >
+            <div class="admin-section-heading">
+              <div>
+                <p class="eyebrow">Map configuration</p>
+                <h1 id="categories-heading">Map categories</h1>
                 <p class="admin-help">
-                  This immediately cancels the associated Stripe subscription and revokes local
-                  Premium access.
+                  Categories are shared by the map editor and AI suggestions.
                 </p>
               </div>
+              <button id="add-map-category" class="primary-button" type="button">
+                + Add category
+              </button>
             </div>
-          </div>
-        </section>
-
-        <section class="admin-section">
-          <h2>Map categories</h2>
-          <p class="admin-help">
-            Stable category keys keep existing entries connected. Edit labels and descriptions, or
-            disable a category to keep historical entries while stopping new use. Enabled LLM
-            categories are supplied to analysis automatically.
-          </p>
-          <form id="map-category-form" class="admin-panel">
-            <label
-              >Existing category
-              <select id="map-category-select">
-                <option value="">New category</option>
-              </select></label
-            >
-            <label
-              >Kind
-              <select name="kind">
-                <option value="entry">Entry</option>
-                <option value="topic">Topic</option>
-              </select></label
-            >
-            <label
-              >Stable key
-              <input
-                name="key"
-                required
-                pattern="[a-z][a-z0-9_]{0,63}"
-                maxlength="64"
-                placeholder="task"
-            /></label>
-            <label>Label <input name="label" required maxlength="120" /></label>
-            <label
-              >Description for the model
-              <textarea name="description" maxlength="2000" rows="3"></textarea>
-            </label>
-            <label
-              ><input name="active" type="checkbox" checked /> Available for new
-              entries/topics</label
-            >
-            <label
-              ><input name="llm_enabled" type="checkbox" checked /> Allow LLM suggestions</label
-            >
-            <label
-              ><input name="supports_completion" type="checkbox" /> Starts with completion
-              tracking</label
-            >
-            <label
-              >Display order <input name="position" type="number" min="0" max="10000" value="0"
-            /></label>
-            <button type="submit" class="primary-button">Save category</button>
-          </form>
-        </section>
-
-        <section class="admin-section">
-          <div class="admin-section-heading">
-            <div>
-              <p class="eyebrow">Model behaviour</p>
-              <h2>System prompts</h2>
+            <div class="admin-list-toolbar">
+              <label class="admin-search"
+                >Find a category<input
+                  id="map-category-search"
+                  type="search"
+                  placeholder="Search name, key or description" /></label
+              ><label
+                >Type<select id="map-category-filter">
+                  <option value="">All categories</option>
+                  <option value="entry">Entries</option>
+                  <option value="topic">Topics</option>
+                </select></label
+              ><span id="map-category-count" class="admin-help"></span>
             </div>
-          </div>
-          <p class="admin-help">
-            Saved text is reloaded for the next model request. Restarting FastAPI or Ollama is not
-            required.
-          </p>
-          <div class="admin-prompt-grid">
-            <form class="admin-panel admin-prompt-form" data-kind="chat">
-              <h3>Chat bot</h3>
-              <textarea id="chat-prompt" rows="22" minlength="100" required></textarea>
-              <button class="primary-button" type="submit">Save chat prompt</button>
+            <p id="map-category-status" class="admin-local-status" role="status"></p>
+            <div class="admin-table-scroll">
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Category</th>
+                    <th scope="col">Type</th>
+                    <th scope="col">Availability</th>
+                    <th scope="col">AI suggestions</th>
+                    <th scope="col">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="map-category-list"></tbody>
+              </table>
+            </div>
+            <p class="admin-help">
+              Categories in use can be disabled to preserve existing content. System categories
+              cannot be deleted.
+            </p>
+          </section>
+          <section
+            class="admin-section hidden"
+            id="section-prompts"
+            aria-labelledby="prompts-heading"
+          >
+            <div class="admin-section-heading">
+              <div>
+                <p class="eyebrow">Model behaviour</p>
+                <h1 id="prompts-heading">System prompts</h1>
+                <p class="admin-help">Saved changes apply to the next model request.</p>
+              </div>
+            </div>
+            <div class="admin-prompt-grid">
+              <form class="admin-panel admin-prompt-form" data-kind="chat">
+                <h2>Chat</h2>
+                <label for="chat-prompt">Conversation instructions</label
+                ><textarea id="chat-prompt" rows="18" minlength="100" required></textarea
+                ><button class="primary-button" type="submit">Save chat prompt</button>
+              </form>
+              <form class="admin-panel admin-prompt-form" data-kind="topic">
+                <h2>Topics</h2>
+                <label for="topic-prompt">Topic analysis instructions</label
+                ><textarea id="topic-prompt" rows="18" minlength="100" required></textarea
+                ><button class="primary-button" type="submit">Save topic prompt</button>
+              </form>
+            </div>
+          </section>
+          <section
+            class="admin-section hidden"
+            id="section-settings"
+            aria-labelledby="settings-heading"
+          >
+            <div class="admin-section-heading">
+              <div>
+                <p class="eyebrow">Application</p>
+                <h1 id="settings-heading">App settings</h1>
+                <p class="admin-help">
+                  Changes are saved for this installation and apply to new requests.
+                </p>
+              </div>
+              <button id="reload-app-settings" class="secondary-button" type="button">
+                Reload
+              </button>
+            </div>
+            <p id="app-settings-status" class="admin-local-status" role="status"></p>
+            <form id="app-settings-form">
+              <fieldset id="app-settings-fields" class="admin-settings-fields" disabled>
+                <legend class="admin-settings-legend">Models</legend>
+                <p class="admin-help">
+                  Choose a provider and enter its exact model identifier. Ollama models must already
+                  be installed. Local demo providers do not call an AI model.
+                </p>
+                <div class="admin-settings-models">
+                  <div class="admin-panel admin-form">
+                    <h2 class="admin-span">Chat model</h2>
+                    <label
+                      >Provider<select
+                        name="chat_provider"
+                        aria-label="Chat provider"
+                      ></select></label
+                    ><label
+                      >Model identifier<input
+                        name="chat_model"
+                        aria-label="Chat model identifier"
+                        maxlength="200"
+                    /></label>
+                    <p class="admin-help">Used for conversations.</p>
+                  </div>
+                  <div class="admin-panel admin-form">
+                    <h2 class="admin-span">Topic model</h2>
+                    <label
+                      >Provider<select
+                        name="topic_provider"
+                        aria-label="Topic provider"
+                      ></select></label
+                    ><label
+                      >Model identifier<input
+                        name="topic_model"
+                        aria-label="Topic model identifier"
+                        maxlength="200"
+                    /></label>
+                    <p class="admin-help">Used for map suggestions and topic analysis.</p>
+                  </div>
+                </div>
+                <h2>Features</h2>
+                <div class="admin-settings-switches">
+                  <label class="admin-check"
+                    ><input name="feedback_enabled" type="checkbox" /><span
+                      >Feedback<span class="admin-help">Allow users to send feedback.</span></span
+                    ></label
+                  >
+                  <label class="admin-check"
+                    ><input name="password_reset_enabled" type="checkbox" /><span
+                      >Password reset<span class="admin-help"
+                        >Allow password-reset emails. Requires configured SMTP.</span
+                      ></span
+                    ></label
+                  >
+                  <label class="admin-check"
+                    ><input name="premium_features_enabled" type="checkbox" /><span
+                      >Require Premium<span class="admin-help"
+                        >Restrict premium features to subscribers. When off, these features are
+                        available to all accounts.</span
+                      ></span
+                    ></label
+                  >
+                </div>
+                <h2>Daily message limits</h2>
+                <div class="admin-form admin-settings-limits">
+                  <label
+                    >Free accounts<input
+                      name="rate_limit_llm_free_user_per_day"
+                      type="number"
+                      min="0"
+                      max="100000"
+                      required /></label
+                  ><label
+                    >Premium / free test phase<input
+                      name="rate_limit_llm_user_per_day"
+                      type="number"
+                      min="0"
+                      max="100000"
+                      required
+                  /></label>
+                </div>
+                <p class="admin-help">
+                  Limits apply when deployment rate limiting is enabled. Existing daily usage is
+                  preserved.
+                </p>
+              </fieldset>
+              <p class="admin-help">
+                Provider API keys, mail connections and security settings are managed in your
+                deployment environment. Models are used as entered; saving does not download or test
+                a model.
+              </p>
+              <div class="admin-form-actions">
+                <button id="reset-app-settings" class="secondary-button" type="button" disabled>
+                  Use deployment defaults</button
+                ><button id="save-app-settings" class="primary-button" type="submit" disabled>
+                  Save settings
+                </button>
+              </div>
             </form>
-            <form class="admin-panel admin-prompt-form" data-kind="topic">
-              <h3>Topic bot</h3>
-              <textarea id="topic-prompt" rows="22" minlength="100" required></textarea>
-              <button class="primary-button" type="submit">Save topic prompt</button>
-            </form>
-          </div>
-        </section>
-      </main>
+          </section>
+          <section
+            class="admin-section hidden"
+            id="section-feedback"
+            aria-labelledby="feedback-heading"
+          >
+            <div class="admin-section-heading">
+              <div>
+                <p class="eyebrow">Test phase</p>
+                <h1 id="feedback-heading">Feedback</h1>
+                <p class="admin-help">Read feedback from your users.</p>
+              </div>
+              <button id="refresh-feedback" class="secondary-button" type="button">Refresh</button>
+            </div>
+            <p id="admin-feedback-status" role="status"></p>
+            <div id="admin-feedback-list"></div>
+            <button id="more-feedback" class="secondary-button hidden" type="button">
+              Load older feedback
+            </button>
+          </section>
+        </main>
+      </div>
     </div>
-    <script src="js/dialogs.js"></script>
-    <script src="admin.js?v=20260917-roles-1"></script>
+    <dialog id="map-category-dialog" class="admin-dialog" aria-labelledby="map-category-title">
+      <form id="map-category-form" class="admin-form">
+        <div class="admin-dialog-heading">
+          <div>
+            <p class="eyebrow">Map configuration</p>
+            <h2 id="map-category-title">Add category</h2>
+          </div>
+          <button
+            id="close-map-category"
+            class="secondary-button"
+            type="button"
+            aria-label="Close category editor"
+          >
+            Close
+          </button>
+        </div>
+        <label
+          >Type<select name="kind">
+            <option value="entry">Entry</option>
+            <option value="topic">Topic</option>
+          </select></label
+        >
+        <label
+          >Key<input
+            name="key"
+            required
+            pattern="[a-z][a-z0-9_]{0,63}"
+            maxlength="64"
+            placeholder="e.g. task"
+          /><span class="admin-help">A unique identifier. Fixed after creation.</span></label
+        >
+        <label class="admin-span">Name<input name="label" required maxlength="120" /></label>
+        <label class="admin-span"
+          >Description for AI<textarea
+            name="description"
+            maxlength="2000"
+            rows="3"
+            placeholder="When should this category be used?"
+          ></textarea>
+        </label>
+        <div class="admin-span admin-category-options">
+          <label class="admin-check"
+            ><input name="active" type="checkbox" checked /> Available for new content</label
+          ><label class="admin-check"
+            ><input name="llm_enabled" type="checkbox" checked /> Allow AI suggestions</label
+          ><label class="admin-check"
+            ><input name="supports_completion" type="checkbox" /> Start with completion
+            tracking</label
+          >
+        </div>
+        <label
+          >Display order<input name="position" type="number" min="0" max="10000" value="0"
+        /></label>
+        <p id="map-category-system-note" class="admin-help"></p>
+        <p id="map-category-error" class="admin-span form-error" role="alert"></p>
+        <div class="admin-form-actions">
+          <button id="cancel-map-category" class="secondary-button" type="button">Cancel</button
+          ><button type="submit" class="primary-button">Save category</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog
+      id="admin-confirm-dialog"
+      class="admin-dialog admin-confirm-dialog"
+      aria-labelledby="admin-confirm-title"
+    >
+      <form id="admin-confirm-form" class="admin-form">
+        <h2 id="admin-confirm-title" class="admin-span">Confirm action</h2>
+        <p id="admin-confirm-message" class="admin-span"></p>
+        <label class="admin-span"
+          >Type <strong id="admin-confirm-value"></strong> to confirm<input
+            id="admin-confirm-input"
+            autocomplete="off"
+            required
+        /></label>
+        <div class="admin-form-actions">
+          <button id="admin-confirm-cancel" class="secondary-button" type="button">Cancel</button
+          ><button id="admin-confirm-submit" class="danger-button" type="submit">Delete</button>
+        </div>
+      </form>
+    </dialog>
+    <script src="admin.js?v=20261027-4"></script>
   </body>
 </html>

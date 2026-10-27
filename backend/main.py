@@ -64,6 +64,9 @@ def create_app(init_database: bool = True) -> FastAPI:
         return JSONResponse(status_code=409, content={"detail": str(error)})
 
     app.add_middleware(BasicAuthMiddleware)
+    from backend.core.app_settings_middleware import AppSettingsMiddleware
+
+    app.add_middleware(AppSettingsMiddleware, owner=app)
     app.add_middleware(
         RequestSizeLimitMiddleware,
         max_body_bytes=settings.max_request_body_bytes,

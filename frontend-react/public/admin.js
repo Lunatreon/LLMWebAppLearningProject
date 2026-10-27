@@ -1,7 +1,4 @@
 function resolveApiBase() {
-  if (['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(window.location.hostname)) {
-    return 'http://127.0.0.1:8000/api/v1';
-  }
   return (
     document.querySelector('meta[name="feely-api-base"]')?.content.trim().replace(/\/$/, '') ||
     `${window.location.origin}/api/v1`
@@ -34,65 +31,375 @@ const subscriptionState = document.querySelector('#admin-subscription-state');
 const removeSubscription = document.querySelector('#remove-subscription');
 
 let mapCategoryRows = [];
+const categoryDialog = document.querySelector('#map-category-dialog');
+const mapCategoryForm = document.querySelector('#map-category-form');
+const categoryField = (name) => mapCategoryForm.elements.namedItem(name);
+let categorySaving = false;
+
+function categoryMessage(message, error = false) {
+  const status = document.querySelector('#map-category-status');
+  status.textContent = message;
+  status.classList.toggle('is-error', error);
+}
 async function loadMapCategories() {
   const token = adminToken;
   const rows = await api('/admin/map/categories', { headers: authHeaders() });
   if (adminToken !== token) return;
   mapCategoryRows = rows;
-  const select = document.querySelector('#map-category-select');
-  select.replaceChildren(new Option('New category', ''));
-  rows.forEach((row) =>
-    select.append(
-      new Option(
-        `${row.kind}: ${row.label}${row.active ? '' : ' (disabled)'}`,
-        `${row.kind}/${row.key}`,
-      ),
-    ),
-  );
+  renderMapCategories();
 }
-const mapCategoryForm = document.querySelector('#map-category-form');
-document.querySelector('#map-category-select').addEventListener('change', (event) => {
+function renderMapCategories() {
+  const list = document.querySelector('#map-category-list');
+  const search = document.querySelector('#map-category-search').value.trim().toLowerCase();
+  const kind = document.querySelector('#map-category-filter').value;
+  const rows = mapCategoryRows.filter(
+    (row) =>
+      (!kind || row.kind === kind) &&
+      `${row.label} ${row.key} ${row.description}`.toLowerCase().includes(search),
+  );
+  list.replaceChildren();
+  document.querySelector('#map-category-count').textContent = `${rows.length} categories`;
+  for (const row of rows) {
+    const tr = document.createElement('tr');
+    const title = document.createElement('td');
+    const name = document.createElement('strong');
+    name.textContent = row.label;
+    const key = document.createElement('small');
+    key.textContent = row.key;
+    title.append(name, key);
+    tr.append(title);
+    for (const text of [
+      row.kind === 'entry' ? 'Entry' : 'Topic',
+      row.active ? 'Active' : 'Disabled',
+      row.llm_enabled ? 'Allowed' : 'Off',
+    ]) {
+      const td = document.createElement('td');
+      td.textContent = text;
+      tr.append(td);
+    }
+    const actions = document.createElement('td');
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.className = 'secondary-button';
+    edit.textContent = 'Edit';
+    edit.setAttribute('aria-label', `Edit ${row.label}`);
+    edit.addEventListener('click', () => openCategory(row));
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'admin-text-danger';
+    remove.textContent = 'Delete';
+    remove.setAttribute('aria-label', `Delete ${row.label}`);
+    const system =
+      (row.kind === 'topic' && row.key === 'other') ||
+      (row.kind === 'entry' && row.key === 'merged_topic');
+    remove.disabled = system;
+    if (system) remove.title = 'Required system category';
+    remove.addEventListener('click', async () => {
+      if (
+        !(await confirmAction(
+          `Delete the category ?${row.label}?? Existing content is never deleted. If this category is in use, disable it in the editor instead.`,
+          row.key,
+          'Delete category',
+        ))
+      )
+        return;
+      remove.disabled = true;
+      try {
+        await api(
+          `/admin/map/categories/${encodeURIComponent(row.kind)}/${encodeURIComponent(row.key)}`,
+          { method: 'DELETE', headers: authHeaders() },
+        );
+        await loadMapCategories();
+        categoryMessage('Category deleted.');
+      } catch (error) {
+        categoryMessage(error.message, true);
+      } finally {
+        remove.disabled = false;
+      }
+    });
+    const group = document.createElement('div');
+    group.className = 'admin-row-actions';
+    group.append(edit, remove);
+    actions.append(group);
+    tr.append(actions);
+    list.append(tr);
+  }
+  if (!rows.length) {
+    const tr = document.createElement('tr'),
+      td = document.createElement('td');
+    td.colSpan = 5;
+    td.className = 'admin-empty';
+    td.textContent = 'No categories found.';
+    tr.append(td);
+    list.append(tr);
+  }
+}
+function openCategory(row) {
   mapCategoryForm.reset();
-  const row = mapCategoryRows.find((row) => `${row.kind}/${row.key}` === event.target.value);
-  mapCategoryForm.elements.key.readOnly = Boolean(row);
-  mapCategoryForm.elements.kind.disabled = Boolean(row);
-  if (!row) return;
-  for (const field of ['kind', 'key', 'label', 'description', 'position'])
-    mapCategoryForm.elements[field].value = row[field];
-  for (const field of ['active', 'llm_enabled', 'supports_completion'])
-    mapCategoryForm.elements[field].checked = row[field];
+  document.querySelector('#map-category-error').textContent = '';
+  document.querySelector('#map-category-title').textContent = row
+    ? `Edit ${row.label}`
+    : 'Add category';
+  for (const name of ['active', 'llm_enabled']) categoryField(name).disabled = false;
+  categoryField('key').readOnly = Boolean(row);
+  categoryField('kind').disabled = Boolean(row);
+  if (row) {
+    for (const name of ['kind', 'key', 'label', 'description', 'position'])
+      categoryField(name).value = row[name];
+    for (const name of ['active', 'llm_enabled', 'supports_completion'])
+      categoryField(name).checked = row[name];
+  }
+  const other = row?.kind === 'topic' && row.key === 'other';
+  const merged = row?.kind === 'entry' && row.key === 'merged_topic';
+  categoryField('active').disabled = other || merged;
+  categoryField('llm_enabled').disabled = other || merged;
+  document.querySelector('#map-category-system-note').textContent = other
+    ? 'Required fallback category. Availability and AI access are fixed.'
+    : merged
+      ? 'Required provenance category. AI suggestions stay off.'
+      : '';
+  categoryDialog.showModal();
+  categoryField(row ? 'label' : 'kind').focus();
+}
+document.querySelector('#add-map-category').addEventListener('click', () => openCategory(null));
+for (const id of ['close-map-category', 'cancel-map-category'])
+  document.querySelector(`#${id}`).addEventListener('click', () => {
+    if (!categorySaving) categoryDialog.close();
+  });
+categoryDialog.addEventListener('cancel', (event) => {
+  if (categorySaving) event.preventDefault();
 });
+document.querySelector('#map-category-search').addEventListener('input', renderMapCategories);
+document.querySelector('#map-category-filter').addEventListener('change', renderMapCategories);
 mapCategoryForm.addEventListener('submit', async (event) => {
   event.preventDefault();
+  if (categorySaving) return;
+  categorySaving = true;
   const button = mapCategoryForm.querySelector('button[type="submit"]');
   button.disabled = true;
+  document.querySelector('#map-category-error').textContent = '';
   try {
-    const elements = mapCategoryForm.elements;
     const body = {
-      label: elements.label.value,
-      description: elements.description.value,
-      position: Number(elements.position.value),
+      label: categoryField('label').value.trim(),
+      description: categoryField('description').value,
+      position: Number(categoryField('position').value),
     };
-    for (const field of ['active', 'llm_enabled', 'supports_completion'])
-      body[field] = elements[field].checked;
-    await api(
-      `/admin/map/categories/${encodeURIComponent(elements.kind.value)}/${encodeURIComponent(elements.key.value)}`,
-      {
-        method: 'PUT',
-        headers: authHeaders(),
-        body: JSON.stringify(body),
-      },
-    );
+    for (const name of ['active', 'llm_enabled', 'supports_completion'])
+      body[name] = categoryField(name).checked;
+    const kind = categoryField('kind').value,
+      key = categoryField('key').value;
+    if (
+      !categoryField('key').readOnly &&
+      mapCategoryRows.some((row) => row.kind === kind && row.key === key)
+    ) {
+      throw new Error(
+        'This key already exists for this type. Edit the existing category or choose another key.',
+      );
+    }
+    await api(`/admin/map/categories/${encodeURIComponent(kind)}/${encodeURIComponent(key)}`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify(body),
+    });
     await loadMapCategories();
-    mapCategoryForm.reset();
-    elements.key.readOnly = false;
-    elements.kind.disabled = false;
-    setStatus('Category saved. New map loads and model calls use the updated catalog.');
+    categoryDialog.close();
+    categoryMessage('Category saved. Map loads and AI calls use the updated settings.');
   } catch (error) {
-    setStatus(error.message, true);
+    document.querySelector('#map-category-error').textContent = error.message;
   } finally {
+    categorySaving = false;
     button.disabled = false;
   }
+});
+
+let appSettingsSnapshot = null;
+let appSettingsLoading = false;
+const appSettingsForm = document.querySelector('#app-settings-form');
+const settingsField = (name) => appSettingsForm.elements.namedItem(name);
+const settingFlags = ['feedback_enabled', 'password_reset_enabled', 'premium_features_enabled'];
+const settingLimits = ['rate_limit_llm_free_user_per_day', 'rate_limit_llm_user_per_day'];
+function settingsMessage(message, error = false) {
+  const status = document.querySelector('#app-settings-status');
+  status.textContent = message;
+  status.classList.toggle('is-error', error);
+}
+function settingsBusy(busy) {
+  document.querySelector('#app-settings-fields').disabled = busy;
+  for (const id of ['save-app-settings', 'reset-app-settings'])
+    document.querySelector(`#${id}`).disabled = busy;
+  document.querySelector('#reload-app-settings').disabled = busy;
+}
+function populateAppSettings(snapshot) {
+  appSettingsSnapshot = snapshot;
+  const labels = {
+    openai: 'OpenAI',
+    anthropic: 'Anthropic',
+    ollama: 'Ollama',
+    local: 'Local demo',
+    mock: 'Mock demo',
+  };
+  for (const role of ['chat', 'topic']) {
+    const select = settingsField(`${role}_provider`);
+    select.replaceChildren();
+    for (const provider of Object.keys(labels)) {
+      const available = snapshot.providers[provider];
+      const option = new Option(
+        labels[provider] + (available ? '' : ' ? credentials missing'),
+        provider,
+      );
+      option.disabled = !available;
+      select.append(option);
+    }
+    select.value = snapshot.values[`${role}_provider`];
+    settingsField(`${role}_model`).value = snapshot.values[`${role}_model`];
+    updateModelField(role, false);
+  }
+  for (const name of settingFlags) settingsField(name).checked = snapshot.values[name];
+  for (const name of settingLimits) settingsField(name).value = snapshot.values[name];
+  settingsBusy(false);
+}
+function updateModelField(role, changed) {
+  const provider = settingsField(`${role}_provider`).value;
+  const input = settingsField(`${role}_model`);
+  input.disabled = ['mock', 'local'].includes(provider);
+  input.required = !input.disabled;
+  if (changed) input.value = appSettingsSnapshot?.default_models[provider]?.[role] || '';
+  input.placeholder = input.disabled ? 'No AI model used' : 'Exact model identifier';
+}
+async function loadAppSettings() {
+  if (appSettingsLoading) return;
+  appSettingsLoading = true;
+  settingsBusy(true);
+  settingsMessage('Loading app settings?');
+  try {
+    const snapshot = await api('/admin/settings', { headers: authHeaders() });
+    populateAppSettings(snapshot);
+    settingsMessage(
+      snapshot.overridden ? 'Saved settings are active.' : 'Using deployment defaults.',
+    );
+  } catch (error) {
+    settingsMessage(error.message, true);
+    document.querySelector('#reload-app-settings').disabled = false;
+  } finally {
+    appSettingsLoading = false;
+  }
+}
+for (const role of ['chat', 'topic'])
+  settingsField(`${role}_provider`).addEventListener('change', () => updateModelField(role, true));
+document.querySelector('#reload-app-settings').addEventListener('click', loadAppSettings);
+appSettingsForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!appSettingsSnapshot || appSettingsLoading) return;
+  const body = { expected_revision: appSettingsSnapshot.revision };
+  for (const role of ['chat', 'topic'])
+    for (const key of ['provider', 'model'])
+      body[`${role}_${key}`] = settingsField(`${role}_${key}`).value;
+  for (const name of settingFlags) body[name] = settingsField(name).checked;
+  for (const name of settingLimits) body[name] = Number(settingsField(name).value);
+  appSettingsLoading = true;
+  settingsBusy(true);
+  settingsMessage('Saving?');
+  try {
+    const snapshot = await api('/admin/settings', {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify(body),
+    });
+    populateAppSettings(snapshot);
+    settingsMessage('Settings saved. New requests use these values.');
+  } catch (error) {
+    settingsMessage(error.message, true);
+  } finally {
+    appSettingsLoading = false;
+    settingsBusy(false);
+  }
+});
+document.querySelector('#reset-app-settings').addEventListener('click', async () => {
+  if (!appSettingsSnapshot || appSettingsLoading) return;
+  if (
+    !(await confirmAction(
+      'Restore model, feature and limit settings from your deployment configuration?',
+      'RESET_SETTINGS',
+      'Use deployment defaults',
+    ))
+  )
+    return;
+  appSettingsLoading = true;
+  settingsBusy(true);
+  try {
+    const snapshot = await api(
+      `/admin/settings?expected_revision=${appSettingsSnapshot.revision}`,
+      { method: 'DELETE', headers: authHeaders() },
+    );
+    populateAppSettings(snapshot);
+    settingsMessage('Deployment defaults restored.');
+  } catch (error) {
+    settingsMessage(error.message, true);
+  } finally {
+    appSettingsLoading = false;
+    settingsBusy(false);
+  }
+});
+
+function showSection(name) {
+  const valid = ['users', 'categories', 'prompts', 'feedback', 'settings'];
+  if (!valid.includes(name)) name = 'users';
+  for (const section of valid)
+    document.querySelector(`#section-${section}`).classList.toggle('hidden', name !== section);
+  document.querySelectorAll('[data-section]').forEach((button) => {
+    if (button.dataset.section === name) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  });
+  history.replaceState(null, '', `#${name}`);
+  if (name === 'settings' && adminToken && !appSettingsSnapshot) void loadAppSettings();
+}
+document
+  .querySelectorAll('[data-section]')
+  .forEach((button) => button.addEventListener('click', () => showSection(button.dataset.section)));
+showSection(location.hash.slice(1));
+
+let pendingConfirmation = null;
+const confirmDialog = document.querySelector('#admin-confirm-dialog');
+async function confirmAction(message, value, title = 'Confirm action') {
+  if (pendingConfirmation) return false;
+  document.querySelector('#admin-confirm-title').textContent = title;
+  document.querySelector('#admin-confirm-submit').textContent = title;
+  document.querySelector('#admin-confirm-message').textContent = message;
+  document.querySelector('#admin-confirm-value').textContent = value;
+  const input = document.querySelector('#admin-confirm-input');
+  input.value = '';
+  input.setCustomValidity('');
+  confirmDialog.showModal();
+  input.focus();
+  return new Promise((resolve) => {
+    pendingConfirmation = { resolve, value };
+  });
+}
+function finishConfirmation(confirmed) {
+  const pending = pendingConfirmation;
+  pendingConfirmation = null;
+  confirmDialog.close();
+  pending?.resolve(confirmed);
+}
+document
+  .querySelector('#admin-confirm-cancel')
+  .addEventListener('click', () => finishConfirmation(false));
+confirmDialog.addEventListener('cancel', (event) => {
+  event.preventDefault();
+  finishConfirmation(false);
+});
+document
+  .querySelector('#admin-confirm-input')
+  .addEventListener('input', (event) => event.target.setCustomValidity(''));
+document.querySelector('#admin-confirm-form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const input = document.querySelector('#admin-confirm-input');
+  if (input.value !== pendingConfirmation?.value) {
+    input.setCustomValidity('Enter the exact confirmation text.');
+    input.reportValidity();
+    return;
+  }
+  finishConfirmation(true);
 });
 
 function authHeaders() {
@@ -102,7 +409,12 @@ async function api(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, options);
   if (response.status === 204) return null;
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.detail || `Request failed (${response.status})`);
+  if (!response.ok) {
+    const detail = Array.isArray(payload.detail)
+      ? payload.detail.map((item) => item.msg).join('; ')
+      : payload.detail;
+    throw new Error(detail || `Request failed (${response.status})`);
+  }
   return payload;
 }
 function setStatus(message, error = false) {
@@ -115,7 +427,12 @@ function selectedUser() {
 
 function renderUsers() {
   userList.replaceChildren();
-  state.users.forEach((user) => {
+  const search = document.querySelector('#admin-user-search').value.trim().toLowerCase();
+  const users = state.users.filter((user) =>
+    `${user.username} ${user.email} ${user.display_name || ''}`.toLowerCase().includes(search),
+  );
+  if (!users.length) userList.textContent = 'No users found.';
+  users.forEach((user) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = `admin-user-card${user.id === state.selectedUserId ? ' active' : ''}`;
@@ -135,7 +452,11 @@ function selectUser(userId) {
   state.selectedUserId = userId;
   const user = selectedUser();
   if (!user) return;
+  document.querySelector('#admin-user-empty').classList.add('hidden');
   userEditor.classList.remove('hidden');
+  document.querySelector('#user-save-status').textContent = '';
+  document.querySelector('#delete-user').disabled =
+    user.username === document.querySelector('#admin-status').dataset.username;
   userTitle.textContent = `Edit ${user.display_name || user.username}`;
   userEmail.value = user.email;
   userUsername.value = user.username;
@@ -153,6 +474,10 @@ async function loadUsers() {
   if (state.selectedUserId && !selectedUser()) state.selectedUserId = null;
   renderUsers();
   if (state.selectedUserId) selectUser(state.selectedUserId);
+  else {
+    userEditor.classList.add('hidden');
+    document.querySelector('#admin-user-empty').classList.remove('hidden');
+  }
 }
 
 async function loadPrompts() {
@@ -226,23 +551,63 @@ document.querySelector('#admin-create-user-form').addEventListener('submit', asy
   }
 });
 
+document.querySelector('#admin-user-search').addEventListener('input', renderUsers);
+document.querySelector('#delete-user').addEventListener('click', async () => {
+  const user = selectedUser();
+  if (!user) return;
+  if (
+    !(await confirmAction(
+      `Permanently delete ${user.email} and their profile, chats, map and feedback? This cannot be undone.`,
+      user.username,
+      'Delete user',
+    ))
+  )
+    return;
+  const button = document.querySelector('#delete-user');
+  button.disabled = true;
+  try {
+    await api(`/admin/users/${user.id}?confirmation=${encodeURIComponent(user.username)}`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+    });
+    state.selectedUserId = null;
+    await loadUsers();
+    setStatus('User deleted.');
+  } catch (error) {
+    setStatus(error.message, true);
+  } finally {
+    button.disabled = false;
+  }
+});
 userForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  const updated = await api(`/admin/users/${state.selectedUserId}`, {
-    method: 'PATCH',
-    headers: authHeaders(),
-    body: JSON.stringify({
-      email: userEmail.value,
-      username: userUsername.value,
-      display_name: userDisplayName.value || null,
-      is_active: userActive.checked,
-      is_email_verified: userVerified.checked,
-      role: userRole.value,
-    }),
-  });
-  state.users = state.users.map((user) => (user.id === updated.id ? updated : user));
-  selectUser(updated.id);
-  setStatus('User saved.');
+  const button = userForm.querySelector('button[type="submit"]');
+  button.disabled = true;
+  const status = document.querySelector('#user-save-status');
+  status.textContent = 'Saving...';
+  try {
+    const updated = await api(`/admin/users/${state.selectedUserId}`, {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        email: userEmail.value,
+        username: userUsername.value,
+        display_name: userDisplayName.value || null,
+        is_active: userActive.checked,
+        role: userRole.value,
+        is_email_verified: userVerified.checked,
+      }),
+    });
+    state.users = state.users.map((user) => (user.id === updated.id ? updated : user));
+    selectUser(updated.id);
+    status.textContent = 'Changes saved.';
+    setStatus('User saved.');
+  } catch (error) {
+    status.textContent = error.message;
+    setStatus(error.message, true);
+  } finally {
+    button.disabled = false;
+  }
 });
 
 passwordForm.addEventListener('submit', async (event) => {
@@ -308,6 +673,7 @@ function showLogin() {
 }
 
 function showAdmin() {
+  if (location.hash === '#settings' && !appSettingsSnapshot) void loadAppSettings();
   loginView.classList.add('hidden');
   adminApp.classList.remove('hidden');
 }
@@ -323,6 +689,8 @@ loginForm.addEventListener('submit', async (event) => {
     });
     adminToken = response.access_token;
     localStorage.setItem('feely_admin_token', adminToken);
+    const current = await api('/admin/status', { headers: authHeaders() });
+    statusLine.dataset.username = current.username;
     showAdmin();
     await Promise.all([loadUsers(), loadPrompts(), loadFeedback(), loadMapCategories()]);
     setStatus('Administration ready.');
@@ -333,6 +701,7 @@ loginForm.addEventListener('submit', async (event) => {
 
 document.querySelector('#admin-logout').addEventListener('click', () => {
   adminToken = null;
+  appSettingsSnapshot = null;
   localStorage.removeItem('feely_admin_token');
   showLogin();
 });
@@ -347,6 +716,7 @@ async function start() {
   }
   try {
     const status = await api('/admin/status', { headers: authHeaders() });
+    statusLine.dataset.username = status.username;
     showAdmin();
     await Promise.all([loadUsers(), loadPrompts(), loadFeedback(), loadMapCategories()]);
     setStatus(`Administration ready · ${status.username}`);

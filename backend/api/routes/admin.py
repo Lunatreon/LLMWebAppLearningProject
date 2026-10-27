@@ -25,6 +25,7 @@ from backend.schemas.admin import (
     AdminUserRead,
     AdminUserUpdate,
 )
+from backend.schemas.app_settings import AppPreferencesWrite
 from backend.services.billing import (
     BillingNotConfiguredError,
     BillingProviderError,
@@ -40,6 +41,94 @@ from backend.llm.prompts import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+@router.get("/settings")
+def read_app_settings(db: Session = Depends(get_db), _: str = Depends(get_current_admin)):
+    from backend.services.app_settings import read_settings
+
+    return read_settings(db)
+
+
+@router.put("/settings")
+def update_app_settings(
+    payload: AppPreferencesWrite, db: Session = Depends(get_db), _: str = Depends(get_current_admin)
+):
+    from backend.services.app_settings import save_settings
+
+    return save_settings(
+        db, payload.model_dump(exclude={"expected_revision"}), payload.expected_revision
+    )
+
+
+@router.delete("/settings")
+def reset_app_settings(
+    expected_revision: int, db: Session = Depends(get_db), _: str = Depends(get_current_admin)
+):
+    from backend.services.app_settings import save_settings
+
+    return save_settings(db, {}, expected_revision)
+
+
+@router.delete("/users/{user_id}", status_code=204)
+def delete_admin_user(
+    user_id: int,
+    confirmation: str,
+    db: Session = Depends(get_db),
+    admin_username: str = Depends(get_current_admin),
+):
+    user = admin_target_user(db, user_id)
+    if confirmation != user.username:
+        raise HTTPException(status_code=400, detail="Type the username to confirm deletion.")
+    if user.username == admin_username:
+        raise HTTPException(
+            status_code=400, detail="You cannot delete your own administrator account."
+        )
+    subscription = get_subscription(db, user)
+    if subscription and subscription.stripe_subscription_id and subscription.status != "canceled":
+        raise HTTPException(
+            status_code=409, detail="Cancel the Stripe subscription before deleting this account."
+        )
+    if (
+        user.role == "admin"
+        and user.is_active
+        and not (settings.admin_username and settings.admin_password_hash)
+    ):
+        remaining = db.scalar(
+            select(func.count(User.id)).where(
+                User.role == "admin", User.is_active.is_(True), User.id != user.id
+            )
+        )
+        if not remaining:
+            raise HTTPException(status_code=409, detail="Keep at least one active administrator.")
+    db.delete(user)
+    db.commit()
+    logger.info("Administrator %s deleted user %s", admin_username, user_id)
+
+
+@router.delete("/map/categories/{kind}/{key}", status_code=204)
+def delete_map_category(
+    kind: str,
+    key: str,
+    db: Session = Depends(get_db),
+    _: str = Depends(get_current_admin),
+):
+    from backend.models.map import MapCategory
+
+    if (kind, key) in {("topic", "other"), ("entry", "merged_topic")}:
+        raise HTTPException(status_code=400, detail="This system category cannot be deleted.")
+    category = db.get(MapCategory, (kind, key))
+    if category is None:
+        raise HTTPException(status_code=404, detail="Category not found.")
+    try:
+        db.delete(category)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="This category is used by existing map content. Disable it instead.",
+        ) from None
 
 
 @router.post("/login", response_model=AdminToken, dependencies=[Depends(rate_limit_auth)])

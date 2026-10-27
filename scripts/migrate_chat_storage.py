@@ -49,10 +49,13 @@ def main():
                 else:
                     upgrade_chat_storage(Operations(MigrationContext.configure(connection)))
                     from backend.models.map import TABLES
+                    from backend.models.app_settings import AppSettings
                     from backend.db.base import Base
                     from migrations.map_storage_v3 import migrate_profiles
 
-                    Base.metadata.create_all(connection, tables=list(TABLES.values()))
+                    Base.metadata.create_all(
+                        connection, tables=[*TABLES.values(), AppSettings.__table__]
+                    )
                     migrate_profiles(connection, TABLES)
                 connection.commit()
             except BaseException:

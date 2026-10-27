@@ -9,7 +9,7 @@ configuration. The frontend uses the same API for either supported database.
 
 ## Current model and PostgreSQL target
 
-There are 17 application tables, including normalized conversations, maps and the
+There are 18 application tables, including normalized conversations, maps and the
 category catalog. See [the generated schema](DATABASE_SCHEMA.md) and
 [map storage](MAP_DATABASE_SCHEMA.md). Alembic adds `alembic_version`.
 

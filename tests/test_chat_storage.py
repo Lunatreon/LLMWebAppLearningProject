@@ -267,7 +267,7 @@ def test_unversioned_sqlite_upgrade_is_idempotent_and_preserves_history(tmp_path
 
         chat_schema = sa.MetaData()
         for table in Base.metadata.sorted_tables:
-            if table.name not in MAP_TABLES:
+            if table.name not in MAP_TABLES and table.name != "app_settings":
                 table.to_metadata(chat_schema)
         assert compare_metadata(MigrationContext.configure(connection), chat_schema) == []
     engine.dispose()

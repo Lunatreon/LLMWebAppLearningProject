@@ -246,3 +246,125 @@ def test_admin_login_is_independent_and_requires_configuration(monkeypatch, clie
         json={"username": "admin", "password": "wrong-admin-pass"},
     )
     assert rejected.status_code == 401
+
+
+def test_admin_deletes_user_and_owned_map_but_preserves_other_users(monkeypatch, client):
+    from sqlalchemy import select, func
+    from backend.models.user import User, DailyLLMUsage, UserProfile
+    from backend.models.map import TABLES
+    from tests.test_email_and_feedback import database
+
+    monkeypatch.setattr(settings, "premium_features_enabled", False)
+    admin = configure_and_login_admin(monkeypatch, client)
+    owner = register_and_login(client, "delete@example.com", "to_delete")
+    register_and_login(client, "keep@example.com", "keep_me")
+    assert (
+        client.post(
+            "/api/v1/users/me/map/entries", headers=owner, json={"category": "task", "text": "Task"}
+        ).status_code
+        == 200
+    )
+    with database(client) as db:
+        user = db.scalar(select(User).where(User.username == "to_delete"))
+        user_id = user.id
+        db.add(DailyLLMUsage(user_id=user_id, usage_date="2026-10-27", message_count=1))
+        db.commit()
+    endpoint = f"/api/v1/admin/users/{user_id}"
+    assert (
+        client.delete(endpoint, headers=owner, params={"confirmation": "to_delete"}).status_code
+        == 401
+    )
+    assert (
+        client.delete(endpoint, headers=admin, params={"confirmation": "wrong"}).status_code == 400
+    )
+    assert (
+        client.delete(endpoint, headers=admin, params={"confirmation": "to_delete"}).status_code
+        == 204
+    )
+    assert client.get("/api/v1/users/me", headers=owner).status_code == 401
+    with database(client) as db:
+        assert db.get(User, user_id) is None
+        assert db.scalar(select(User).where(User.username == "keep_me")) is not None
+        for table in [
+            UserProfile.__table__,
+            DailyLLMUsage.__table__,
+            TABLES["user_maps"],
+            TABLES["map_entries"],
+        ]:
+            assert (
+                db.scalar(select(func.count()).select_from(table).where(table.c.user_id == user_id))
+                == 0
+            )
+
+
+def test_category_delete_blocks_used_and_system_categories(monkeypatch, client):
+    admin = configure_and_login_admin(monkeypatch, client)
+    monkeypatch.setattr(settings, "premium_features_enabled", False)
+    owner = register_and_login(client, "category@example.com", "category_owner")
+    endpoint = "/api/v1/admin/map/categories/entry/experimental"
+    assert client.put(endpoint, headers=admin, json={"label": "Experimental"}).status_code == 200
+    assert client.delete(endpoint, headers=owner).status_code == 401
+    assert client.delete(endpoint, headers=admin).status_code == 204
+    assert client.delete(endpoint, headers=admin).status_code == 404
+    assert (
+        client.delete("/api/v1/admin/map/categories/topic/other", headers=admin).status_code == 400
+    )
+    assert (
+        client.delete("/api/v1/admin/map/categories/entry/merged_topic", headers=admin).status_code
+        == 400
+    )
+    assert (
+        client.post(
+            "/api/v1/users/me/map/entries", headers=owner, json={"category": "task", "text": "Task"}
+        ).status_code
+        == 200
+    )
+    used = "/api/v1/admin/map/categories/entry/task"
+    assert client.delete(used, headers=admin).status_code == 409
+    assert (
+        client.put(used, headers=admin, json={"label": "Task", "active": False}).status_code == 200
+    )
+    saved = client.get("/api/v1/users/me/map", headers=owner).json()
+    assert saved["unassigned_entries"][0]["category"] == "task"
+
+
+def test_admin_cannot_delete_self_or_user_with_uncanceled_stripe(monkeypatch, client):
+    from backend.models.billing import BillingSubscription
+    from backend.models.user import User
+    from tests.test_email_and_feedback import database
+    from sqlalchemy import select
+
+    admin = configure_and_login_admin(monkeypatch, client)
+    created = client.post(
+        "/api/v1/admin/users",
+        headers=admin,
+        json={
+            "email": "admin@example.com",
+            "username": "site-admin",
+            "password": "some-password",
+            "role": "admin",
+        },
+    ).json()
+    assert (
+        client.delete(
+            f"/api/v1/admin/users/{created['id']}",
+            headers=admin,
+            params={"confirmation": "site-admin"},
+        ).status_code
+        == 400
+    )
+    register_and_login(client, "paid@example.com", "paid_member")
+    with database(client) as db:
+        user = db.scalar(select(User).where(User.username == "paid_member"))
+        user_id = user.id
+        db.add(
+            BillingSubscription(user_id=user_id, stripe_subscription_id="sub_test", status="active")
+        )
+        db.commit()
+    endpoint = f"/api/v1/admin/users/{user_id}"
+    assert (
+        client.delete(endpoint, headers=admin, params={"confirmation": "paid_member"}).status_code
+        == 409
+    )
+    with database(client) as db:
+        assert db.get(User, user_id) is not None
