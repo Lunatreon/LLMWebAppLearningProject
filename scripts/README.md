@@ -36,5 +36,11 @@ need to run alongside FeelY. Use `--help` for Python tools with command-line opt
 Integration rehearsal tools create and remove their own resources. Read their
 guide and `--help` before running them; they are not the everyday launcher.
 
+The Docker persistence rehearsal checks the current account, conversation, map,
+practice and terms records, then verifies every stored column survives a restart.
+It expects no new legacy journal records. Fixed check failures print their reason;
+raw command errors remain in sanitized diagnostics. API and Mailpit probes honor
+the ports in the disposable environment file so a local rehearsal can use separate ports.
+
 `frontend-react/scripts/` contains isolated auth servers and browser contract
 validation tools. Those support frontend verification and are not runtime dependencies.

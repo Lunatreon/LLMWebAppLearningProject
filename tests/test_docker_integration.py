@@ -172,3 +172,90 @@ def test_encryption_key_values_are_individually_redacted(stack):
     key = next(iter(json.loads(stack.values["CONTENT_ENCRYPTION_KEYS"]).values()))
     assert key in stack.secrets()
     assert key not in ci.redact("An accidental key value: " + key, stack.secrets())
+
+
+def rehearsal_snapshot():
+    return {
+        "counts": {
+            "users": 1,
+            "user_profiles": 1,
+            "chat_sessions": 1,
+            "chat_turns": 1,
+            "user_maps": 1,
+            "map_topics": 1,
+            "map_entries": 1,
+            "terms_acceptances": 1,
+            "journal_entries": 0,
+        }
+    }
+
+
+def test_persistence_contract_accepts_current_map_rehearsal_without_legacy_journal():
+    ci.validate_rehearsal_snapshot(rehearsal_snapshot())
+
+
+@pytest.mark.parametrize(
+    "table",
+    [
+        "users",
+        "user_profiles",
+        "chat_sessions",
+        "chat_turns",
+        "user_maps",
+        "map_topics",
+        "map_entries",
+        "terms_acceptances",
+    ],
+)
+def test_persistence_contract_rejects_missing_current_records(table):
+    snapshot = rehearsal_snapshot()
+    snapshot["counts"][table] = 0
+    with pytest.raises(ci.CheckFailed, match=table):
+        ci.validate_rehearsal_snapshot(snapshot)
+
+
+def test_rehearsal_does_not_create_retired_journal_records():
+    snapshot = rehearsal_snapshot()
+    snapshot["counts"]["journal_entries"] = 1
+    with pytest.raises(ci.CheckFailed, match="journal_entries"):
+        ci.validate_rehearsal_snapshot(snapshot)
+
+
+def test_rehearsal_uses_configured_ports_instead_of_local_app(stack, monkeypatch):
+    text = stack.config.read_text().replace("FEELY_API_PORT=8000", "FEELY_API_PORT=18000")
+    text = text.replace("FEELY_MAILPIT_PORT=8025", "FEELY_MAILPIT_PORT=18025")
+    stack.config.write_text(text)
+    stack = ci.DockerIntegration(stack.directory)
+    monkeypatch.setattr(stack, "execute", lambda *args, **kwargs: None)
+    stack.smoke()
+    assert stack.environment["FEELY_STACK_API_URL"] == stack.api_url
+    assert stack.environment["FEELY_STACK_MAILPIT_URL"] == stack.mailpit_url
+    assert stack.api_url == "http://127.0.0.1:18000"
+    assert stack.mailpit_url == "http://127.0.0.1:18025"
+
+
+@pytest.mark.parametrize("safe", [True, False])
+def test_cli_prints_fixed_check_failure_reasons_without_echoing_arbitrary_errors(
+    stack, monkeypatch, capsys, safe
+):
+    stack.save("compose-config", "PASS")
+    stack.save("image-build", "PASS")
+    secret = stack.values["SECRET_KEY"]
+
+    def fail(self):
+        if safe:
+            raise ci.CheckFailed(
+                "HTTP rehearsal persistence mismatch: map_entries expected 1 rows, observed 0"
+            )
+        raise RuntimeError(secret)
+
+    monkeypatch.setattr(ci.DockerIntegration, "run", fail)
+    monkeypatch.setattr(
+        ci.sys, "argv", ["docker-integration", "run", "--work-dir", str(stack.directory)]
+    )
+    with pytest.raises(SystemExit) as error:
+        ci.main()
+    assert error.value.code == 1
+    output = capsys.readouterr()
+    assert secret not in output.out + output.err
+    assert ("Reason: HTTP rehearsal persistence mismatch" in output.err) is safe

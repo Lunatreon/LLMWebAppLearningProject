@@ -41,6 +41,29 @@ class CheckFailed(RuntimeError):
     """Only fixed, non-sensitive messages may cross the process boundary."""
 
 
+def validate_rehearsal_snapshot(snapshot):
+    """The HTTP rehearsal saves one account, conversation and completed map practice."""
+    expected = {
+        "users": 1,
+        "user_profiles": 1,
+        "chat_sessions": 1,
+        "chat_turns": 1,
+        "user_maps": 1,
+        "map_topics": 1,
+        "map_entries": 1,
+        "terms_acceptances": 1,
+        # Journal history is retained for transfers, but the app no longer creates it.
+        "journal_entries": 0,
+    }
+    for name, count in expected.items():
+        actual = snapshot.get("counts", {}).get(name)
+        if type(actual) is not int or actual != count:
+            observed = str(actual) if type(actual) is int else "missing or invalid"
+            raise CheckFailed(
+                f"HTTP rehearsal persistence mismatch: {name} expected {count} rows, observed {observed}"
+            )
+
+
 def redact(text, secrets):
     for secret in sorted(set(secrets), key=len, reverse=True):
         if secret:
@@ -91,6 +114,8 @@ class DockerIntegration:
         if not re.fullmatch(r"feely-ci-[a-z0-9][a-z0-9-]{0,40}", self.project):
             raise CheckFailed("Refusing a project outside the disposable feely-ci-* namespace")
         self.values = read_values(self.config)
+        self.api_url = f"http://127.0.0.1:{int(self.values['FEELY_API_PORT'])}"
+        self.mailpit_url = f"http://127.0.0.1:{int(self.values['FEELY_MAILPIT_PORT'])}"
         # Shell env must not override generated CI values with a developer's real secrets/DB.
         self.environment = {k: v for k, v in os.environ.items() if k not in self.values}
         self.environment["FEELY_DOCKER_ENV_FILE"] = str(self.config)
@@ -189,8 +214,8 @@ class DockerIntegration:
             {
                 "FEELY_LOCAL_STACK_CHECK": "1",
                 "FEELY_CHECK_SNAPSHOT": "0",
-                "FEELY_STACK_API_URL": "http://127.0.0.1:8000",
-                "FEELY_STACK_MAILPIT_URL": "http://127.0.0.1:8025",
+                "FEELY_STACK_API_URL": self.api_url,
+                "FEELY_STACK_MAILPIT_URL": self.mailpit_url,
                 "FEELY_STACK_APP_URL": self.values["PUBLIC_APP_URL"],
                 "FEELY_STACK_PRIVATE_DIR": str(self.directory),
                 "FEELY_STACK_VERIFY_SAVED": "1" if verify_saved else "0",
@@ -225,7 +250,7 @@ class DockerIntegration:
         with urlopen(self.values["PUBLIC_APP_URL"], timeout=5) as response:
             if response.status != 200 or b'id="root"' not in response.read():
                 raise CheckFailed("Compiled frontend did not serve the application")
-        with urlopen("http://127.0.0.1:8000/api/v1/health", timeout=5) as response:
+        with urlopen(self.api_url + "/api/v1/health", timeout=5) as response:
             if json.load(response) != {"status": "ok"}:
                 raise CheckFailed("HTTP health response mismatch")
         self.save("health", "PASS")
@@ -248,8 +273,7 @@ class DockerIntegration:
         self.save("http-mailpit", "PASS")
         self.save("persistence", "RUNNING")
         before = self.probe("snapshot")
-        if before["counts"]["users"] != 1 or before["counts"]["journal_entries"] != 1:
-            raise CheckFailed("HTTP rehearsal did not persist its synthetic data")
+        validate_rehearsal_snapshot(before)
         self.collect_logs("initial")
         self.compose("down", "--remove-orphans", timeout=90)
         self.compose("up", "-d", timeout=180)
@@ -283,7 +307,7 @@ class DockerIntegration:
         if reset != fresh:
             raise CheckFailed("Explicit volume reset did not produce a fresh migrated database")
         self.probe("runtime")
-        with urlopen("http://127.0.0.1:8025/api/v1/messages", timeout=5) as response:
+        with urlopen(self.mailpit_url + "/api/v1/messages", timeout=5) as response:
             if json.load(response)["total"] != 0:
                 raise CheckFailed("Mailpit was not fresh after container recreation")
         self.save("volume-reset", "PASS")
@@ -402,7 +426,7 @@ def main():
         elif args.action == "cleanup" and (stack.directory / "owned-project").exists():
             stack.compose("down", "-v", "--remove-orphans", timeout=90)
             print("Disposable Docker containers, networks and named volumes removed.")
-    except Exception:
+    except Exception as error:
         # Subprocess/URL/SQL errors can embed secrets. Details live only in redacted logs.
         if stack and phase:
             stack.save(phase, "FAIL")
@@ -414,6 +438,9 @@ def main():
             f"FAIL: Docker integration {args.action}; inspect sanitized diagnostics.",
             file=sys.stderr,
         )
+        if isinstance(error, CheckFailed):
+            # These messages are deliberately constructed without SQL, HTTP bodies or secrets.
+            print(f"Reason: {error}", file=sys.stderr)
         raise SystemExit(1) from None
 
 
