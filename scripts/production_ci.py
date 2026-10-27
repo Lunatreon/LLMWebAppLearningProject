@@ -10,7 +10,7 @@ import secrets
 import subprocess
 import sys
 
-from scripts.docker_integration import leaked_secrets, poll, redact
+from scripts.docker_integration import CheckFailed, leaked_secrets, poll, redact
 from deployment.production import (
     ROOT,
     check_compose,
@@ -20,9 +20,13 @@ from deployment.production import (
 )
 
 
+class ProductionCheckFailed(RuntimeError):
+    """Only controlled, non-sensitive validation messages may be printed directly."""
+
+
 def create_fixture(directory, project):
     if not re.fullmatch(r"feely-prod-ci-[a-z0-9-]+", project):
-        raise RuntimeError("Refusing a non-CI production project name.")
+        raise ProductionCheckFailed("Refusing a non-CI production project name.")
     directory.mkdir(mode=0o700, parents=True, exist_ok=False)
     password = secrets.token_urlsafe(32)
     replacements = {
@@ -70,7 +74,7 @@ class Rehearsal:
         self.config, self.values = load_production(self.master)
         self.project = (directory / "project.txt").read_text().strip()
         if not re.fullmatch(r"feely-prod-ci-[a-z0-9-]+", self.project):
-            raise RuntimeError("Refusing to operate on a non-CI project.")
+            raise ProductionCheckFailed("Refusing to operate on a non-CI project.")
         self.command, self.environment = compose_command(
             self.master, self.values, project=self.project
         )
@@ -104,7 +108,7 @@ class Rehearsal:
         with (self.directory / "commands.log").open("a", encoding="utf-8") as stream:
             stream.write(redact(result.stdout + result.stderr, self.private))
         if result.returncode:
-            raise RuntimeError("Production CI command failed; see sanitized diagnostics.")
+            raise ProductionCheckFailed("Production CI command failed; see sanitized diagnostics.")
         return result
 
     def validate(self):
@@ -134,7 +138,9 @@ class Rehearsal:
         ):
             existing = subprocess.run(arguments, capture_output=True, text=True, timeout=15)
             if existing.returncode or existing.stdout.strip():
-                raise RuntimeError(f"Refusing an unavailable daemon or pre-existing CI {kind}.")
+                raise ProductionCheckFailed(
+                    f"Refusing an unavailable daemon or pre-existing CI {kind}."
+                )
         (self.directory / "owned-project").touch(exist_ok=False)
         # Missing config fails before any connection, without making real provider calls.
         for field in (
@@ -149,7 +155,7 @@ class Rehearsal:
                 altered.validate_runtime_security()
             except RuntimeError:
                 continue
-            raise RuntimeError(f"Missing {field.upper()} was not rejected.")
+            raise ProductionCheckFailed(f"Missing {field.upper()} was not rejected.")
         print(
             "PASS: production Compose, three services, no Mailpit/public DB/API ports, isolated secrets and missing-config guards."
         )
@@ -175,6 +181,20 @@ class Rehearsal:
         )
 
     def runtime(self):
+        # Parse the actual raw env_file inside the image before starting a restart loop.
+        # This catches serialization errors that validating the master file alone misses.
+        self.run(
+            [
+                "run",
+                "--rm",
+                "--no-deps",
+                "--entrypoint",
+                "python",
+                "backend",
+                "-c",
+                "from backend.core.config import settings; settings.validate_runtime_security(); print('Production runtime environment: PASS')",
+            ]
+        )
         # Do not start Caddy here: no public port binding, certificate issuance, SMTP or LLM call.
         self.run(["up", "-d", "postgres", "backend"])
 
@@ -188,10 +208,10 @@ class Rehearsal:
                     timeout=10,
                 )
                 if state.returncode:
-                    raise RuntimeError("Could not inspect production CI service health.")
+                    raise ProductionCheckFailed("Could not inspect production CI service health.")
                 state = json.loads(state.stdout)
                 if state["Status"] in ("exited", "dead"):
-                    raise RuntimeError("Production CI service exited before readiness.")
+                    raise ProductionCheckFailed("Production CI service exited before readiness.")
                 if state.get("Health", {}).get("Status") != "healthy":
                     return False
             return True
@@ -226,7 +246,9 @@ engine.dispose()
             timeout=30,
         )
         if result.returncode:
-            raise RuntimeError("Non-superuser production role query/sequence/write probe failed.")
+            raise ProductionCheckFailed(
+                "Non-superuser production role query/sequence/write probe failed."
+            )
         print(
             "PASS: fresh production PostgreSQL role initialization, non-superuser Alembic startup, sequence/write rollback and HTTP+DB health."
         )
@@ -244,7 +266,7 @@ engine.dispose()
         (self.directory / "containers.log").write_text(sanitized, encoding="utf-8")
         print(sanitized[-20000:])
         if result.returncode or leaked_secrets(output, self.private):
-            raise RuntimeError(
+            raise ProductionCheckFailed(
                 "Production CI log collection/secret scan failed; output is redacted."
             )
 
@@ -275,9 +297,11 @@ def main():
                 rehearsal.run(["down", "-v", "--remove-orphans"])
                 print("PASS: disposable production CI resources removed.")
         else:
-            raise RuntimeError("Production CI project ownership was not established.")
-    except Exception:
+            raise ProductionCheckFailed("Production CI project ownership was not established.")
+    except Exception as error:
         print(f"FAIL: production CI {args.action}; inspect sanitized logs.", file=sys.stderr)
+        if isinstance(error, (ProductionCheckFailed, CheckFailed)):
+            print(f"Reason: {error}", file=sys.stderr)
         raise SystemExit(1) from None
 
 

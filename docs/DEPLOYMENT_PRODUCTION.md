@@ -77,6 +77,12 @@ file permissions. It filters out bootstrap DB credentials. Regenerate this file
 whenever you change `.env.production`, then recreate containers. Runtime env-file
 raw mode preserves literal `$`, `#` and quotes in SMTP passwords.
 
+Structured settings such as `CONTENT_ENCRYPTION_KEYS` are serialized as JSON in
+the generated file. If updating an installation whose backend reports a JSON
+parsing error for this field, rerun preparation with `--replace` using the updated
+code and recreate the backend. Preserve the existing key values in the master
+configuration; this repair does not require rotating encryption keys.
+
 Run production using only `-f compose.production.yml`; do not merge local Compose
 into it. The backend applies Alembic migrations before starting. Failed migrations
 stop startup. The PostgreSQL app role is a non-superuser database owner, initialized

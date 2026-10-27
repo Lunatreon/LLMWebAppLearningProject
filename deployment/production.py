@@ -125,7 +125,7 @@ def backend_environment(config):
                 value = ""
             else:
                 continue
-        if isinstance(value, (list, bool)):
+        if isinstance(value, (dict, list, bool)):
             value = json.dumps(value)
         else:
             value = str(value)

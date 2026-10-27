@@ -279,11 +279,94 @@ def test_openai_error_body_never_reaches_logs_or_traceback_message(monkeypatch, 
 
 def test_production_webmail_supports_imap_without_cloudflare(production):
     config, _, _ = production
-    config = config.model_copy(update={
-        "webmail_enabled": True, "webmail_provider": "imap",
-        "webmail_imap_host": "mail.your-server.de", "webmail_imap_username": "info@example.com",
-        "webmail_imap_password": "private-mailbox-password",
-    })
+    config = config.model_copy(
+        update={
+            "webmail_enabled": True,
+            "webmail_provider": "imap",
+            "webmail_imap_host": "mail.your-server.de",
+            "webmail_imap_username": "info@example.com",
+            "webmail_imap_password": "private-mailbox-password",
+        }
+    )
     config.validate_runtime_security()
     with pytest.raises(RuntimeError, match="IMAP"):
         config.model_copy(update={"webmail_imap_password": ""}).validate_runtime_security()
+
+
+def test_filtered_environment_serializes_keyring_as_json_and_loads_like_backend(
+    production, monkeypatch
+):
+    from backend.core.config import Settings
+    from deployment.production import backend_environment
+
+    config, _, folder = production
+    values = backend_environment(config)
+    assert json.loads(values["CONTENT_ENCRYPTION_KEYS"]) == config.content_encryption_keys
+    for name, value in values.items():
+        monkeypatch.setenv(name, value)
+    runtime = Settings(_env_file=None)
+    assert runtime.content_encryption_keys == config.content_encryption_keys
+    assert runtime.cors_origins == config.cors_origins
+    assert runtime.allowed_hosts == config.allowed_hosts
+    runtime.validate_runtime_security()
+    filtered = dict(
+        line.split("=", 1) for line in (folder / ".env.production.backend").read_text().splitlines()
+    )
+    assert json.loads(filtered["CONTENT_ENCRYPTION_KEYS"]) == config.content_encryption_keys
+
+
+def test_production_runtime_checks_actual_container_environment_before_starting_services(
+    production, monkeypatch
+):
+    from scripts.production_ci import Rehearsal, ProductionCheckFailed
+
+    _, _, folder = production
+    rehearsal = Rehearsal(folder)
+    commands = []
+
+    def fail(arguments, **kwargs):
+        commands.append(arguments)
+        raise ProductionCheckFailed("Production CI command failed; see sanitized diagnostics.")
+
+    monkeypatch.setattr(rehearsal, "run", fail)
+    with pytest.raises(ProductionCheckFailed):
+        rehearsal.runtime()
+    assert len(commands) == 1
+    assert commands[0][:7] == [
+        "run",
+        "--rm",
+        "--no-deps",
+        "--entrypoint",
+        "python",
+        "backend",
+        "-c",
+    ]
+    assert "validate_runtime_security" in commands[0][-1]
+
+
+@pytest.mark.parametrize("controlled", [True, False])
+def test_production_cli_prints_safe_failure_reason_without_echoing_arbitrary_errors(
+    production, monkeypatch, capsys, controlled
+):
+    from scripts import production_ci
+
+    config, _, folder = production
+    (folder / "owned-project").touch()
+
+    def fail(self):
+        if controlled:
+            raise production_ci.ProductionCheckFailed(
+                "Production CI service exited before readiness."
+            )
+        raise RuntimeError(config.secret_key)
+
+    monkeypatch.setattr(production_ci.Rehearsal, "runtime", fail)
+    monkeypatch.setattr(
+        production_ci.sys, "argv", ["production-ci", "run", "--directory", str(folder)]
+    )
+    with pytest.raises(SystemExit) as error:
+        production_ci.main()
+    assert error.value.code == 1
+    output = capsys.readouterr()
+    assert config.secret_key not in output.out + output.err
+    assert ("Reason: Production CI service exited before readiness." in output.err) is controlled
