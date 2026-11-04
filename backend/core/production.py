@@ -145,7 +145,7 @@ def validate_production_config(config) -> None:
     }
     for role, value in providers.items():
         provider = value.lower()
-        if provider not in {"openai", "anthropic", "ollama"}:
+        if provider not in {"openai", "litellm", "anthropic", "ollama"}:
             raise RuntimeError(
                 f"{role}_LLM_PROVIDER must explicitly select a production provider; mock/local are development only."
             )
@@ -159,6 +159,18 @@ def validate_production_config(config) -> None:
                 )
         if provider == "anthropic" and not configured(config.anthropic_api_key):
             raise RuntimeError(f"ANTHROPIC_API_KEY is required for the {role} provider.")
+        if provider == "litellm":
+            from backend.llm.providers.litellm import valid_litellm_base_url
+
+            if not configured(config.litellm_base_url) or not valid_litellm_base_url(
+                config.litellm_base_url
+            ):
+                raise RuntimeError("LITELLM_BASE_URL must be a valid HTTP(S) proxy URL.")
+            if not configured(config.litellm_api_key):
+                raise RuntimeError(f"LITELLM_API_KEY is required for the {role} provider.")
+            model = getattr(config, f"litellm_{role.lower()}_model") or config.litellm_model
+            if not configured(model):
+                raise RuntimeError(f"LITELLM_{role}_MODEL or LITELLM_MODEL is required.")
     if config.stripe_enabled:
         if not all(
             (

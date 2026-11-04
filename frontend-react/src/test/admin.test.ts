@@ -81,8 +81,18 @@ test('admin navigation, category editing, creation, deletion and user actions wo
     overridden: false,
     values: { ...defaults },
     defaults,
-    providers: { mock: true, local: true, ollama: true, openai: false, anthropic: false },
-    default_models: { ollama: { chat: 'installed-model', topic: 'installed-model' } },
+    providers: {
+      mock: true,
+      local: true,
+      ollama: true,
+      openai: false,
+      litellm: true,
+      anthropic: false,
+    },
+    default_models: {
+      ollama: { chat: 'installed-model', topic: 'installed-model' },
+      litellm: { chat: 'remote-alias', topic: 'remote-alias' },
+    },
     email_delivery_configured: false,
   };
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
@@ -250,6 +260,9 @@ test('admin navigation, category editing, creation, deletion and user actions wo
   fireEvent.change(provider, { target: { value: 'ollama' } });
   expect(model.disabled).toBe(false);
   expect(model.value).toBe('installed-model');
+  fireEvent.change(provider, { target: { value: 'litellm' } });
+  expect(model.value).toBe('remote-alias');
+  expect(provider.selectedOptions[0].textContent).toBe('LiteLLM');
   fireEvent.change(model, { target: { value: 'custom-model' } });
   fireEvent.click(document.querySelector('[name="feedback_enabled"]')!);
   fireEvent.submit(document.querySelector('#app-settings-form')!);
@@ -258,6 +271,7 @@ test('admin navigation, category editing, creation, deletion and user actions wo
     expect(document.querySelector('#app-settings-status')?.textContent).toContain('Settings saved'),
   );
   expect(preferences.values.chat_model).toBe('custom-model');
+  expect(preferences.values.chat_provider).toBe('litellm');
   expect(preferences.values.feedback_enabled).toBe(true);
   fireEvent.click(document.querySelector('#reset-app-settings')!);
   fireEvent.change(document.querySelector('#admin-confirm-input')!, {

@@ -33,6 +33,23 @@ prompt follows a consistent conversational pattern: reflect the main concern,
 separate feelings from actions when useful, offer one manageable next step, and
 ask at most one open question.
 
+To use a remote LiteLLM proxy, set:
+
+```env
+CHAT_LLM_PROVIDER="litellm"
+TOPIC_LLM_PROVIDER="litellm"
+LITELLM_BASE_URL="https://your-server.example.com/v1"
+LITELLM_API_KEY="your-proxy-api-key"
+LITELLM_MODEL="your-server-model-alias"
+```
+
+Get the API base URL, key and model alias from the server owner. Restart the
+backend after updating its environment. LiteLLM is also available in Admin →
+App settings once its URL and key are configured. Optional `LITELLM_CHAT_MODEL`
+and `LITELLM_TOPIC_MODEL` override the shared model for each role. See the
+[LiteLLM connection guide](../backend/llm/README.md#using-a-remote-litellm-server)
+for URL details and request limits.
+
 To use Claude through Anthropic, set:
 
 ```env

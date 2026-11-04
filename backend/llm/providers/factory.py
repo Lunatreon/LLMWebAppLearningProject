@@ -7,6 +7,7 @@ from fastapi import HTTPException, status
 from backend.core.config import settings
 from backend.llm.providers.anthropic import AnthropicChatLLMClient, AnthropicTopicLLMClient
 from backend.llm.providers.local import LocalChatLLMClient, LocalTopicLLMClient
+from backend.llm.providers.litellm import litellm_options
 from backend.llm.providers.ollama import OllamaChatLLMClient, OllamaTopicLLMClient
 from backend.llm.providers.openai import OpenAIChatLLMClient, OpenAITopicLLMClient
 from backend.llm.types import ChatLLMClient, TopicLLMClient
@@ -34,13 +35,16 @@ def unsupported_provider(provider: str) -> NoReturn:
     raise HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail=(
-            f"Unsupported LLM provider '{provider}'. " "Use mock, openai, anthropic, or ollama."
+            f"Unsupported LLM provider '{provider}'. "
+            "Use mock, local, openai, litellm, anthropic, or ollama."
         ),
     )
 
 
 def get_chat_llm_client() -> ChatLLMClient:
     provider = (settings.chat_llm_provider or settings.llm_provider).lower()
+    if provider == "litellm":
+        return OpenAIChatLLMClient(**litellm_options("chat"))
     if provider == "openai":
         return OpenAIChatLLMClient(
             api_key=ensure_openai_api_key(),
@@ -68,6 +72,8 @@ def get_chat_llm_client() -> ChatLLMClient:
 
 def get_topic_llm_client() -> TopicLLMClient:
     provider = (settings.topic_llm_provider or settings.llm_provider).lower()
+    if provider == "litellm":
+        return OpenAITopicLLMClient(**litellm_options("topic"))
     if provider == "openai":
         return OpenAITopicLLMClient(
             api_key=ensure_openai_api_key(),

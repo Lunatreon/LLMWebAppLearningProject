@@ -16,18 +16,32 @@ logger = logging.getLogger(__name__)
 
 
 class OpenAIBaseClient:
-    def __init__(self, api_key: str, model: str) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        *,
+        base_url: str | None = None,
+        timeout_seconds: float | None = None,
+        max_retries: int | None = None,
+        provider_name: str = "OpenAI",
+    ) -> None:
         from openai import AsyncOpenAI
 
+        timeout_seconds = (
+            settings.openai_timeout_seconds if timeout_seconds is None else timeout_seconds
+        )
         self.client = AsyncOpenAI(
             api_key=api_key,
             timeout=httpx.Timeout(
-                settings.openai_timeout_seconds,
-                connect=min(5.0, settings.openai_timeout_seconds),
+                timeout_seconds,
+                connect=min(5.0, timeout_seconds),
             ),
-            max_retries=settings.openai_max_retries,
+            max_retries=settings.openai_max_retries if max_retries is None else max_retries,
+            **({"base_url": base_url} if base_url is not None else {}),
         )
         self.model = model
+        self.provider_name = provider_name
 
     async def complete(self, messages):
         from openai import APIError
@@ -41,11 +55,12 @@ class OpenAIBaseClient:
         except APIError as error:
             # SDK exceptions may contain the provider response or private request text.
             logger.warning(
-                "OpenAI request failed: error_type=%s status=%s",
+                "%s request failed: error_type=%s status=%s",
+                self.provider_name,
                 type(error).__name__,
                 getattr(error, "status_code", None),
             )
-            raise RuntimeError("OpenAI provider request failed.") from None
+            raise RuntimeError(f"{self.provider_name} provider request failed.") from None
         finally:
             # Each factory-created provider owns one request, including cancellation.
             await self.client.close()

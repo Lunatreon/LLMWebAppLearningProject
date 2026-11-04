@@ -264,6 +264,7 @@ function populateAppSettings(snapshot) {
   appSettingsSnapshot = snapshot;
   const labels = {
     openai: 'OpenAI',
+    litellm: 'LiteLLM',
     anthropic: 'Anthropic',
     ollama: 'Ollama',
     local: 'Local demo',

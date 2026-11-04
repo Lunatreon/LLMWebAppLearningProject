@@ -1,3 +1,4 @@
+import pytest
 from fastapi import Depends
 from backend.core.config import settings, Settings
 from backend.llm.providers.factory import get_chat_llm_client, get_topic_llm_client
@@ -27,11 +28,16 @@ def test_preferences_persist_apply_to_new_requests_and_reset(monkeypatch, client
     assert client.get("/api/v1/feedback/config").json() == {"enabled": False}
 
 
-def test_models_reach_provider_factories_without_exposing_credentials(monkeypatch, client):
+@pytest.mark.parametrize("chat_provider", ["openai", "litellm"])
+def test_models_reach_provider_factories_without_exposing_credentials(
+    monkeypatch, client, chat_provider
+):
     from backend.llm.providers import factory
 
     monkeypatch.setattr(settings, "openai_api_key", "private-test-openai-key")
     monkeypatch.setattr(settings, "anthropic_api_key", "private-test-anthropic-key")
+    monkeypatch.setattr(settings, "litellm_base_url", "https://proxy.example.com/v1")
+    monkeypatch.setattr(settings, "litellm_api_key", "private-test-litellm-key")
     admin = configure_and_login_admin(monkeypatch, client)
     url = "/api/v1/admin/settings"
     snapshot = client.get(url, headers=admin)
@@ -42,7 +48,7 @@ def test_models_reach_provider_factories_without_exposing_credentials(monkeypatc
         headers=admin,
         json={
             **value,
-            "chat_provider": "openai",
+            "chat_provider": chat_provider,
             "chat_model": "custom-chat-model",
             "topic_provider": "anthropic",
             "topic_model": "custom-topic-model",
@@ -71,6 +77,7 @@ def test_models_reach_provider_factories_without_exposing_credentials(monkeypatc
 
 def test_unconfigured_providers_and_invalid_settings_are_rejected(monkeypatch, client):
     monkeypatch.setattr(settings, "openai_api_key", None)
+    monkeypatch.setattr(settings, "litellm_base_url", None)
     monkeypatch.setattr(settings, "smtp_host", None)
     admin = configure_and_login_admin(monkeypatch, client)
     url = "/api/v1/admin/settings"
@@ -78,6 +85,7 @@ def test_unconfigured_providers_and_invalid_settings_are_rejected(monkeypatch, c
     payload = {**value, "expected_revision": 0}
     for changes in (
         {"chat_provider": "openai", "chat_model": "model"},
+        {"chat_provider": "litellm", "chat_model": "model"},
         {"chat_provider": "ollama", "chat_model": " "},
         {"password_reset_enabled": True},
         {"rate_limit_llm_user_per_day": -1},

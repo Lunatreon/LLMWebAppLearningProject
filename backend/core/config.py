@@ -21,6 +21,8 @@ LIVE_SETTING_NAMES = frozenset(
         "topic_llm_provider",
         "openai_chat_model",
         "openai_topic_model",
+        "litellm_chat_model",
+        "litellm_topic_model",
         "anthropic_chat_model",
         "anthropic_topic_model",
         "ollama_chat_model",
@@ -155,6 +157,13 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-5.6-luna"
     openai_chat_model: str | None = None
     openai_topic_model: str | None = None
+    litellm_base_url: str | None = None
+    litellm_api_key: str | None = None
+    litellm_model: str = ""
+    litellm_chat_model: str | None = None
+    litellm_topic_model: str | None = None
+    litellm_timeout_seconds: float = Field(default=180.0, gt=0, le=600)
+    litellm_max_retries: int = Field(default=2, ge=0, le=3)
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-sonnet-4-6"
     anthropic_chat_model: str | None = None

@@ -1,7 +1,7 @@
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-Provider = Literal["mock", "local", "openai", "anthropic", "ollama"]
+Provider = Literal["mock", "local", "openai", "litellm", "anthropic", "ollama"]
 
 
 class AppPreferences(BaseModel):

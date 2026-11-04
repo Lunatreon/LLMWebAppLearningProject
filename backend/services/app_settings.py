@@ -5,6 +5,7 @@ from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from backend.core.config import settings
 from backend.models.app_settings import AppSettings
+from backend.llm.providers.litellm import valid_litellm_base_url
 from backend.schemas.app_settings import AppPreferences
 
 FLAGS = (
@@ -59,6 +60,8 @@ def read_settings(db):
             "mock": True,
             "local": True,
             "openai": bool(base["openai_api_key"]),
+            "litellm": valid_litellm_base_url(base["litellm_base_url"])
+            and bool((base["litellm_api_key"] or "").strip()),
             "anthropic": bool(base["anthropic_api_key"]),
             "ollama": bool(base["ollama_base_url"]),
         },
@@ -67,7 +70,7 @@ def read_settings(db):
                 role: base[f"{provider}_{role}_model"] or base[f"{provider}_model"]
                 for role in ("chat", "topic")
             }
-            for provider in ("openai", "anthropic", "ollama")
+            for provider in ("openai", "litellm", "anthropic", "ollama")
         },
         "email_delivery_configured": settings.email_delivery_configured,
     }

@@ -17,6 +17,7 @@ Start with the kind of change you want to make:
 There is one implementation file per provider, not per model:
 
 - `openai.py` uses the OpenAI SDK and its chat completion response format.
+- `litellm.py` configures a remote LiteLLM proxy, reusing the OpenAI transport.
 - `anthropic.py` uses the Anthropic SDK, its separate system-prompt argument,
   required output token limit, and text content blocks.
 - `ollama.py` uses local HTTP endpoints and manages generation scheduling,
@@ -25,6 +26,35 @@ There is one implementation file per provider, not per model:
 
 Different model names for the same provider are configuration values. They do
 not need additional Python files. OpenAI credentials still use `OPENAI_API_KEY`.
+
+### Using a remote LiteLLM server
+
+Ask the server owner for the proxy API base URL, an API key and an available
+model alias. Add these to the backend environment (`.env` for local development,
+or the private deployment env file):
+
+```dotenv
+CHAT_LLM_PROVIDER=litellm
+TOPIC_LLM_PROVIDER=litellm
+LITELLM_BASE_URL=https://llm.example.com/v1
+LITELLM_API_KEY=your-proxy-key
+LITELLM_MODEL=your-server-model-alias
+```
+
+Use the exact API base URL supplied by the owner, including any path prefix;
+do not include `/chat/completions`. Both proxy-root URLs and `/v1` URLs are
+supported by LiteLLM. Model names must match the aliases exposed by that server.
+The selected model must support JSON-object responses for chat and topic results.
+Optional `LITELLM_CHAT_MODEL` and `LITELLM_TOPIC_MODEL` override the shared model.
+`LITELLM_TIMEOUT_SECONDS` and `LITELLM_MAX_RETRIES` bound requests independently
+of OpenAI settings. Restart the backend after changing connection settings.
+
+LiteLLM also appears in both provider dropdowns in Admin → App settings once
+the URL and key are configured. Admin model choices apply to subsequent requests.
+Credentials stay in the backend environment and are never returned to the browser.
+No LiteLLM installation or local model hardware is needed on the FeelY machine;
+the remote server handles inference, so speed depends on its model, load and network.
+See the [LiteLLM proxy documentation](https://docs.litellm.ai/docs/).
 
 ## Tasks
 

@@ -42,6 +42,34 @@ def test_valid_production_config_never_loads_host_credentials(production, monkey
     assert config.secret_key in backend
 
 
+@pytest.mark.parametrize(
+    "changes,field",
+    [
+        ({}, None),
+        ({"litellm_base_url": ""}, "LITELLM_BASE_URL"),
+        ({"litellm_api_key": ""}, "LITELLM_API_KEY"),
+        ({"litellm_model": ""}, "LITELLM_CHAT_MODEL"),
+    ],
+)
+def test_production_litellm_configuration(production, changes, field):
+    config, _, _ = production
+    config = config.model_copy(
+        update={
+            "chat_llm_provider": "litellm",
+            "topic_llm_provider": "litellm",
+            "litellm_base_url": "https://proxy.example.com/v1",
+            "litellm_api_key": "test-proxy-key",
+            "litellm_model": "remote-alias",
+            **changes,
+        }
+    )
+    if field:
+        with pytest.raises(RuntimeError, match=field):
+            config.validate_runtime_security()
+    else:
+        config.validate_runtime_security()
+
+
 @pytest.mark.skipif(not shutil.which("docker"), reason="Docker CLI is not installed")
 def test_production_compose_after_docker_file_consolidation(production):
     config, values, folder = production
