@@ -11,7 +11,7 @@ TextChunkCallback = Callable[[str], Awaitable[None]]
 class ChatLLMResult:
     assistant_message: str
     profile: dict[str, Any]
-    map_suggestion: dict[str, str] | None = None
+    map_suggestion: dict[str, Any] | None = None
 
 
 @dataclass
@@ -43,8 +43,6 @@ class TopicLLMClient(Protocol):
     async def create_topic(
         self,
         chat_info: dict[str, Any],
-        matched_patterns: list[str],
-        topic_hint: str | None = None,
         available_topics: list[dict[str, Any]] | None = None,
     ) -> TopicLLMResult:
         """Return a topic and short description for an analysed chat."""

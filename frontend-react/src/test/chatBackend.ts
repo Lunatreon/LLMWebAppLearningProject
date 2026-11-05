@@ -195,6 +195,7 @@ export function chatBackend(
       if (payload.accepted)
         map.unassigned_entries.push(
           mapEntry('saved-note', payload.text, payload.category, {
+            goal: payload.goal ?? null,
             source_chat_id: payload.chat_id,
           }),
         );

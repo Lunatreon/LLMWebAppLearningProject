@@ -1,6 +1,6 @@
 """Relational map entities; API JSON is assembled at the storage boundary."""
 
-from sqlalchemy import event, Column, Boolean, false
+from sqlalchemy import event, Column, Boolean, LargeBinary, false
 from backend.db.base import Base
 from migrations.map_schema_v3 import build_tables, category_rows
 
@@ -8,6 +8,7 @@ TABLES = build_tables(Base.metadata)
 TABLES["map_entries"].append_column(
     Column("working_on", Boolean, nullable=False, server_default=false())
 )
+TABLES["map_entries"].append_column(Column("goal_ciphertext", LargeBinary))
 
 
 class MapCategory(Base):

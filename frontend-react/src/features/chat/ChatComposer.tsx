@@ -68,7 +68,9 @@ export default function ChatComposer() {
             aria-controls="map-suggestion-review-dialog"
             onClick={() => controller.openReview('note')}
           >
-            Review map note
+            {chat.pending_map_suggestion.kind === 'reflection'
+              ? 'Explore a possible pattern'
+              : 'Review map note'}
           </button>
         )}
       </div>

@@ -47,7 +47,7 @@ def test_openai_roles_preserve_credentials_models_and_prompt_contract(monkeypatc
         assert result.assistant_message == "A reflective reply"
         on_chunk.assert_awaited_once_with("A reflective reply")
     else:
-        result = asyncio.run(get_topic_llm_client().create_topic({}, []))
+        result = asyncio.run(get_topic_llm_client().create_topic({}))
         assert result.topic == "Work"
 
     assert credentials == ["test-only-key"]

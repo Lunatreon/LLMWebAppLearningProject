@@ -98,8 +98,6 @@ class OpenAITopicLLMClient(OpenAIBaseClient):
     async def create_topic(
         self,
         chat_info: dict[str, Any],
-        matched_patterns: list[str],
-        topic_hint: str | None = None,
         available_topics: list[dict[str, Any]] | None = None,
     ) -> TopicLLMResult:
         response = await self.complete(
@@ -112,8 +110,6 @@ class OpenAITopicLLMClient(OpenAIBaseClient):
                     "role": "user",
                     "content": topic_request_payload(
                         chat_info,
-                        matched_patterns,
-                        topic_hint,
                         available_topics,
                     ),
                 },

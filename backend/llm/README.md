@@ -58,7 +58,7 @@ See the [LiteLLM proxy documentation](https://docs.litellm.ai/docs/).
 
 ## Tasks
 
-Conversation summaries, pattern recognition, suggestion cooldown rules and topic
+Conversation summaries, analysis pacing, suggestion cooldown rules and topic
 matching are grouped under `tasks/`. These helpers may be deterministic; being a
 task does not imply an external model call.
 
@@ -74,5 +74,26 @@ summary needs no model and lives in `backend/llm/tasks/conversation_summary.py`.
 Shared modules at this folder's root support multiple providers and tasks. The
 package `__init__.py` is intentionally minimal. Import factories, task functions
 and result types from their concrete modules. Editable prompt loading is in
-`prompts.py`; configured prompt files and pattern rules keep their original paths.
+`prompts.py`. The topic prompt and user-only context assess personal significance;
+no keyword file or keyword-derived confidence score is used. Analysis is eligible
+after three completed user messages and every three additional messages.
 Authoritative Map CRUD/profile protection stays in `backend/services/self_authorship.py`.
+
+Map suggestions use `kind: observation` for user-described self-understanding and
+chosen actions, or `kind: reflection` for possible patterns that need exploration.
+Reflections include a question and supporting details. Their review first asks whether
+the connection fits, then offers editable text and a separate save. The API requires
+`interpretation_confirmed: true` and the current `suggestion_id` to save a reflection.
+The parser still accepts older observation-only payloads without these new fields.
+Tasks/practices may include a nullable `goal` separate from their action text.
+
+`select_topic_context` selects up to twenty anchors using chat links, Unicode word
+overlap and recency, including a selected topic's parent where space permits. It adds
+no provider call. These are retrieval hints, never evidence of a relationship or trait.
+The existing bounded payload and batched analysis limits remain in place.
+
+Deploy this change with `alembic upgrade head` (revision `0006` adds encrypted goals)
+and the current chat/topic prompts. Custom prompt directories and Docker prompt volumes
+must adopt the updated prompt contract. The deterministic development fallback does not
+perform semantic pattern discovery; evaluate the configured model using the scenarios
+in `docs/TOPIC_PROMPT_EVALUATION.md`.

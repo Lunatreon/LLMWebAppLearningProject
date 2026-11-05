@@ -445,6 +445,100 @@ describe('real Chat shell/composer/history/stream', () => {
       topic_space_id: null,
     });
   });
+  test('possible pattern needs a separate confirmation before an editable observation can be saved', async () => {
+    const { writes } = mount({
+      initial: [
+        {
+          ...chat('a'),
+          pending_map_suggestion: {
+            ...detectedNote('a'),
+            kind: 'reflection',
+            suggestion_id: 'pattern-a',
+            category: 'own_perception',
+            question: 'Do those two decisions feel connected?',
+            text: 'I wonder whether I sometimes put others first.',
+          },
+        },
+      ],
+    });
+    await composer();
+    await select();
+    fireEvent.click(await screen.findByRole('button', { name: 'Explore a possible pattern' }));
+    let dialog = await screen.findByRole('dialog', { name: 'Explore a possible pattern' });
+    expect(within(dialog).getByText('Do those two decisions feel connected?')).toBeDefined();
+    expect(within(dialog).queryByRole('button', { name: 'Save to map' })).toBeNull();
+    expect(writes()).toHaveLength(0);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'This fits' }));
+    dialog = await screen.findByRole('dialog', { name: 'Keep this in your map?' });
+    expect(writes()).toHaveLength(0);
+    expect(document.activeElement).toBe(
+      within(dialog).getByRole('heading', { name: 'Keep this in your map?' }),
+    );
+    fireEvent.change(within(dialog).getByLabelText('Edit map suggestion'), {
+      target: { value: 'I sometimes change plans after criticism.' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save to map' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(JSON.parse(String(writes()[0][1]?.body))).toMatchObject({
+      suggestion_id: 'pattern-a',
+      interpretation_confirmed: true,
+      accepted: true,
+      text: 'I sometimes change plans after criticism.',
+    });
+  });
+  test('exploring a possible pattern fills the composer without saving or sending', async () => {
+    const { writes } = mount({
+      initial: [
+        {
+          ...chat('a'),
+          pending_map_suggestion: {
+            ...detectedNote('a'),
+            kind: 'reflection',
+            suggestion_id: 'pattern-a',
+            question: 'Do those two decisions feel connected?',
+          },
+        },
+      ],
+    });
+    const input = await composer();
+    await select();
+    fireEvent.click(await screen.findByRole('button', { name: 'Explore a possible pattern' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Explore a possible pattern' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Explore in chat' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(input.value).toContain('Do those two decisions feel connected?');
+    expect(writes()).toHaveLength(0);
+  });
+  test('task suggestion keeps its editable goal alongside the action', async () => {
+    const { writes } = mount({
+      initial: [
+        {
+          ...chat('a'),
+          pending_map_suggestion: {
+            ...detectedNote('a'),
+            kind: 'observation',
+            suggestion_id: 'task-a',
+            category: 'task',
+            text: 'Prepare one sentence',
+            goal: 'Express my boundary clearly',
+          },
+        },
+      ],
+    });
+    await composer();
+    await select();
+    fireEvent.click(await screen.findByRole('button', { name: 'Review map note' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Keep this in your map?' });
+    fireEvent.change(within(dialog).getByLabelText('Desired outcome'), {
+      target: { value: 'Speak clearly about my needs' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save to map' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(JSON.parse(String(writes()[0][1]?.body))).toMatchObject({
+      text: 'Prepare one sentence',
+      goal: 'Speak clearly about my needs',
+    });
+  });
   test('analysis retry never resends the conversation', async () => {
     const { writes } = mount({
       initial: [chat('a')],

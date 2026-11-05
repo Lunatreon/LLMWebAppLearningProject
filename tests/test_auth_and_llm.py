@@ -66,7 +66,6 @@ from backend.llm.tasks.topic_matching import (
     best_existing_topic_match,
     infer_local_freeform_topic,
 )
-from backend.llm.tasks.pattern_recognition import ChatAnalyser
 from backend.services.self_authorship import merge_llm_profile
 
 
@@ -89,6 +88,18 @@ def grant_premium_access(client: TestClient, email: str) -> None:
         db.commit()
     finally:
         session_generator.close()
+
+
+def send_conversation(client, headers, messages, chat_id=None):
+    for message in messages:
+        response = client.post(
+            "/api/v1/llm/message",
+            headers=headers,
+            json={"context": message, **({"chat_id": chat_id} if chat_id else {})},
+        )
+        assert response.status_code == 200
+        chat_id = response.json()["chat_id"]
+    return response
 
 
 def test_local_website_cors_preflight(client):
@@ -263,7 +274,7 @@ def test_user_can_register_login_and_send_llm_message(client):
     assert suggestion_response.status_code == 200
     suggestion = suggestion_response.json()["suggestion"]
     assert suggestion["chat_id"] == chat_id
-    assert "productivity" in suggestion["topic"]
+    assert suggestion["topic"]  # Offline naming no longer comes from an English keyword rule.
     assert suggestion["description"]
 
     confirm_response = client.post(
@@ -735,17 +746,19 @@ def test_user_can_confirm_map_suggestion_and_complete_practice(client):
     headers = {"Authorization": f"Bearer {login_response.json()['access_token']}"}
     grant_premium_access(client, "map@example.com")
 
-    message_response = client.post(
-        "/api/v1/llm/message",
-        json={
-            "context": (
+    message_response = send_conversation(
+        client,
+        headers,
+        [
+            "My family expectations still affect how I make decisions.",
+            "I notice this both with work choices and in my relationships.",
+            (
                 "My parents told me to choose safety and obedience, and I still feel "
                 "judged when I make my own decisions. It keeps showing up in my body "
                 "when I need to choose something for myself, because a part of me still "
                 "expects punishment or rejection if I disappoint them."
-            )
-        },
-        headers=headers,
+            ),
+        ],
     )
     assert message_response.status_code == 200
     body = message_response.json()
@@ -1143,28 +1156,18 @@ def test_one_chat_can_be_connected_to_multiple_detected_topics(monkeypatch, clie
             )
 
     monkeypatch.setattr(llm_routes, "get_topic_llm_client", MultipleTopicClient)
-    monkeypatch.setattr(
-        llm_routes,
-        "ChatAnalyser",
-        lambda: SimpleNamespace(
-            analyse=lambda _chat_info: SimpleNamespace(
-                should_create_topic=True,
-                matched_patterns=["relationship", "work"],
-                topic_hint="relationships and work",
-                confidence=0.9,
-            )
-        ),
-    )
 
-    response = client.post(
-        "/api/v1/llm/message",
-        json={
-            "context": (
+    response = send_conversation(
+        client,
+        headers,
+        [
+            "My relationships and my work are both important parts of my life.",
+            "I keep noticing how boundaries affect both of those areas.",
+            (
                 "I am considering a boundary in my relationship, and I am also trying "
                 "to recover after a demanding week at work."
-            )
-        },
-        headers=headers,
+            ),
+        ],
     )
     assert response.status_code == 200
     chat_id = response.json()["chat_id"]
@@ -1343,65 +1346,7 @@ def test_short_emotional_message_does_not_create_topic(client):
     assert suggestion_response.json()["suggestion"] is None
 
 
-def test_relationship_and_self_struggle_text_gets_semantic_topic_hint():
-    chat_info = {
-        "messages": [
-            {
-                "role": "user",
-                "content": (
-                    "I damaged my relationship with someone I love while I was depressed, "
-                    "and I relied on her emotional support too heavily."
-                ),
-            },
-            {
-                "role": "user",
-                "content": (
-                    "I became jealous of her progress and avoided taking responsibility for "
-                    "my actions, habits, and the work needed to repair trust."
-                ),
-            },
-            {
-                "role": "user",
-                "content": (
-                    "I want to change without expecting my partner to keep stabilizing me, "
-                    "and I need to learn how to give support instead of only taking it."
-                ),
-            },
-        ]
-    }
-
-    analysis = ChatAnalyser().analyse(chat_info)
-
-    assert analysis.should_create_topic is True
-    assert analysis.topic_hint == "relationship strain and personal responsibility"
-    assert "feeling" not in analysis.matched_patterns
-
-
-def test_healthcare_chat_gets_general_topic_hint():
-    chat_info = {
-        "messages": [
-            {
-                "role": "user",
-                "content": "I am applying for bottom surgery and the waiting feels heavy.",
-            },
-            {
-                "role": "user",
-                "content": "Testosterone changes and dysphoria have affected intimacy.",
-            },
-            {
-                "role": "user",
-                "content": "I want gender-affirming care and closeness with my girlfriend.",
-            },
-        ]
-    }
-
-    analysis = ChatAnalyser().analyse(chat_info)
-
-    assert analysis.should_create_topic is True
-    assert analysis.topic_hint == "healthcare access, body, and relationships"
-
-
-def test_family_autonomy_chat_gets_fitting_topic_hint():
+def test_topic_context_preserves_user_evidence_without_assistant_interpretation():
     chat_info = {
         "messages": [
             {
@@ -1432,11 +1377,8 @@ def test_family_autonomy_chat_gets_fitting_topic_hint():
         ]
     }
 
-    analysis = ChatAnalyser().analyse(chat_info)
     topic_context = topic_chat_context(chat_info)
 
-    assert analysis.should_create_topic is True
-    assert analysis.topic_hint == "family expectations, autonomy, and self-worth"
     assert len(topic_context["user_messages"]) == 3
     assert all("assistant text" not in message for message in topic_context["user_messages"])
 
@@ -1466,12 +1408,8 @@ def test_long_uncategorized_chat_can_request_a_freeform_topic():
         ]
     }
 
-    analysis = ChatAnalyser().analyse(chat_info)
     topic = infer_local_freeform_topic(topic_chat_context(chat_info)["user_messages"])
 
-    assert analysis.should_create_topic is True
-    assert analysis.topic_hint is None
-    assert analysis.matched_patterns == ["open-topic-analysis"]
     assert "Bicycle" in topic or "Bicycles" in topic
 
 
@@ -1801,17 +1739,13 @@ def test_anthropic_clients_use_messages_api_and_shared_json_contract():
     topic_result = asyncio.run(
         topic_client.create_topic(
             {"messages": [{"role": "user", "content": "My family expects safety."}]},
-            ["family", "safety"],
-            "family expectations",
         )
     )
 
     assert topic_result.topic == "Family expectations and autonomy"
     topic_request = topic_messages.requests[0]
     assert "background map assistant" in topic_request["system"]
-    assert json.loads(topic_request["messages"][0]["content"])["topic_hint"] == (
-        "family expectations"
-    )
+    assert "topic_hint" not in json.loads(topic_request["messages"][0]["content"])
 
 
 class OllamaResponse:
@@ -1939,8 +1873,6 @@ def test_ollama_clients_use_local_chat_api_and_structured_json_contract():
     topic_result = asyncio.run(
         topic_client.create_topic(
             {"messages": [{"role": "user", "content": "I want my own direction."}]},
-            ["family", "autonomy"],
-            "family expectations",
         )
     )
 
@@ -2103,19 +2035,14 @@ def test_background_map_observations_do_not_require_a_new_topic(client, monkeypa
             )
 
     monkeypatch.setattr(llm_routes, "get_topic_llm_client", MapClient)
-    monkeypatch.setattr(
-        llm_routes,
-        "ChatAnalyser",
-        lambda: SimpleNamespace(
-            analyse=lambda _: SimpleNamespace(
-                should_create_topic=False, matched_patterns=[], topic_hint=None, confidence=0.8
-            )
-        ),
-    )
-    first = client.post(
-        "/api/v1/llm/message",
-        headers=headers,
-        json={"context": "Making my own choices matters to me."},
+    first = send_conversation(
+        client,
+        headers,
+        [
+            "My family has often expected me to follow their decisions.",
+            "At work too, I notice how important it is to choose my own direction.",
+            "Making my own choices matters to me.",
+        ],
     ).json()
     assert first["map_suggestion"] is None
     assert calls[0]["chat_info"]["suggest_topics"] is True
@@ -2123,15 +2050,77 @@ def test_background_map_observations_do_not_require_a_new_topic(client, monkeypa
     result = client.get(poll_url, headers=headers).json()
     assert result["map_suggestion"]["category"] == "value"
     assert bool(result["suggestions"]) == offer_topic
-    client.post(
-        "/api/v1/llm/message",
-        headers=headers,
-        json={"chat_id": first["chat_id"], "context": "I want to reflect on that."},
+    send_conversation(
+        client,
+        headers,
+        [
+            "I want to reflect on that.",
+            "It also matters when planning my future.",
+            "I am still thinking about what that means to me.",
+        ],
+        chat_id=first["chat_id"],
     )
     after = client.get(poll_url, headers=headers).json()
-    assert len(calls) == 2  # Continue analysis even with a pending topic.
+    # Both pending proposals block calls; otherwise analysis continues with observations disabled.
+    assert len(calls) == (1 if offer_topic else 2)
+    if not offer_topic:
+        assert calls[-1]["chat_info"]["suggest_observations"] is False
     assert after["suggestions"] == result["suggestions"]
     assert after["map_suggestion"] == result["map_suggestion"]
+
+
+def test_topic_analysis_pacing_and_dismissal_history_reach_next_request(client, monkeypatch):
+    from tests.test_admin import register_and_login
+
+    headers = register_and_login(client, "pacing@example.com", "pacing")
+    calls = []
+
+    class SelectiveClient:
+        async def create_topic(self, **kwargs):
+            calls.append(kwargs)
+            return TopicLLMResult(
+                topic="Music" if len(calls) == 1 else "",
+                description=(
+                    "You describe music as a lasting source of expression."
+                    if len(calls) == 1
+                    else ""
+                ),
+            )
+
+    monkeypatch.setattr(llm_routes, "get_topic_llm_client", SelectiveClient)
+    first = send_conversation(client, headers, ["Music has mattered to me since childhood."])
+    chat_id = first.json()["chat_id"]
+    send_conversation(client, headers, ["I use music to express my feelings."], chat_id)
+    assert calls == []
+    send_conversation(client, headers, ["It remains an important part of who I am."], chat_id)
+    assert len(calls) == 1
+    assert calls[0]["chat_info"]["new_user_message_count"] == 3
+    url = f"/api/v1/llm/chats/{chat_id}/topic-suggestion"
+    suggestion = client.get(url, headers=headers).json()["suggestion"]
+    review = client.post(
+        "/api/v1/llm/topics/confirm",
+        headers=headers,
+        json={
+            "chat_id": chat_id,
+            "topic": suggestion["topic"],
+            "description": suggestion["description"],
+            "suggestion_id": suggestion["suggestion_id"],
+            "accepted": False,
+        },
+    )
+    assert review.status_code == 200
+    send_conversation(
+        client, headers, ["Heute habe ich eingekauft.", "Mein Zug war verspätet."], chat_id
+    )
+    assert len(calls) == 1
+    send_conversation(client, headers, ["Danach war ich kurz genervt."], chat_id)
+    assert len(calls) == 2
+    assert calls[-1]["chat_info"]["new_user_message_count"] == 3
+    assert calls[-1]["chat_info"]["recent_topic_suggestions"][0]["status"] == "dismissed"
+    assert "matched_patterns" not in calls[-1] and "topic_hint" not in calls[-1]
+    empty = client.get(url, headers=headers).json()
+    assert empty["analysis_status"] == "idle"
+    assert empty["suggestion"] is None
 
 
 def test_chat_result_keeps_message_when_optional_map_suggestion_is_malformed():
@@ -2219,24 +2208,14 @@ def test_topic_categories_and_connections_survive_suggestion_confirmation(monkey
             )
 
     monkeypatch.setattr(llm_routes, "get_topic_llm_client", PersonalTopicClient)
-    monkeypatch.setattr(
-        llm_routes,
-        "ChatAnalyser",
-        lambda: SimpleNamespace(
-            analyse=lambda _: SimpleNamespace(
-                should_create_topic=True,
-                matched_patterns=["support"],
-                topic_hint="support",
-                confidence=0.9,
-            ),
-        ),
-    )
-    message = client.post(
-        "/api/v1/llm/message",
-        headers=headers,
-        json={
-            "context": "My girlfriend supports me as I heal. I also stay calm when things change.",
-        },
+    message = send_conversation(
+        client,
+        headers,
+        [
+            "My girlfriend is an important, supportive person in my life.",
+            "I have stayed calm through several changes at work and at home.",
+            "My girlfriend supports me as I heal. I also stay calm when things change.",
+        ],
     ).json()
     chat_id = message["chat_id"]
     suggestions = client.get(
@@ -2401,11 +2380,11 @@ def test_topic_model_retries_malformed_json_once_with_more_room(monkeypatch, rec
     model = make_ollama_client(OllamaTopicLLMClient, {})
     model.max_tokens = 768
     if recover:
-        result = asyncio.run(model.create_topic({"messages": []}, []))
+        result = asyncio.run(model.create_topic({"messages": []}))
         assert result.topic == "Pressure"
     else:
         with pytest.raises(HTTPException):
-            asyncio.run(model.create_topic({"messages": []}, []))
+            asyncio.run(model.create_topic({"messages": []}))
     assert budgets == [768, 1536]
     assert model.max_tokens == 768
 
@@ -2433,10 +2412,14 @@ def test_failed_map_analysis_can_be_retried_without_resending_chat(client, monke
             )
 
     monkeypatch.setattr(llm_routes, "get_topic_llm_client", Broken)
-    result = client.post(
-        "/api/v1/llm/message",
-        headers=headers,
-        json={"context": "I feel pressure to finish my work."},
+    result = send_conversation(
+        client,
+        headers,
+        [
+            "Finishing work has been difficult for me lately.",
+            "I keep noticing this pressure in different projects.",
+            "I feel pressure to finish my work.",
+        ],
     ).json()
     url = f"/api/v1/llm/chats/{result['chat_id']}/topic-suggestion"
     assert client.get(url, headers=headers).json()["analysis_status"] == "error"

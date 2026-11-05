@@ -14,7 +14,7 @@ export interface TopicSuggestion {
   description: string;
   category?: TopicCategory;
   related_topic_ids?: string[];
-  confidence?: number;
+  confidence?: number | null;
   matched_patterns?: string[];
   status?: string;
   existing_topic_id?: string | null;
@@ -24,6 +24,10 @@ export interface TopicSuggestion {
   queue_total?: number;
 }
 export interface MapSuggestion {
+  suggestion_id?: string;
+  kind?: 'observation' | 'reflection';
+  question?: string | null;
+  goal?: string | null;
   category: EntryCategory;
   text: string;
   reason?: string | null;
@@ -73,6 +77,9 @@ export interface TopicDecision {
   parent_topic_space_id: string | null;
 }
 export interface NoteDecision {
+  suggestion_id?: string;
+  interpretation_confirmed?: boolean;
+  goal?: string | null;
   chat_id: string;
   accepted: boolean;
   category: EntryCategory;

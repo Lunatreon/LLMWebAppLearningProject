@@ -292,9 +292,11 @@ When an authenticated user calls `POST /api/v1/llm/message`, the backend:
    and the new `context` to the Chat-LLM.
 3. Saves the Chat-LLM response, updated profile, and updated chat info.
 4. Returns the chat response to the app or website immediately.
-5. Starts a backend background task that checks the full stored chat with the hard-coded analyser.
-6. If enough patterns from `backend/llm/pattern_recognition.txt` match, sends compact notes, recent
-   user messages, and the user's existing topic list to the Topic-LLM.
+5. Starts a background task. Analysis first becomes eligible after three completed user
+   messages, then after three more messages since the preceding analysis. No keyword rules apply.
+6. Sends bounded user-only context (up to twelve recent messages and sampled older excerpts),
+   recent topic/observation proposals, and the existing map to the Topic-LLM. If a topic and
+   observation are both awaiting review, it skips the external call.
 7. Saves the Topic-LLM topic and description as a pending suggestion. The model
    can recommend connecting the chat to an existing topic or placing a new topic
    under a broader one; the user confirms the choice.
@@ -302,8 +304,40 @@ When an authenticated user calls `POST /api/v1/llm/message`, the backend:
    `GET /api/v1/llm/chats/{chat_id}/topic-suggestion` for newly generated topics.
 9. Uses an accepted topic as the chat title through `POST /api/v1/llm/topics/confirm`.
 10. For users with My Map access, creates or reuses a Topic Space and connects the current chat.
-11. Optionally proposes one editable My Map entry from the newest user message.
+11. Optionally proposes one editable My Map entry supported by the conversation and new evidence.
 12. Writes that entry only after explicit user confirmation.
+
+The topic prompt prioritizes enduring values, strengths, interests, relationships and
+recurring responses over isolated events. It requires personal significance, adequate
+user evidence and novelty; an empty proposal is valid. A temporary state is not a trait.
+The revisable picture includes user-described trauma, lasting difficulties and unresolved
+experiences alongside strengths. A single disclosure with explicit lasting meaning can
+qualify. The model preserves connections the user describes between experiences, people
+and present responses, including uncertainty, without inferring hidden trauma, diagnoses
+or causes. A positive focus does not require a recovery story or an action plan.
+Explicitly meaningful self-descriptions can qualify; inferred patterns need distinct
+supporting statements. Topic reviews are included in later context so dismissed ideas
+are not continually reworded. Titles and observations use the user's language, while
+existing IDs remain stable across languages. See [topic prompt evaluation](TOPIC_PROMPT_EVALUATION.md).
+
+Specific experiences, preferences, responses and achievements can sit under an existing
+broader topic such as Social behavior. Context selection considers linked topics and
+word overlap with the latest user statements, so an older relevant topic can be included
+alongside recent topics. This selects context only; it does not infer relationships.
+The same twenty-topic and character limits still apply, with no additional LLM call.
+
+Possible patterns the user has not named use a separate reflection review. The user can
+explore the question in chat, dismiss it, or choose "This fits" to open an editable
+observation. Confirming that it fits does not save anything; "Save to map" is a separate
+action. The API requires confirmation and a current suggestion ID for these reflections.
+An unconfirmed pattern cannot simultaneously create a new trait/topic suggestion.
+
+Tasks and practices have an optional `goal` describing the intended outcome separately
+from their action text. It is editable in map entries and suggestion reviews, displayed
+on the map and in practice reflections, and stored encrypted. The model may propose an
+action only when the user chooses it and may include a goal only when the user states it.
+An entry can remain marked "Working on" without becoming a task. Task completion does
+not imply that a difficult experience is resolved or an achievement has occurred.
 
 Map topics have an editable type: Person, Trait, Experience, or Other. My Map uses
 its existing floating topic bubbles and filters for these types, with short descriptions in the selected
@@ -312,9 +346,9 @@ Chat and topic prompts favor simple 1-4 word names and brief descriptions ground
 in the user's account. Chat suggestions can propose connections to existing topics;
 the user can review those connections before saving, or use Edit & connect later.
 
-Patterns are an analysis trigger, not a fixed topic taxonomy. The Topic-LLM can
-create its own free-form topic from the compact conversation memory. Longer chats
-that do not match a predefined category can also enter open-topic analysis.
+Analysis uses message-count pacing rather than keyword or pattern triggers. The
+Topic-LLM can propose free-form topics from bounded user statements when their
+lasting significance and novelty meet the evidence threshold.
 
 The current request shape is:
 

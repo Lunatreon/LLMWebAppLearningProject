@@ -25,6 +25,7 @@ class SelfAuthorshipMapRead(BaseModel):
 
 
 class MapEntryCreate(BaseModel):
+    goal: str | None = Field(default=None, max_length=1000)
     working_on: bool = Field(default=False, strict=True)
     expected_revision: int | None = Field(default=None, ge=0, strict=True)
     category: MapEntryCategory
@@ -41,6 +42,7 @@ class MapEntryCreateResponse(BaseModel):
 
 
 class MapEntryUpdate(BaseModel):
+    goal: str | None = Field(default=None, max_length=1000)
     working_on: bool | None = Field(default=None, strict=True)
     expected_revision: int | None = Field(default=None, ge=0, strict=True)
     category: MapEntryCategory | None = None

@@ -373,6 +373,36 @@ describe('real My Map route/graph/forms', () => {
     await waitFor(() => expect(screen.queryByText('I rested')).toBeNull());
     expect(writes()[2][1]?.method).toBe('DELETE');
   });
+  test('practice action and goal remain separate when created, edited and cleared', async () => {
+    const { writes, getData } = mount();
+    await select('Overall');
+    fireEvent.click(screen.getByRole('button', { name: '+ Practice' }));
+    let dialog = await screen.findByRole('dialog', { name: 'Add practice' });
+    fireEvent.change(within(dialog).getByLabelText('Entry text'), {
+      target: { value: 'Prepare one sentence' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Desired outcome'), {
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save practice' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    const article = (await screen.findByText('Prepare one sentence')).closest('article')!;
+    expect(within(article).getByText('Express my boundary clearly')).toBeDefined();
+    expect(JSON.parse(String(writes()[0][1]?.body))).toMatchObject({
+      text: 'Prepare one sentence',
+      goal: 'Express my boundary clearly',
+    });
+    fireEvent.click(within(article).getByRole('button', { name: 'Entry actions' }));
+    fireEvent.click(within(article).getByRole('button', { name: 'Edit' }));
+    dialog = await screen.findByRole('dialog', { name: 'Edit entry' });
+    expect((within(dialog).getByLabelText('Desired outcome') as HTMLTextAreaElement).value).toBe(
+      'Express my boundary clearly',
+    );
+    fireEvent.change(within(dialog).getByLabelText('Desired outcome'), { target: { value: '' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(getData().unassigned_entries[0].goal).toBeNull();
+    expect(getData().unassigned_entries[0].text).toBe('Prepare one sentence');
+  });
   test('practice create, pause, resume and reactivation remain Map actions; completion opens Reflection', async () => {
     const { writes, router } = mount();
     await loaded();

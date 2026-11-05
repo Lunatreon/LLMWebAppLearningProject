@@ -35,6 +35,7 @@ export default function EntryForm({ popup }: { popup: Exclude<MapPopup, { kind: 
         : categories[0] || 'own_perception'),
   );
   const [completion, setCompletion] = useState(entry?.completion_percent?.toString() || '');
+  const [goal, setGoal] = useState(entry?.goal || '');
   const [workingOn, setWorkingOn] = useState(entry?.working_on ?? false);
   const { controls, bind } = useDialogControls();
   const input = useRef<HTMLTextAreaElement>(null);
@@ -88,6 +89,7 @@ export default function EntryForm({ popup }: { popup: Exclude<MapPopup, { kind: 
               {
                 category: practice ? 'practice' : category,
                 text: text.trim(),
+                ...(goal.trim() || entry?.goal != null ? { goal: goal.trim() || null } : {}),
                 ...(workingOn !== Boolean(entry?.working_on) ? { working_on: workingOn } : {}),
                 ...(completion !== ''
                   ? { completion_percent: Number(completion) }
@@ -167,13 +169,32 @@ export default function EntryForm({ popup }: { popup: Exclude<MapPopup, { kind: 
           required
           aria-label="Entry text"
           placeholder={
-            task
-              ? 'What repeatable practice belongs to this topic?'
+            practice || category === 'task'
+              ? 'What action do you want to take?'
               : 'What observation do you want to save here?'
           }
           value={text}
           onChange={(event) => setText(event.target.value)}
         />
+        {(practice ||
+          category === 'task' ||
+          goal ||
+          snapshot.data?.categories?.some(
+            (item) => item.kind === 'entry' && item.key === category && item.supports_completion,
+          )) && (
+          <label>
+            Desired outcome (optional)
+            <textarea
+              ref={bind}
+              aria-label="Desired outcome"
+              placeholder="What do you want this action to help you achieve?"
+              maxLength={1000}
+              rows={2}
+              value={goal}
+              onChange={(event) => setGoal(event.target.value)}
+            />
+          </label>
+        )}
         <button ref={bind} type="submit" disabled={busy}>
           {submitLabel}
         </button>

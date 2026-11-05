@@ -10,6 +10,7 @@ import type {
   NoteDecision,
   Reaction,
   ChatMessage,
+  MapSuggestion,
 } from './types';
 const root = '/llm/chats',
   path = (id: string) => `${root}/${encodeURIComponent(id)}`;
@@ -37,11 +38,18 @@ function validTopic(value: unknown, id: string) {
   );
 }
 function validNote(value: unknown, id: string) {
-  const note = value as { source_chat_id?: string; text?: string; category?: string } | null;
+  const note = value as MapSuggestion | null;
   return (
     note &&
     (!note.source_chat_id || note.source_chat_id === id) &&
     typeof note.text === 'string' &&
+    (note.goal == null || typeof note.goal === 'string') &&
+    (note.kind === undefined || note.kind === 'observation' || note.kind === 'reflection') &&
+    (note.kind !== 'reflection' ||
+      (typeof note.question === 'string' &&
+        Boolean(note.question.trim()) &&
+        typeof note.suggestion_id === 'string' &&
+        Boolean(note.suggestion_id))) &&
     typeof note.category === 'string'
   );
 }

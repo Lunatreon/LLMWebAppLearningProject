@@ -2,7 +2,7 @@
 
 import logging
 from copy import deepcopy
-from backend.services.map_categories import allowed
+from backend.services.map_categories import allowed, supports_completion
 from typing import Any
 
 from backend.llm.json_response import raise_bad_gateway
@@ -30,8 +30,11 @@ MAP_SUGGESTION_SCHEMA = {
                 "category": {"type": "string", "enum": list(MAP_SUGGESTION_CATEGORIES)},
                 "text": {"type": "string"},
                 "reason": {"type": "string"},
+                "kind": {"type": "string", "enum": ["observation", "reflection"]},
+                "question": {"type": ["string", "null"]},
+                "goal": {"type": ["string", "null"]},
             },
-            "required": ["category", "text", "reason"],
+            "required": ["category", "text", "reason", "kind", "question", "goal"],
             "additionalProperties": False,
         },
     ],
@@ -114,7 +117,7 @@ TOPIC_RESPONSE_SCHEMA["properties"]["map_suggestion"] = MAP_SUGGESTION_SCHEMA
 TOPIC_RESPONSE_SCHEMA["required"].append("map_suggestion")
 
 
-def map_suggestion_from_payload(value: Any) -> dict[str, str] | None:
+def map_suggestion_from_payload(value: Any) -> dict[str, Any] | None:
     """Discard malformed optional suggestions without losing a valid response."""
     if value is None:
         return None
@@ -124,10 +127,37 @@ def map_suggestion_from_payload(value: Any) -> dict[str, str] | None:
         or value.get("category") not in allowed("entry", llm=True)
         or not isinstance(value.get("text"), str)
         or not isinstance(value.get("reason"), str)
+        or not value.get("text", "").strip()
+        or len(value.get("text", "")) > 1000
+        or len(value.get("reason", "")) > 1000
+        or not isinstance(value.get("kind", "observation"), str)
+        or value.get("kind", "observation") not in {"observation", "reflection"}
+        or (
+            value.get("goal") is not None
+            and (not isinstance(value["goal"], str) or len(value["goal"]) > 1000)
+        )
+        or (
+            value.get("question") is not None
+            and (not isinstance(value["question"], str) or len(value["question"]) > 1000)
+        )
+        or (
+            value.get("kind") == "reflection"
+            and (
+                not isinstance(value.get("question"), str)
+                or not value["question"].strip()
+                or supports_completion(value["category"])
+                or value.get("goal") is not None
+            )
+        )
     ):
         logger.warning("Discarding a malformed optional LLM map suggestion")
         return None
-    return value
+    # Never pass model-supplied routing IDs or confirmation flags through to review.
+    return {
+        key: value[key]
+        for key in ("category", "text", "reason", "kind", "question", "goal")
+        if key in value
+    }
 
 
 def chat_result_from_payload(payload: dict[str, Any]) -> ChatLLMResult:

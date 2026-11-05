@@ -102,6 +102,7 @@ export function mapBackend(
     }
     if (path === '/users/me/map/entries') {
       const next = mapEntry(`entry-${++counter}`, payload.text.trim(), payload.category, {
+        goal: payload.goal ?? null,
         completion_percent: payload.completion_percent,
         working_on: payload.working_on ?? false,
       });
@@ -127,6 +128,7 @@ export function mapBackend(
       return json({ deleted: true, entry: value, map: data });
     }
     Object.assign(value, { category: payload.category, text: payload.text.trim() });
+    if (Object.hasOwn(payload, 'goal')) value.goal = payload.goal;
     if (Object.hasOwn(payload, 'working_on')) value.working_on = payload.working_on;
     if (Object.hasOwn(payload, 'completion_percent'))
       value.completion_percent = payload.completion_percent;

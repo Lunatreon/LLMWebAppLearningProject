@@ -46,7 +46,7 @@ from backend.llm.tasks.map_suggestions import (
     remember_map_suggestion_event,
     should_surface_map_suggestion,
 )
-from backend.llm.tasks.pattern_recognition import ChatAnalyser
+from backend.llm.tasks.topic_analysis import topic_analysis_due
 from backend.services.self_authorship import (
     add_map_entry,
     create_or_link_topic_space,
@@ -297,50 +297,57 @@ async def analyse_chat_for_topic(
         ):
             return
 
+        if not topic_analysis_due(info):
+            info["analysis_status"] = "topic_ready" if queued_topics else "idle"
+            save_chat_context(chat_session, info)
+            db.commit()
+            return
+
+        new_user_message_count = message_count - int(info.get("analysed_message_count", 0))
+
         info["analysis_status"] = "analysing"
         info.pop("analysis_error", None)
         save_chat_context(chat_session, info)
         db.commit()
 
-        analysis = ChatAnalyser().analyse(info)
         info = chat_context(db, chat_session)
         info["analysed_message_count"] = message_count
 
         user = db.get(User, user_id)
         premium_access = user is not None and has_premium_feature_access(db, user)
+        suggest_topics = not queued_topics
+        suggest_observations = premium_access and not info.get("pending_map_suggestion")
+        if not suggest_topics and not suggest_observations:
+            info["analysis_status"] = "topic_ready"
+            save_chat_context(chat_session, info)
+            db.commit()
+            return
         profile = db.scalar(select(UserProfile).where(UserProfile.user_id == user_id))
         visible_map = (
             read_map(profile.data if profile else {})
             if user is not None and has_premium_feature_access(db, user)
             else {"topic_spaces": []}
         )
-        available_topics = [
-            {
-                "id": space.get("id"),
-                "title": space.get("title"),
-                "category": space.get("category", "other"),
-                "description": space.get("description", ""),
-                "parent_topic_id": space.get("parent_topic_id"),
-                "observations": [
-                    {"category": entry.get("category"), "text": str(entry.get("text") or "")[:240]}
-                    for entry in space.get("entries", [])[-5:]
-                ],
-            }
-            for space in visible_map.get("topic_spaces", [])[:40]
-        ]
+        from backend.llm.context import select_topic_context
+
+        available_topics = select_topic_context(visible_map.get("topic_spaces", []), info, chat_id)
         topic_result = await get_topic_llm_client().create_topic(
             chat_info={
                 **info,
-                "suggest_topics": not queued_topics,
-                "suggest_observations": premium_access and not info.get("pending_map_suggestion"),
+                "suggest_topics": suggest_topics,
+                "suggest_observations": suggest_observations,
+                "new_user_message_count": new_user_message_count,
             },
-            matched_patterns=analysis.matched_patterns,
-            topic_hint=analysis.topic_hint,
             available_topics=available_topics,
         )
         from backend.llm.responses import map_suggestion_from_payload
 
         topic_result.map_suggestion = map_suggestion_from_payload(topic_result.map_suggestion)
+        if topic_result.map_suggestion and topic_result.map_suggestion.get("kind") == "reflection":
+            # An unconfirmed interpretation cannot also become a trait/topic proposal.
+            topic_result.topic = ""
+            topic_result.description = ""
+            topic_result.additional_topics = []
         from backend.services.map_categories import allowed
 
         for generated in [topic_result, *topic_result.additional_topics]:
@@ -380,6 +387,7 @@ async def analyse_chat_for_topic(
             if target is None:
                 target = find_topic_space_for_chat(profile.data if profile else {}, chat_id)
             suggestion.update(
+                suggestion_id=uuid4().hex,
                 source_chat_id=chat_id,
                 topic_space_id=target.get("id") if target else None,
                 topic_title=target.get("title") if target else None,
@@ -455,9 +463,6 @@ async def analyse_chat_for_topic(
                         for topic_id in result.related_topic_ids
                         if topic_id in available_topic_ids and topic_id != result.existing_topic_id
                     ],
-                    "confidence": analysis.confidence,
-                    "matched_patterns": analysis.matched_patterns,
-                    "topic_hint": analysis.topic_hint,
                     "existing_topic_id": result.existing_topic_id,
                     "parent_topic_id": result.parent_topic_id,
                     "status": "pending",
@@ -486,6 +491,18 @@ async def analyse_chat_for_topic(
             info["initial_topic_title_set"] = True
 
         set_pending_topic_queue(info, pending_topics)
+        info["recent_topic_suggestions"] = [
+            *info.get("recent_topic_suggestions", []),
+            *[
+                {
+                    "suggestion_id": item["suggestion_id"],
+                    "topic": item["topic"],
+                    "description": item["description"][:240],
+                    "status": "pending",
+                }
+                for item in pending_topics
+            ],
+        ][-12:]
         save_chat_context(chat_session, info)
         db.commit()
     except Exception as exc:  # pragma: no cover - defensive for background jobs
@@ -1053,6 +1070,12 @@ def confirm_topic(
         set_pending_topic_queue(chat_info, remaining)
     else:
         set_pending_topic_queue(chat_info, [])
+    reviewed_id = payload.suggestion_id or (
+        queued_topics[0].get("suggestion_id") if queued_topics else None
+    )
+    for item in chat_info.get("recent_topic_suggestions", []):
+        if reviewed_id and item.get("suggestion_id") == reviewed_id:
+            item["status"] = "accepted" if payload.accepted else "dismissed"
     chat_info["updated_at"] = current_timestamp()
     save_chat_context(chat_session, chat_info)
     db.commit()
@@ -1094,6 +1117,22 @@ def confirm_map_suggestion(
     chat_info = chat_context(db, chat_session)
     pending_map_suggestion = chat_info.get("pending_map_suggestion")
 
+    if payload.suggestion_id is not None and (
+        not isinstance(pending_map_suggestion, dict)
+        or pending_map_suggestion.get("suggestion_id") != payload.suggestion_id
+    ):
+        raise HTTPException(status_code=409, detail="This suggestion changed. Review it again.")
+    if (
+        payload.accepted
+        and isinstance(pending_map_suggestion, dict)
+        and pending_map_suggestion.get("kind") == "reflection"
+        and (not payload.interpretation_confirmed or payload.suggestion_id is None)
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Confirm whether the possible pattern fits before saving an observation.",
+        )
+
     entry = None
     if payload.accepted:
         topic_space = find_topic_space_for_chat(profile.data, payload.chat_id)
@@ -1103,6 +1142,7 @@ def confirm_map_suggestion(
                 profile.data,
                 category=payload.category,
                 text=payload.text,
+                goal=payload.goal,
                 topic_space_id=topic_space_id,
                 source_chat_id=payload.chat_id,
                 reason=payload.reason,

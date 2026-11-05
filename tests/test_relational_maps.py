@@ -154,7 +154,7 @@ def test_admin_catalog_drives_api_and_llm_and_preserves_disabled_categories(
         from backend.llm.context import topic_request_payload
         from backend.llm.responses import topic_response_schema, map_suggestion_from_payload
 
-        value = json.loads(topic_request_payload({}, [], None))
+        value = json.loads(topic_request_payload({}))
         assert any(
             c["key"] == "goal" and c["description"] == payload["description"]
             for c in value["allowed_map_categories"]["entry"]
@@ -269,6 +269,7 @@ def test_migration_preserves_map_data_and_encrypts_text(tmp_path):
                         "text": "Private observation",
                         "status": "paused",
                         "reflection": "Private reflection",
+                        "goal": "Private desired outcome",
                         "source_chat_id": "deleted-chat",
                         "source_journal_date": "2026-01-01",
                     }
@@ -300,6 +301,8 @@ def test_migration_preserves_map_data_and_encrypts_text(tmp_path):
         }
         encrypted = connection.execute(select(TABLES["map_entries"].c.text_ciphertext)).scalar_one()
         assert b"Private observation" not in encrypted
+        goal = connection.execute(select(TABLES["map_entries"].c.goal_ciphertext)).scalar_one()
+        assert isinstance(goal, bytes) and b"Private desired outcome" not in goal
     with Session(engine) as db:
         restored = db.get(UserProfile, 1).data["self_authorship_map"]
         restored.pop("revision")

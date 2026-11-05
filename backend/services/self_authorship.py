@@ -560,6 +560,7 @@ def add_map_entry(
     category: str,
     working_on: bool = False,
     text: str,
+    goal: str | None = None,
     topic_space_id: str | None = None,
     source_chat_id: str | None = None,
     reason: str | None = None,
@@ -573,6 +574,7 @@ def add_map_entry(
         "category": category,
         "working_on": working_on,
         "text": text.strip(),
+        "goal": goal.strip() or None if goal is not None else None,
         "source_chat_id": source_chat_id,
         "reason": reason.strip() if reason else None,
         "created_at": now,
@@ -621,6 +623,8 @@ def update_map_entry(
     working_on: bool | None = None,
     category: str | None = None,
     text: str | None = None,
+    goal: str | None = None,
+    update_goal: bool = False,
     reason: str | None = None,
     topic_space_id: str | None = None,
     move_entry: bool = False,
@@ -655,6 +659,8 @@ def update_map_entry(
             entry.pop("reflection", None)
     if text is not None:
         entry["text"] = text.strip()
+    if update_goal:
+        entry["goal"] = goal.strip() or None if goal is not None else None
     if reason is not None:
         entry["reason"] = reason.strip() if reason else None
     if move_entry:

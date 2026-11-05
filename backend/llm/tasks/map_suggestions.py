@@ -69,6 +69,7 @@ def map_suggestion_marker(
     return {
         "category": suggestion.get("category"),
         "text": normalized_map_suggestion_text(suggestion.get("text"))[:220],
+        **{key: suggestion[key] for key in ("kind", "question", "goal") if key in suggestion},
         "signature": map_suggestion_signature(suggestion),
         "message_count": message_count,
         "created_at": datetime.now(timezone.utc).isoformat(),

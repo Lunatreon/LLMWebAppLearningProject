@@ -25,6 +25,8 @@ export default function NoteReview({
     : entryCategories;
   const [text, setText] = useState(suggestion.text),
     [category, setCategory] = useState<EntryCategory>(suggestion.category || 'own_perception');
+  const [goal, setGoal] = useState(suggestion.goal || '');
+  const [patternConfirmed, setPatternConfirmed] = useState(false);
   const [target, setTarget] = useState(
     spaces.some((space) => space.id === suggestion.topic_space_id)
       ? suggestion.topic_space_id!
@@ -35,6 +37,9 @@ export default function NoteReview({
   function decide(accepted: boolean) {
     if (accepted && !text.trim()) return;
     void controller.decideNote({
+      suggestion_id: suggestion.suggestion_id,
+      ...(suggestion.kind === 'reflection' ? { interpretation_confirmed: patternConfirmed } : {}),
+      ...(goal.trim() || suggestion.goal != null ? { goal: goal.trim() || null } : {}),
       chat_id: suggestion.source_chat_id || snapshot.active!,
       accepted,
       category,
@@ -43,6 +48,89 @@ export default function NoteReview({
       topic_space_id: spaces.length ? target || null : suggestion.topic_space_id,
     });
   }
+  if (suggestion.kind === 'reflection' && !patternConfirmed) {
+    return (
+      <DialogFrame
+        id="map-suggestion-review-dialog"
+        dialogClass="chat-review-dialog"
+        label="Explore a possible pattern"
+        controls={controls}
+        focus={heading}
+        focusVersion="reflection"
+        busy={snapshot.reviewPending}
+        hidden={hidden}
+        backdropClose={false}
+        onClose={() => controller.closeReview()}
+      >
+        <header className="chat-review-header">
+          <h2 ref={heading} tabIndex={-1}>
+            Does this connection fit?
+          </h2>
+          <button
+            ref={bind}
+            className="secondary-button"
+            type="button"
+            disabled={snapshot.reviewPending}
+            onClick={() => controller.closeReview()}
+          >
+            Close
+          </button>
+        </header>
+        <section className="map-suggestion-card" aria-live="polite">
+          <p className="map-entry-text">{suggestion.text}</p>
+          <p>{suggestion.question}</p>
+          <p className="suggestion-reason">{suggestion.reason}</p>
+          <p>This is a possible connection. You can explore it, change it, or leave it aside.</p>
+          <div className="suggestion-actions">
+            <button
+              ref={bind}
+              className="secondary-button"
+              type="button"
+              disabled={snapshot.reviewPending}
+              onClick={() => decide(false)}
+            >
+              Not now
+            </button>
+            <button
+              ref={bind}
+              className="secondary-button"
+              type="button"
+              disabled={snapshot.reviewPending}
+              onClick={() => {
+                controller.closeReview();
+                controller.prompt(
+                  [
+                    snapshot.draft,
+                    `I would like to explore this possible connection: ${suggestion.text}`,
+                    suggestion.question,
+                    suggestion.reason,
+                  ]
+                    .filter(Boolean)
+                    .join('\n\n'),
+                );
+              }}
+            >
+              Explore in chat
+            </button>
+            <button
+              ref={bind}
+              className="primary-button small"
+              type="button"
+              disabled={snapshot.reviewPending}
+              onClick={() => setPatternConfirmed(true)}
+            >
+              This fits
+            </button>
+          </div>
+          {snapshot.error && (
+            <p className="review-error form-error" role="alert">
+              {snapshot.error}
+            </p>
+          )}
+        </section>
+      </DialogFrame>
+    );
+  }
   return (
     <DialogFrame
       id="map-suggestion-review-dialog"
@@ -50,6 +138,8 @@ export default function NoteReview({
       label="Keep this in your map?"
       controls={controls}
       focus={heading}
+      focusVersion={patternConfirmed ? 'confirmed-pattern' : 'observation'}
+      busy={snapshot.reviewPending}
       hidden={hidden}
       backdropClose={false}
       onClose={() => controller.closeReview()}
@@ -62,6 +152,7 @@ export default function NoteReview({
           ref={bind}
           className="secondary-button"
           type="button"
+          disabled={snapshot.reviewPending}
           onClick={() => controller.closeReview()}
         >
           Close
@@ -124,6 +215,24 @@ export default function NoteReview({
           value={text}
           onChange={(event) => setText(event.target.value)}
         />
+        {(category === 'task' ||
+          category === 'practice' ||
+          goal ||
+          map.snapshot.data?.categories?.some(
+            (item) => item.kind === 'entry' && item.key === category && item.supports_completion,
+          )) && (
+          <label>
+            Desired outcome (optional)
+            <textarea
+              ref={bind}
+              aria-label="Desired outcome"
+              rows={2}
+              maxLength={1000}
+              value={goal}
+              onChange={(event) => setGoal(event.target.value)}
+            />
+          </label>
+        )}
         <p id="map-suggestion-reason" className="suggestion-reason">
           {suggestion.reason}
         </p>

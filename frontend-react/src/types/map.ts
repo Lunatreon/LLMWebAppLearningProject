@@ -36,6 +36,7 @@ export interface MapCategory {
   supports_completion: boolean;
 }
 export interface MapEntry {
+  goal?: string | null;
   working_on?: boolean;
   completion_percent?: number | null;
   id: string;
@@ -75,6 +76,7 @@ export interface TopicPayload {
   chat_id?: string | null;
 }
 export interface EntryPayload {
+  goal?: string | null;
   working_on?: boolean;
   completion_percent?: number | null;
   category: EntryCategory;

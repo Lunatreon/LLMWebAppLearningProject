@@ -48,8 +48,9 @@ class TopicSuggestion(BaseModel):
     chat_id: str
     topic: str
     description: str
-    confidence: float
-    matched_patterns: list[str]
+    # Compatibility with older clients; keyword scores are no longer generated.
+    confidence: float | None = None
+    matched_patterns: list[str] = Field(default_factory=list)
     status: str = "pending"
     existing_topic_id: str | None = None
     parent_topic_id: str | None = None
@@ -104,6 +105,9 @@ class TopicConfirmationResponse(BaseModel):
 
 
 class MapSuggestionConfirmationRequest(BaseModel):
+    suggestion_id: str | None = Field(default=None, max_length=64)
+    interpretation_confirmed: bool = Field(default=False, strict=True)
+    goal: str | None = Field(default=None, max_length=1000)
     expected_revision: int | None = Field(default=None, ge=0, strict=True)
     chat_id: str = Field(min_length=1, max_length=120)
     accepted: bool = True

@@ -58,8 +58,8 @@ The React build accepts public settings only. `VITE_API_BASE_URL` defaults to
 
 Editable prompts live in `prompts/`. In Docker, administrator edits are stored in
 the persistent prompt volume; changing image defaults does not overwrite that
-volume. `backend/llm/pattern_recognition.txt` is loaded by
-`backend/llm/tasks/pattern_recognition.py` and copied into the backend image.
+volume. Background map analysis is paced by `backend/llm/tasks/topic_analysis.py`;
+it uses multilingual LLM evidence assessment rather than a keyword rule file.
 
 ## Database startup
 

@@ -432,26 +432,19 @@ class LocalChatLLMClient:
 
 
 class LocalTopicLLMClient:
-    """Development fallback for topic creation after pattern analysis."""
+    """Deterministic development fallback; not a personality inference model."""
 
     async def create_topic(
         self,
         chat_info: dict[str, Any],
-        matched_patterns: list[str],
-        topic_hint: str | None = None,
         available_topics: list[dict[str, Any]] | None = None,
     ) -> TopicLLMResult:
         user_messages = topic_chat_context(chat_info)["user_messages"]
-        from backend.llm.tasks.pattern_recognition import ChatAnalyser
-
-        # The offline fallback has no model to judge evidence; keep its
-        # conservative heuristic without blocking actual LLM suggestions.
+        # Development-only fallback: wait for several user statements. Production
+        # providers use the multilingual evidence threshold in the system prompt.
         topic = (
-            (topic_hint or infer_local_freeform_topic(user_messages))
-            if (
-                chat_info.get("suggest_topics", True)
-                and ChatAnalyser().analyse(chat_info).should_create_topic
-            )
+            infer_local_freeform_topic(user_messages)
+            if chat_info.get("suggest_topics", True) and len(user_messages) >= 3
             else ""
         )
         description = (
@@ -464,7 +457,7 @@ class LocalTopicLLMClient:
             description=description[:1000] if topic else "",
             map_suggestion=(
                 LocalChatLLMClient().local_map_suggestion(user_messages[-1])
-                if user_messages
+                if user_messages and chat_info.get("suggest_observations", True)
                 else None
             ),
         )

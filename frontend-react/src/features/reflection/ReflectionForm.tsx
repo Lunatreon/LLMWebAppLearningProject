@@ -60,6 +60,11 @@ export default function ReflectionForm({ hidden }: { hidden: boolean }) {
         </button>
         <p className="eyebrow">Review without shame</p>
         <h2>What happened when you tried it?</h2>
+        {practice?.goal && (
+          <p>
+            <strong>Goal:</strong> {practice.goal}
+          </p>
+        )}
         <label>
           <span>{reflectionPrompt}</span>
           <textarea

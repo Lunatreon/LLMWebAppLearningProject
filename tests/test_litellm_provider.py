@@ -68,7 +68,7 @@ def test_proxy_transport_and_response_contract(monkeypatch, proxy, role, overrid
             assert result.assistant_message == payload["assistant_message"]
             callback.assert_awaited_once_with(payload["assistant_message"])
         else:
-            assert (await get_topic_llm_client().create_topic({}, [])).topic == "Work"
+            assert (await get_topic_llm_client().create_topic({})).topic == "Work"
 
     asyncio.run(run())
     assert clients[0].is_closed()

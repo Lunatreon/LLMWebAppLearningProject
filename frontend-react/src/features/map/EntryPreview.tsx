@@ -80,6 +80,11 @@ export default function EntryPreview({ node, entry }: { node: MapNodeData; entry
           </>
         )}
       </p>
+      {entry.goal && (
+        <p className="map-task-goal">
+          <strong>Goal:</strong> {entry.goal}
+        </p>
+      )}
       {practice && (
         <div className="map-task-panel">
           <span className="map-task-status" data-status={entry.status || 'active'}>

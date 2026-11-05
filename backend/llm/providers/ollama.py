@@ -465,17 +465,13 @@ class OllamaTopicLLMClient(OllamaBaseClient):
     async def create_topic(
         self,
         chat_info: dict[str, Any],
-        matched_patterns: list[str],
-        topic_hint: str | None = None,
         available_topics: list[dict[str, Any]] | None = None,
     ) -> TopicLLMResult:
         from copy import copy
 
         request = {
             "system_prompt": read_system_prompt("topic"),
-            "user_payload": topic_request_payload(
-                chat_info, matched_patterns, topic_hint, available_topics
-            ),
+            "user_payload": topic_request_payload(chat_info, available_topics),
             "response_schema": topic_response_schema(),
             "temperature": 0.2,
         }

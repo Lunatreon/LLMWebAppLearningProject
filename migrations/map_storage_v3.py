@@ -70,7 +70,7 @@ def migrate_profiles(connection, tables):
         live = set(
             connection.execute(sa.select(chats.c.chat_id).where(chats.c.user_id == owner)).scalars()
         )
-        encoded = encode_map(owner, value, live)
+        encoded = encode_map(owner, value, live, entry_columns=set(tables["map_entries"].c.keys()))
         restored = decode_map(owner, encoded)
         if "updated_at" not in value:
             restored.pop("updated_at", None)

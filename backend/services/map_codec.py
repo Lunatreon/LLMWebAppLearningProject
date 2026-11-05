@@ -24,6 +24,7 @@ ENTRY_FIELDS = {
     "id",
     "category",
     "text",
+    "goal",
     "reason",
     "reflection",
     "status",
@@ -63,7 +64,7 @@ def unpack(row, owner, identity):
     return json.loads(raw) if raw else {"values": {}, "present": None, "timestamps": {}}
 
 
-def encode_map(owner, data, chats):
+def encode_map(owner, data, chats, *, entry_columns=None):
     key = settings.content_encryption_key_id
     topics = data.get("topic_spaces", [])
     if not isinstance(topics, list) or not isinstance(data.get("unassigned_entries", []), list):
@@ -136,14 +137,31 @@ def encode_map(owner, data, chats):
             source_topic_reference=entry.get("source_topic_id"),
             created_at=timestamp(entry.get("created_at")),
             updated_at=timestamp(entry.get("updated_at")),
-            extra_ciphertext=extra(entry, ENTRY_FIELDS, owner, "entry:" + identity, key),
+            extra_ciphertext=extra(
+                entry,
+                (
+                    ENTRY_FIELDS
+                    if entry_columns is None or "goal_ciphertext" in entry_columns
+                    else ENTRY_FIELDS - {"goal"}
+                ),
+                owner,
+                "entry:" + identity,
+                key,
+            ),
         )
         for field, column in [
             ("text", "text_ciphertext"),
+            ("goal", "goal_ciphertext"),
             ("reason", "reason_ciphertext"),
             ("reflection", "reflection_ciphertext"),
             ("source_topic_title", "source_topic_title_ciphertext"),
         ]:
+            if (
+                column == "goal_ciphertext"
+                and entry_columns is not None
+                and column not in entry_columns
+            ):
+                continue
             row[column] = crypt(
                 entry.get(field, "" if field == "text" else None),
                 owner,
@@ -275,10 +293,13 @@ def decode_map(owner, rows):
         )
         for field, column in [
             ("text", "text_ciphertext"),
+            ("goal", "goal_ciphertext"),
             ("reason", "reason_ciphertext"),
             ("reflection", "reflection_ciphertext"),
             ("source_topic_title", "source_topic_title_ciphertext"),
         ]:
+            if column not in row:
+                continue
             values[field] = crypt(
                 row[column], owner, "entry:" + identity, field, row["content_key_id"], decode=True
             )

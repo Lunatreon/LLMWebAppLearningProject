@@ -18,6 +18,7 @@ function validEntry(entry: MapEntry) {
     entry &&
     typeof entry.id === 'string' &&
     typeof entry.text === 'string' &&
+    (entry.goal == null || typeof entry.goal === 'string') &&
     typeof entry.category === 'string'
   );
 }
